@@ -735,6 +735,11 @@ export function attackCancelled(ctx: AttackCtx): boolean {
 /** Players allowed to take part in the current attack. */
 export function participants(s: GameState): string[] {
   const ctx = s.attack;
+  if (ctx?.barred?.length) return participantsBeforeBar(s).filter((id) => !ctx.barred!.includes(id));
+  return participantsBeforeBar(s);
+}
+function participantsBeforeBar(s: GameState): string[] {
+  const ctx = s.attack;
   if (!ctx || !isPrivileged(ctx)) return livePlayers(s).map((p) => p.id);
   const extra = liveEffects(ctx).flatMap((e) => (e.t === 'interfere' ? [e.player] : []));
   for (const p of livePlayers(s)) if (anyHook(s, (h, self) => controllerOf2(s, self) === p.id && !!h.mayInterfere?.(s, self, p.id))) extra.push(p.id);
@@ -1121,6 +1126,7 @@ export function checkPlot(s: GameState, playerId: string, play: PlotPlay, declar
   if (ctx && protectedPlayer(s, playerId, ctx.attackerPlayer) && ctx.targetPlayer !== playerId) return 'You cannot interfere with the first turn of a player.';
   // No player may use two copies of the same Plot in one attack (R030); a cancelled copy never happened.
   if (ctx && ctx.plays.some((p) => p.player === playerId && s.cards[p.iid]?.cardId === d.id && !isCancelled(ctx.plays, p.iid))) return `You already used ${d.name} in this attack.`;
+  if (ctx?.barred?.includes(playerId)) return 'A card bars you from interfering in this attack.';
   if (ctx && isPrivileged(ctx) && !participants(s).includes(playerId) && !t.includes('roll') && d.id !== 'interference' && d.id !== 'deep-agent') return 'Only the two players involved may act in a Privileged attack.';
   return h.check(s, playerId, play, ctx);
 }

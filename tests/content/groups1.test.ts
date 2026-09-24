@@ -1,9 +1,10 @@
 // Scripted Group abilities from src/engine/content/groups1.ts.
 import { describe, expect, it } from 'vitest';
 import {
-  applyAction, attackStrength, canAid, canOppose, currentOutcome, globalPower, isPrivileged, power, resistance,
-  startInstantAttack, tokenBarred, waitingFor, HOOKS, CARDS, type Action, type GameState,
+  alignments, applyAction, attackStrength, canAid, canOppose, checkPlot, createGame, currentOutcome, drawPlot, globalPower, isPrivileged,
+  power, resistance, startInstantAttack, tokenBarred, waitingFor, HOOKS, CARDS, type Action, type GameState,
 } from '../../src/engine';
+import { randomDeck } from '../../src/engine/decks';
 import { roll2d6 } from '../../src/engine/rng';
 import { give, scenario } from '../helpers';
 
@@ -681,5 +682,313 @@ describe('Underground Newspapers', () => {
   });
   it('not for other Groups', () => {
     expect(destroy('gay-activists', true)).toBe(destroy('gay-activists', false));
+  });
+});
+
+// ---------------------------------------------------------------- abilities that use choices, private looks and rule hooks
+
+const pl = (s: GameState, id: string) => s.players.find((p) => p.id === id)!;
+const choose = (s: GameState, who: string, ids: string[]) => act(s, who, { type: 'choose', ids });
+
+/** A three-player game in p1's main phase, set up like scenario(). */
+function threeWay(): GameState {
+  const s = createGame({
+    seed: 11,
+    players: ['p1', 'p2', 'p3'].map((id, i) => ({ id, name: id.toUpperCase(), isAI: true, deck: randomDeck(90 + i) })),
+  });
+  for (const c of Object.values(s.cards)) {
+    if ((c.zone === 'structure' && CARDS[c.cardId].type === 'Group') || c.zone === 'hand') delete s.cards[c.iid];
+  }
+  for (const p of s.players) { p.turnsTaken = 1; p.hand = []; s.cards[p.illuminati].tokens = 1; }
+  s.active = 0; s.phase = 'main'; s.prompt = undefined; s.window = undefined; s.round = 3; s.nwo = {};
+  return s;
+}
+
+describe('Mossad', () => {
+  it('may look at the bottom Plot and then draw from the bottom', () => {
+    let s = scenario();
+    const m = under(s, 'p1', 'mossad');
+    const bottom = pl(s, 'p1').plotDeck.at(-1)!;
+    s = use(s, 'p1', m, 'peek');
+    expect(pl(s, 'p1').known).toContain(bottom);
+    expect(s.cards[m].tokens).toBe(1);
+    s = use(s, 'p1', m, 'drawFrom', { mode: 'bottom' });
+    drawPlot(s, pl(s, 'p1'));
+    expect(hand(s, 'p1')).toContain(bottom);
+  });
+  it('draws from the top unless told otherwise, and never changes a rival\'s draws', () => {
+    let s = scenario();
+    const m = under(s, 'p1', 'mossad');
+    const top = pl(s, 'p1').plotDeck[0];
+    drawPlot(s, pl(s, 'p1'));
+    expect(hand(s, 'p1')).toContain(top);
+    s = use(s, 'p1', m, 'drawFrom', { mode: 'bottom' });
+    const rivalTop = pl(s, 'p2').plotDeck[0];
+    drawPlot(s, pl(s, 'p2'));
+    expect(hand(s, 'p2')).toContain(rivalTop);
+  });
+});
+
+describe('Multinational Oil Companies', () => {
+  it('bars one named rival from its attack', () => {
+    let s = threeWay();
+    const oil = under(s, 'p1', 'multinational-oil-companies');
+    const tgt = under(s, 'p2', 'las-vegas');
+    const p3g = under(s, 'p3', 'c-i-a');
+    const p3plot = give(s, 'p3', 'reload', { hand: true });
+    s = act(s, 'p1', { type: 'attack', attackType: 'destroy', attacker: oil, target: tgt });
+    expect(waitingFor(s)).toContain('p3');
+    s = use(s, 'p1', oil, 'designate', { target: ill(s, 'p3') });
+    expect(waitingFor(s)).not.toContain('p3');
+    expect(canAid(s, 'p3', p3g).ok).toBe(false);
+    expect(checkPlot(s, 'p3', { card: p3plot })).toMatch(/bars you/);
+    expect(() => use(s, 'p1', oil, 'designate', { target: ill(s, 'p3') })).toThrow(/already been named/);
+  });
+  it('cannot name the defender, and only works with more than two players', () => {
+    let s = threeWay();
+    const oil = under(s, 'p1', 'multinational-oil-companies');
+    const tgt = under(s, 'p2', 'las-vegas');
+    s = act(s, 'p1', { type: 'attack', attackType: 'destroy', attacker: oil, target: tgt });
+    expect(() => use(s, 'p1', oil, 'designate', { target: ill(s, 'p2') })).toThrow(/not already part/);
+    let t = scenario();
+    const oil2 = under(t, 'p1', 'multinational-oil-companies');
+    t = act(t, 'p1', { type: 'attack', attackType: 'destroy', attacker: oil2, target: under(t, 'p2', 'las-vegas') });
+    expect(() => use(t, 'p1', oil2, 'designate', { target: ill(t, 'p2') })).toThrow(/more than two/);
+  });
+});
+
+describe('NATO and United Nations send Relief with multiplied Power', () => {
+  it('NATO counts triple: Power 3 is enough for a Power 3 Place', () => {
+    const s = scenario();
+    const nato = under(s, 'p1', 'nato');
+    const place = under(s, 'p2', 'brazil');
+    s.cards[place].devastated = true;
+    const next = use(s, 'p1', nato, 'relief', { target: place });
+    expect(next.cards[place].devastated).toBe(false);
+    expect(next.cards[nato].tokens).toBe(0);
+  });
+  it('United Nations counts five times, and other Groups can add the rest', () => {
+    const s = scenario();
+    const un = under(s, 'p1', 'united-nations');
+    const cia = under(s, 'p1', 'c-i-a', 'RIGHT');
+    const place = under(s, 'p2', 'brazil');
+    s.cards[place].devastated = true;
+    expect(() => use(s, 'p1', un, 'relief', { target: place })).toThrow(/Relief needs 9/);
+    const next = use(s, 'p1', un, 'relief', { target: place, payWith: [cia] });
+    expect(next.cards[place].devastated).toBe(false);
+    expect(next.cards[cia].tokens).toBe(0);
+  });
+  it('only for a Devastated Place', () => {
+    const s = scenario();
+    const nato = under(s, 'p1', 'nato');
+    expect(() => use(s, 'p1', nato, 'relief', { target: under(s, 'p2', 'brazil') })).toThrow(/Devastated/);
+  });
+});
+
+describe('N.S.A.', () => {
+  it('looks at the top three Plots of a rival deck for free, once per turn', () => {
+    let s = scenario();
+    const nsa = under(s, 'p1', 'n-s-a');
+    const top = pl(s, 'p2').plotDeck.slice(0, 3);
+    s = use(s, 'p1', nsa, 'inspect', { target: ill(s, 'p2'), mode: 'top' });
+    expect(pl(s, 'p1').known).toEqual(expect.arrayContaining(top));
+    expect(s.cards[nsa].tokens).toBe(1);
+    expect(() => use(s, 'p1', nsa, 'inspect', { target: ill(s, 'p2'), mode: 'bottom' })).toThrow(/Already used/);
+    s = use(s, 'p1', nsa, 'inspectAction', { target: ill(s, 'p2'), mode: 'bottom' });
+    expect(pl(s, 'p1').known).toEqual(expect.arrayContaining(pl(s, 'p2').plotDeck.slice(-3)));
+    expect(s.cards[nsa].tokens).toBe(0);
+  });
+  it('needs top or bottom', () => {
+    const s = scenario();
+    const nsa = under(s, 'p1', 'n-s-a');
+    expect(() => use(s, 'p1', nsa, 'inspect', { target: ill(s, 'p2') })).toThrow(/top or the bottom/);
+  });
+});
+
+describe('Offshore Banks and Phone Phreaks move Groups', () => {
+  it('Offshore Banks move one of your Groups for free, once per turn', () => {
+    let s = scenario();
+    const banks = under(s, 'p1', 'offshore-banks');
+    const g = under(s, 'p1', 'the-mafia', 'RIGHT');
+    const before = { x: s.cards[g].x, y: s.cards[g].y };
+    s = use(s, 'p1', banks, 'freeMove', { target: g });
+    const opts = s.prompt!.choice!.options;
+    expect(opts.length).toBeGreaterThan(0);
+    s = choose(s, 'p1', [opts[0].id]);
+    expect({ x: s.cards[g].x, y: s.cards[g].y }).not.toEqual(before);
+    expect(s.cards[g].master).toBe(opts[0].id.split('|')[0]);
+    expect(s.cards[banks].tokens).toBe(1);
+    expect(() => use(s, 'p1', banks, 'freeMove', { target: g })).toThrow(/Already used/);
+  });
+  it('Offshore Banks only move your own Groups', () => {
+    const s = scenario();
+    const banks = under(s, 'p1', 'offshore-banks');
+    expect(() => use(s, 'p1', banks, 'freeMove', { target: under(s, 'p2', 'the-mafia') })).toThrow(/your Groups/);
+  });
+  it('Phone Phreaks move a rival Group that is not a direct Illuminati puppet', () => {
+    let s = scenario();
+    const ph = under(s, 'p1', 'phone-phreaks');
+    const mafia = under(s, 'p2', 'the-mafia');
+    const sharks = give(s, 'p2', 'loan-sharks', { under: mafia, side: 'LEFT' });
+    expect(() => use(s, 'p1', ph, 'move', { target: mafia })).toThrow(/directly controlled/);
+    s = use(s, 'p1', ph, 'move', { target: sharks });
+    const pick = s.prompt!.choice!.options[0].id;
+    s = choose(s, 'p1', [pick]);
+    expect(s.cards[sharks].controller).toBe('p2');
+    expect(`${s.cards[sharks].master}`).toBe(pick.split('|')[0]);
+    expect(s.cards[ph].tokens).toBe(0);
+  });
+});
+
+describe('Phone Company and Post Office look at rival cards', () => {
+  it('Phone Company looks at two random hidden rival Plots without exposing them', () => {
+    let s = scenario();
+    const pc = under(s, 'p1', 'phone-company');
+    const plots = [1, 2, 3].map(() => give(s, 'p2', 'reload', { hand: true }));
+    s = use(s, 'p1', pc, 'inspect', { target: ill(s, 'p2') });
+    expect(plots.filter((p) => pl(s, 'p1').known?.includes(p))).toHaveLength(2);
+    expect(plots.some((p) => s.cards[p].exposed)).toBe(false);
+    expect(s.cards[pc].tokens).toBe(1);
+    expect(() => use(s, 'p1', pc, 'inspect', { target: ill(s, 'p2') })).toThrow(/Already used/);
+  });
+  it('Post Office looks at Group cards, not Plots', () => {
+    let s = scenario();
+    const po = under(s, 'p1', 'post-office');
+    const groups = ['loan-sharks', 'gay-activists', 'boy-sprouts'].map((g) => give(s, 'p2', g, { hand: true }));
+    const plot = give(s, 'p2', 'reload', { hand: true });
+    s = use(s, 'p1', po, 'inspect', { target: ill(s, 'p2') });
+    expect(groups.filter((g) => pl(s, 'p1').known?.includes(g))).toHaveLength(2);
+    expect(pl(s, 'p1').known).not.toContain(plot);
+  });
+});
+
+describe('Punk Rockers', () => {
+  it('no Weird or Liberal Group may defend against their attack', () => {
+    let s = scenario();
+    const punks = under(s, 'p1', 'punk-rockers');
+    const tgt = under(s, 'p2', 'las-vegas');
+    const media = under(s, 'p2', 'big-media', 'RIGHT');
+    const cia = under(s, 'p2', 'c-i-a', 'LEFT');
+    s = act(s, 'p1', { type: 'attack', attackType: 'destroy', attacker: punks, target: tgt });
+    expect(canOppose(s, 'p2', media).ok).toBe(false);
+    expect(canOppose(s, 'p2', cia).ok).toBe(true);
+  });
+  it('no effect when their Power is not used', () => {
+    let s = scenario();
+    under(s, 'p1', 'punk-rockers');
+    const att = under(s, 'p1', 'the-mafia', 'RIGHT');
+    const tgt = under(s, 'p2', 'las-vegas');
+    const media = under(s, 'p2', 'big-media', 'RIGHT');
+    s = act(s, 'p1', { type: 'attack', attackType: 'destroy', attacker: att, target: tgt });
+    expect(canOppose(s, 'p2', media).ok).toBe(true);
+  });
+});
+
+describe('Reformed Church of Satan can only be attacked to destroy', () => {
+  it('refuses an Attack to Control', () => {
+    const s = scenario();
+    const att = under(s, 'p1', 'the-mafia');
+    const church = under(s, 'p2', 'reformed-church-of-satan');
+    expect(() => act(s, 'p1', { type: 'attack', attackType: 'control', attacker: att, target: church })).toThrow(/only be attacked to destroy/);
+    expect(() => act(s, 'p1', { type: 'attack', attackType: 'destroy', attacker: att, target: church })).not.toThrow();
+  });
+});
+
+describe('Rosicrucians', () => {
+  it('turn a Plot draw into a search of the deck, using their action', () => {
+    let s = scenario();
+    const r = under(s, 'p1', 'rosicrucians');
+    s = use(s, 'p1', r, 'searchMode', { mode: 'search' });
+    const want = pl(s, 'p1').plotDeck.at(-2)!;
+    const size = pl(s, 'p1').plotDeck.length;
+    drawPlot(s, pl(s, 'p1'));
+    expect(s.prompt?.kind).toBe('choose');
+    expect(s.cards[r].tokens).toBe(0);
+    s = choose(s, 'p1', [want]);
+    expect(hand(s, 'p1')).toContain(want);
+    expect(pl(s, 'p1').plotDeck.length).toBe(size - 1);
+  });
+  it('at the start of the turn the search waits for the main phase', () => {
+    let s = scenario();
+    const r = under(s, 'p1', 'rosicrucians');
+    s = use(s, 'p1', r, 'searchMode', { mode: 'search' });
+    s.phase = 'beginning';
+    expect(drawPlot(s, pl(s, 'p1'))).toEqual([]);
+    expect(s.prompt).toBeUndefined();
+    s.phase = 'main';
+    s = use(s, 'p1', r, 'search');
+    const pick = s.prompt!.choice!.options[3].id;
+    s = choose(s, 'p1', [pick]);
+    expect(hand(s, 'p1')).toContain(pick);
+    expect(() => use(s, 'p1', r, 'search')).toThrow();
+  });
+  it('draw normally when not searching or without an Action token', () => {
+    let s = scenario();
+    const r = under(s, 'p1', 'rosicrucians');
+    expect(drawPlot(s, pl(s, 'p1'))).toHaveLength(1);
+    s = use(s, 'p1', r, 'searchMode', { mode: 'search' });
+    s.cards[r].tokens = 0;
+    expect(drawPlot(s, pl(s, 'p1'))).toHaveLength(1);
+    expect(() => use(s, 'p1', r, 'search')).toThrow();
+  });
+});
+
+describe('Saturday Morning Cartoons', () => {
+  it('its puppets are Violent (and no longer Peaceful)', () => {
+    const s = scenario();
+    const smc = under(s, 'p1', 'saturday-morning-cartoons');
+    const bjorne = give(s, 'p1', 'bjorne', { under: smc, side: 'LEFT' });
+    const other = under(s, 'p1', 'boy-sprouts', 'RIGHT');
+    expect(alignments(s, bjorne)).toContain('Violent');
+    expect(alignments(s, bjorne)).not.toContain('Peaceful');
+    expect(alignments(s, other)).toContain('Peaceful');
+  });
+});
+
+describe('Tabloids', () => {
+  it('may attack a Secret Group, and anyone may then join either side', () => {
+    let s = scenario();
+    const tab = under(s, 'p1', 'tabloids');
+    const nsa = under(s, 'p2', 'n-s-a');
+    const sharks = under(s, 'p2', 'loan-sharks', 'RIGHT');
+    s = act(s, 'p1', { type: 'attack', attackType: 'control', attacker: tab, target: nsa });
+    expect(canOppose(s, 'p2', sharks)).toMatchObject({ ok: true, global: false });
+  });
+  it('other non-Secret Groups still cannot attack Secret Groups', () => {
+    const s = scenario();
+    const att = under(s, 'p1', 'the-mafia');
+    under(s, 'p1', 'tabloids', 'RIGHT');
+    const nsa = under(s, 'p2', 'n-s-a');
+    expect(() => act(s, 'p1', { type: 'attack', attackType: 'control', attacker: att, target: nsa })).toThrow(/Secret/);
+  });
+});
+
+describe('Vampires', () => {
+  it('a Personality they take over becomes a Vampire', () => {
+    let s = scenario();
+    const v = under(s, 'p1', 'vampires');
+    const bjorne = under(s, 'p2', 'bjorne');
+    s = act(s, 'p1', { type: 'attack', attackType: 'control', attacker: v, target: bjorne });
+    s.attack!.attackBonus.push({ player: 'p1', amount: 40, label: 'test' });
+    s = resolve(s, [2, 2]);
+    expect(s.cards[bjorne].controller).toBe('p1');
+    expect(s.cards[bjorne].data?.vampire).toBe(true);
+  });
+  it('a Vampire survives a non-Magic attack but Magic destroys it for good', () => {
+    const setup = (attacker: string) => {
+      let s = scenario();
+      under(s, 'p2', 'vampires', 'RIGHT');
+      const bjorne = under(s, 'p2', 'bjorne');
+      s.cards[bjorne].data = { vampire: true };
+      const att = under(s, 'p1', attacker);
+      s = act(s, 'p1', { type: 'attack', attackType: 'destroy', attacker: att, target: bjorne });
+      s.attack!.attackBonus.push({ player: 'p1', amount: 40, label: 'test' });
+      return { s: resolve(s, [2, 2]), bjorne };
+    };
+    const a = setup('the-mafia');
+    expect(a.s.cards[a.bjorne].zone).toBe('structure');
+    const b = setup('ninjas');
+    expect(b.s.cards[b.bjorne].zone).toBe('destroyed');
+    expect(b.s.cards[b.bjorne].data?.removedFromGame).toBe(true);
   });
 });
