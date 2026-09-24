@@ -151,6 +151,7 @@ export interface AttackCtx {
   roll?: number[];               // 2d6 once rolled
   result?: 'success' | 'failure';
   usedAgents?: boolean;
+  barred?: string[];       // players a card has barred from interfering in this attack (Multinational Oil Companies)
 }
 
 /** An open response window: everyone may act; closes when all players have passed in a row. */
