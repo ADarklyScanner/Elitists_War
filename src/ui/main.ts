@@ -75,6 +75,7 @@ function commit(next: GameState) {
 
 function act(a: Action) {
   const s = ui.game!;
+  if (online) { onlineMove(a); return; }
   try {
     const next = applyAction(s, ui.me, a);
     ui.sel = { kind: 'none' };
@@ -89,6 +90,7 @@ let timer: number | undefined;
 /** Let the computer move one step at a time so its actions can be followed in the log. */
 function schedule() {
   clearTimeout(timer);
+  if (online) return; // the server moves computer players and applies standing orders
   const s = ui.game;
   if (!s || s.phase === 'gameOver') { ui.thinking = false; return; }
   const waiting = waitingFor(s);
@@ -170,6 +172,7 @@ function render() {
       </section>
       <aside class="console">
         ${renderConsole(s)}
+        ${online ? ordersPanel() : ''}
         ${renderInspect(s)}
         ${renderLog(s)}
       </aside>
@@ -352,7 +355,8 @@ function renderConsole(s: GameState): string {
   } else if (idle(s)) {
     body = renderMainConsole(s);
   } else {
-    body = `${s.attack ? attackPanel(s) : ''}<p class="muted thinking">${ui.thinking ? 'The Computer is thinking…' : 'Waiting…'}</p>`;
+    const names = waiting.map((id) => player(s, id).name).join(', ');
+    body = `${s.attack ? attackPanel(s) : ''}<p class="muted thinking">${online ? (online.busy ? 'Sending…' : `Waiting for ${esc(names)}. You'll see their move here as soon as it's made.`) : ui.thinking ? 'The Computer is thinking…' : 'Waiting…'}</p>`;
   }
   return `<div class="panel now">${err}${body}</div>`;
 }
@@ -441,7 +445,7 @@ function renderMainConsole(s: GameState): string {
       <button class="primary" data-act="endTurn">End turn</button>
     </div>
     ${reliefs.length ? `<div class="label">Relief for Devastated Places (needs 3× printed Power)</div><div class="opts">${reliefs.map((r, i) => `<button data-relief="${i}" ${r.ok ? '' : 'disabled'}>Relieve ${esc(cardName(s, r.place))} (needs ${r.need})${r.ok ? ` with ${r.pay.map((g) => esc(cardName(s, g))).join(', ')}` : ' — not enough Power with tokens'}</button>`).join('')}</div>` : ''}
-    <label class="toggle"><input type="checkbox" id="autopass" ${ui.autoPass ? 'checked' : ''}> Pass for me when I have no possible response</label>`;
+    ${online ? '' : `<label class="toggle"><input type="checkbox" id="autopass" ${ui.autoPass ? 'checked' : ''}> Pass for me when I have no possible response</label>`}`;
 }
 
 function abilityButtons(s: GameState, card: string): string {
@@ -477,6 +481,7 @@ function renderLog(s: GameState): string {
 }
 
 function renderStart() {
+  if (online) { renderOnline(); return; }
   const saves = Object.values(loadSaves()).sort((a, b) => b.updated - a.updated);
   const pick = (ui as Ui & { pick?: string }).pick ?? 'bavarian-illuminati';
   const quick = (ui as Ui & { quick?: boolean }).quick ?? false;
@@ -606,12 +611,13 @@ function bind() {
   });
   const priv = app.querySelector<HTMLInputElement>('#priv');
   if (priv) priv.onchange = () => { if (ui.sel.kind === 'confirm') { ui.sel = { ...ui.sel, privileged: priv.checked }; render(); } };
+  if (online) bindOrders();
   const auto = app.querySelector<HTMLInputElement>('#autopass');
   if (auto) auto.onchange = () => { ui.autoPass = auto.checked; };
   app.querySelectorAll<HTMLElement>('[data-act]').forEach((b) => b.onclick = () => {
     const sel = ui.sel;
     switch (b.dataset.act) {
-      case 'home': clearTimeout(timer); ui.game = null; render(); break;
+      case 'home': clearTimeout(timer); ui.game = null; if (online) { online.gameId = undefined; online.channel?.unsubscribe(); loadGames(); } render(); break;
       case 'clear': ui.sel = { kind: 'none' }; ui.error = undefined; render(); break;
       case 'skipTakeover': act({ type: 'skipTakeover' }); break;
       case 'pass': act({ type: 'pass' }); break;
@@ -642,9 +648,198 @@ function bind() {
 // ------------------------------------------------------------------ boot
 
 function start(data: { game?: GameState | null }) {
+  if (__ONLINE__) { startOnline(); return; }
   if (data?.game) ui.game = data.game;
   render();
   schedule();
+}
+
+// ------------------------------------------------------------------ online play (Supabase)
+
+declare const __ONLINE__: boolean;
+declare const __SB_URL__: string;
+declare const __SB_KEY__: string;
+
+interface GameSummary { id: string; invite: string; seats: { id: string; name: string; isAI: boolean; joined: boolean }[]; me?: string; started: boolean; finished: boolean; yourMove: boolean; progress: string; illuminati?: string; updatedAt: number }
+interface Online {
+  client: any; // eslint-disable-line @typescript-eslint/no-explicit-any
+  userId?: string;
+  name: string;
+  games: GameSummary[];
+  gameId?: string;
+  summary?: GameSummary;
+  orders?: { passWhenNothing: boolean; passWhenUninvolved: boolean };
+  channel?: { unsubscribe(): void };
+  busy: boolean;
+  msg?: string;
+  authMode: 'signin' | 'signup';
+}
+let online: Online | null = null;
+
+async function api(body: Record<string, unknown>) {
+  const { data, error } = await online!.client.functions.invoke('ew-game', { body: { name: online!.name, ...body } });
+  if (error) {
+    let msg = error.message as string;
+    try { msg = (await error.context.json()).error ?? msg; } catch { /* keep generic message */ }
+    throw new Error(msg);
+  }
+  if (data?.error) throw new Error(data.error);
+  return data;
+}
+
+function applyReply(r: { game: GameSummary; state: GameState | null; orders?: Online['orders'] }) {
+  online!.summary = r.game;
+  online!.gameId = r.game.id;
+  online!.orders = r.orders ?? { passWhenNothing: true, passWhenUninvolved: false };
+  ui.game = r.state;
+  if (r.game.me) ui.me = r.game.me;
+}
+
+async function onlineMove(a: Action) {
+  online!.busy = true; ui.error = undefined; render();
+  try { applyReply(await api({ op: 'move', gameId: online!.gameId, action: a })); ui.sel = { kind: 'none' }; }
+  catch (e) { ui.error = (e as Error).message; if (/moved first/.test(ui.error)) await refreshGame(); }
+  online!.busy = false; render();
+}
+
+async function refreshGame() {
+  if (!online?.gameId) return;
+  try { applyReply(await api({ op: 'view', gameId: online.gameId })); render(); } catch (e) { ui.error = (e as Error).message; render(); }
+}
+
+async function loadGames() {
+  try { online!.games = (await api({ op: 'list' })).games; } catch (e) { online!.msg = (e as Error).message; }
+  render();
+}
+
+async function openGame(id: string) {
+  online!.gameId = id;
+  online!.channel?.unsubscribe();
+  online!.channel = online!.client.channel(`ew-${id}`)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'ew_game_pings', filter: `game_id=eq.${id}` }, () => refreshGame())
+    .subscribe();
+  ui.sel = { kind: 'none' }; ui.inspect = undefined;
+  await refreshGame();
+  if (!ui.game) render();
+}
+
+function startOnline() {
+  const g = window as unknown as { supabase: { createClient(u: string, k: string): unknown } };
+  online = { client: g.supabase.createClient(__SB_URL__, __SB_KEY__), name: 'Player', games: [], busy: false, authMode: 'signin' };
+  online.client.auth.onAuthStateChange((_e: string, session: { user: { id: string; email: string; user_metadata?: { name?: string } } } | null) => {
+    online!.userId = session?.user.id;
+    if (session) online!.name = session.user.user_metadata?.name || session.user.email.split('@')[0];
+    if (session) loadGames(); else render();
+  });
+  setInterval(() => { if (online?.gameId) refreshGame(); else if (online?.userId) loadGames(); }, 45_000);
+  render();
+}
+
+function renderOnline() {
+  const o = online!;
+  const msg = o.msg ? `<div class="error" role="alert">${esc(o.msg)}</div>` : '';
+  if (!o.userId) {
+    const up = o.authMode === 'signup';
+    app.innerHTML = `<div class="start"><header class="hero"><h1>Elitists War</h1><p>Play online with friends, a move at a time. Sign in so your games follow you to any device.</p></header>
+      <form class="panel auth" id="auth">${msg}
+        <h2>${up ? 'Create an account' : 'Sign in'}</h2>
+        ${up ? '<label>Your name at the table<input id="a-name" required maxlength="24" autocomplete="nickname"></label>' : ''}
+        <label>Email<input id="a-email" type="email" required autocomplete="email"></label>
+        <label>Password<input id="a-pass" type="password" required minlength="8" autocomplete="${up ? 'new-password' : 'current-password'}"></label>
+        <div class="btns"><button class="primary" type="submit" ${o.busy ? 'disabled' : ''}>${up ? 'Create account' : 'Sign in'}</button>
+        <button type="button" class="linkish" id="a-switch">${up ? 'I already have an account' : 'New here? Create an account'}</button></div>
+      </form></div>`;
+    app.querySelector<HTMLFormElement>('#auth')!.onsubmit = async (e) => {
+      e.preventDefault();
+      const email = (app.querySelector('#a-email') as HTMLInputElement).value.trim();
+      const password = (app.querySelector('#a-pass') as HTMLInputElement).value;
+      o.busy = true; o.msg = undefined; render();
+      if (up) {
+        const name = (app.querySelector('#a-name') as HTMLInputElement).value.trim();
+        const { data, error } = await o.client.auth.signUp({ email, password, options: { data: { name } } });
+        o.msg = error ? error.message : data.session ? undefined : 'Check your email and click the confirmation link, then sign in here.';
+        if (!error && !data.session) o.authMode = 'signin';
+      } else {
+        const { error } = await o.client.auth.signInWithPassword({ email, password });
+        if (error) o.msg = error.message === 'Email not confirmed' ? 'Confirm your email first: open the link we sent you, then sign in.' : error.message;
+      }
+      o.busy = false; render();
+    };
+    app.querySelector<HTMLElement>('#a-switch')!.onclick = () => { o.authMode = up ? 'signin' : 'signup'; o.msg = undefined; render(); };
+    return;
+  }
+  // Waiting room for a game whose seats are not all filled.
+  if (o.gameId && o.summary && !o.summary.started) {
+    app.innerHTML = `<div class="start"><header class="bar"><button class="linkish" data-o="lobby">‹ Games</button><div class="brand">Elitists War</div></header>
+      <section class="panel"><h2>Waiting for players</h2>
+      <p>Send your friends this invite code. The game starts as soon as every seat is filled.</p>
+      <div class="invite"><code id="code">${esc(o.summary.invite)}</code><button data-o="copy">Copy code</button></div>
+      <ul class="seats">${o.summary.seats.map((x) => `<li>${esc(x.isAI ? 'Computer' : x.name)} ${x.joined ? '✓' : '<span class="muted">(waiting)</span>'}</li>`).join('')}</ul></section></div>`;
+    bindOnline();
+    return;
+  }
+  const pick = (ui as Ui & { pick?: string }).pick ?? 'bavarian-illuminati';
+  app.innerHTML = `<div class="start">
+    <header class="bar"><div class="brand">Elitists War</div><div class="turn">${esc(o.name)} · <button class="linkish" data-o="signout">Sign out</button></div></header>
+    ${msg}
+    <section><div class="label">Your games</div><div class="saves">${o.games.map((g) => `
+      <div class="save"><button data-open="${g.id}"><b>${g.yourMove ? '● Your move — ' : ''}${esc(g.seats.map((x) => x.isAI ? 'Computer' : x.name).join(' vs '))}</b>
+      <span class="muted">${g.finished ? 'Finished' : g.started ? `${esc(g.illuminati ?? '')} · ${esc(g.progress)}` : `Waiting for players · invite ${esc(g.invite)}`}</span></button></div>`).join('') || '<p class="muted">No games yet.</p>'}</div></section>
+    <section class="panel"><h2>Join a friend's game</h2>
+      <form id="join" class="row"><label>Invite code <input id="j-code" required maxlength="6" autocapitalize="characters"></label><button class="primary" type="submit">Join</button></form></section>
+    <section><div class="label">Start a new game — choose your Illuminati</div>
+      <div class="ills">${ILLUMINATI.map((c) => `<button class="ill-pick ${pick === c.id ? 'on' : ''}" data-pick="${c.id}"><b>${esc(c.name)}</b><span class="pw">${c.power}/${c.globalPower}</span><span class="small">${esc(c.text.replace(/^Power [^.]+\.\s*/, ''))}</span></button>`).join('')}</div>
+      <form id="new" class="panel"><div class="row">
+        <label>Players <select id="n-seats"><option>2</option><option>3</option><option>4</option><option>5</option></select></label>
+        <label>Computer players <select id="n-ai"><option>0</option><option>1</option><option>2</option><option>3</option></select></label>
+        <label class="toggle"><input type="checkbox" id="n-quick"> Quick game (8 Groups, house rule)</label>
+        <button class="primary" type="submit">Create game</button></div>
+        <p class="muted small">With 0 computer players you get an invite code to send to friends. Everyone moves when they like; the game waits (up to 24 hours per response, 3 days per turn).</p></form>
+    </section></div>`;
+  bindOnline();
+  app.querySelectorAll<HTMLElement>('[data-pick]').forEach((b) => b.onclick = () => { (ui as Ui & { pick?: string }).pick = b.dataset.pick; render(); });
+  app.querySelector<HTMLFormElement>('#join')!.onsubmit = async (e) => {
+    e.preventDefault();
+    const code = (app.querySelector('#j-code') as HTMLInputElement).value.trim().toUpperCase();
+    try { applyReply(await api({ op: 'join', code, illuminati: pick })); await openGame(online!.gameId!); } catch (err) { o.msg = (err as Error).message; render(); }
+  };
+  app.querySelector<HTMLFormElement>('#new')!.onsubmit = async (e) => {
+    e.preventDefault();
+    const seats = Number((app.querySelector('#n-seats') as HTMLSelectElement).value);
+    const computerSeats = Number((app.querySelector('#n-ai') as HTMLSelectElement).value);
+    const quick = (app.querySelector('#n-quick') as HTMLInputElement).checked;
+    try { applyReply(await api({ op: 'new', seats, computerSeats, quick, illuminati: pick })); await openGame(online!.gameId!); } catch (err) { o.msg = (err as Error).message; render(); }
+  };
+}
+
+function bindOnline() {
+  const o = online!;
+  app.querySelectorAll<HTMLElement>('[data-open]').forEach((b) => b.onclick = () => openGame(b.dataset.open!));
+  app.querySelectorAll<HTMLElement>('[data-o]').forEach((b) => b.onclick = async () => {
+    const what = b.dataset.o;
+    if (what === 'signout') { await o.client.auth.signOut(); o.games = []; }
+    if (what === 'lobby') { o.gameId = undefined; o.summary = undefined; o.channel?.unsubscribe(); await loadGames(); }
+    if (what === 'copy') {
+      try { await navigator.clipboard.writeText(o.summary!.invite); b.textContent = 'Copied'; } catch { window.getSelection()?.selectAllChildren(app.querySelector('#code')!); }
+      return;
+    }
+    render();
+  });
+}
+
+/** Standing orders shown during an online game. */
+export function ordersPanel(): string {
+  if (!online?.orders) return '';
+  return `<div class="panel"><div class="label">Standing orders</div>
+    <label class="toggle"><input type="checkbox" id="o-nothing" ${online.orders.passWhenNothing ? 'checked' : ''}> Pass for me when I have no possible response</label>
+    <label class="toggle"><input type="checkbox" id="o-uninvolved" ${online.orders.passWhenUninvolved ? 'checked' : ''}> Pass for me on attacks that don't involve my Groups</label>
+    ${online.summary ? `<p class="muted small">Invite code: <code>${esc(online.summary.invite)}</code></p>` : ''}</div>`;
+}
+function bindOrders() {
+  for (const [id, key] of [['o-nothing', 'passWhenNothing'], ['o-uninvolved', 'passWhenUninvolved']] as const) {
+    const el = app.querySelector<HTMLInputElement>(`#${id}`);
+    if (el) el.onchange = async () => { try { applyReply(await api({ op: 'orders', gameId: online!.gameId, orders: { [key]: el.checked } })); } catch (e) { ui.error = (e as Error).message; } render(); };
+  }
 }
 const hot = (window as unknown as { claude?: { hot?: { snapshot?: (fn: () => unknown) => void; ready?: (fn: (d: unknown) => void) => void; data?: unknown } } }).claude?.hot;
 hot?.snapshot?.(() => ({ game: ui.game }));

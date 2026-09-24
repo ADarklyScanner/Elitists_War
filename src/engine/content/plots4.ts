@@ -1,2 +1,628 @@
 // Encoded by the card-content pass. See docs/CARD_SCRIPTING.md.
-export {};
+// Plots H–R (second batch): linked stat changes, token strippers, hand raids, Disasters and more.
+import type { Alignment, AttackCtx, GameState, PlotEffect, PlotPlay, Side } from '../types';
+import type { PlotHandler } from '../plotTypes';
+import { registerPlots } from '../plotTypes';
+import { registerHooks } from '../hooks';
+import { OPPOSITE, cardName, def } from '../cards';
+import { abilitiesOf, attackingGroups, matches } from '../abilities';
+import { alignments, attributes, power, resistance } from '../stats';
+import { depth, openArrows, structureCards } from '../geometry';
+import { nextRandom, roll2d6 } from '../rng';
+import {
+  activePlayer, cancelledGroups, currentOutcome, discardCard, giveToken, isCancelled, isSecret, log, placeGroup,
+  player, playResourceCard, protectedPlayer, startInstantAttack, takeoverOptions,
+} from '../game';
+import { hooksOf } from '../hooks';
+
+// ---------------------------------------------------------------- helpers
+
+const own = (s: GameState, pl: string, iid?: string) => !!iid && s.cards[iid]?.zone === 'structure' && s.cards[iid].controller === pl;
+const isGroup = (s: GameState, iid?: string) => !!iid && !!s.cards[iid] && def(s, iid).type === 'Group';
+const inPlay = (s: GameState, iid?: string) => !!iid && s.cards[iid]?.zone === 'structure';
+const hasAttr = (s: GameState, iid: string, a: string) => attributes(s, iid).includes(a);
+const illOf = (s: GameState, pl: string) => player(s, pl).illuminati;
+
+/** Spend one token from each listed Group of the player. */
+function spend(s: GameState, pl: string, groups: string[] = []): string | null {
+  for (const g of groups) if (!own(s, pl, g) || s.cards[g].tokens < 1) return 'Every paying Group must be yours and have an Action token.';
+  if (new Set(groups).size !== groups.length) return 'A Group can only pay once.';
+  return null;
+}
+function pay(s: GameState, groups: string[] = []) { for (const g of groups) s.cards[g].tokens--; }
+const totalPower = (s: GameState, groups: string[] = []) => groups.reduce((n, g) => n + power(s, g), 0);
+
+/** Wrap an effect so it happens at once inside an attack, or after the counter window otherwise. */
+function effectNow(fn: (s: GameState, pl: string, play: PlotPlay) => void): Pick<PlotHandler, 'apply' | 'resolve'> {
+  return {
+    apply: (s, pl, play, ctx) => { if (ctx) fn(s, pl, play); },
+    resolve: fn,
+  };
+}
+
+/** Rival whose card `iid` is (in play or in hand). */
+function rivalOf(s: GameState, pl: string, iid?: string): string | undefined {
+  if (!iid || !s.cards[iid]) return undefined;
+  const c = s.cards[iid];
+  const who = c.zone === 'hand' ? s.players.find((p) => p.hand.includes(iid))?.id : c.controller;
+  return who && who !== pl && !player(s, who).eliminated ? who : undefined;
+}
+const hiddenPlots = (s: GameState, pl: string, except?: string) =>
+  player(s, pl).hand.filter((i) => i !== except && def(s, i).type === 'Plot' && !s.cards[i].exposed);
+
+/** A linked Plot's target, unless the Plot was cancelled in the attack under way. */
+function liveLink(s: GameState, self: string): string | undefined {
+  const c = s.cards[self];
+  if (!c.linkedTo) return undefined;
+  const ctx = s.attack;
+  if (ctx && ctx.plays.some((p) => p.iid === self) && isCancelled(ctx.plays, self)) return undefined;
+  return c.linkedTo;
+}
+/** A linked Plot whose Group has left play is discarded. */
+function dropIfGone(s: GameState, self: string) {
+  const t = s.cards[self].linkedTo;
+  if (t && s.cards[t]?.zone !== 'structure' && s.cards[self].zone === 'table') discardCard(s, self);
+}
+function moveToHand(s: GameState, card: string, to: string, exposed: boolean) {
+  for (const p of s.players) p.hand = p.hand.filter((x) => x !== card);
+  Object.assign(s.cards[card], { zone: 'hand', controller: undefined, linkedTo: undefined, exposed });
+  player(s, to).hand.push(card);
+}
+
+// ---------------------------------------------------------------- families
+
+/** Target permanently gains an alignment (losing its opposite). Pay with an Illuminati action,
+ *  or actions of [alignment] Groups whose Power totals the target's Resistance (x2 if it has the
+ *  opposite alignment) plus its closeness bonus when a rival controls it. */
+function alignmentShift(add: Alignment): PlotHandler {
+  const threshold = (s: GameState, pl: string, t: string) => {
+    const opp = OPPOSITE[add];
+    let n = resistance(s, t) * (opp && alignments(s, t).includes(opp) ? 2 : 1);
+    if (s.cards[t].controller !== pl) { const d = depth(s, t); n += d === 1 ? 10 : d === 2 ? 5 : 0; }
+    return n;
+  };
+  return {
+    timing: ['anytime'],
+    linked: true,
+    needs: { target: 'anyGroup', pay: 'tokens' },
+    check(s, pl, play) {
+      if (!inPlay(s, play.target) || !isGroup(s, play.target)) return 'Choose a Group in play.';
+      const payers = play.payWith ?? [];
+      const err = spend(s, pl, payers);
+      if (err) return err;
+      if (payers.length === 1 && payers[0] === illOf(s, pl)) return null;
+      if (!payers.length || payers.some((g) => g === illOf(s, pl) || !alignments(s, g).includes(add))) return `Pay with your Illuminati, or with ${add} Groups.`;
+      const need = threshold(s, pl, play.target!);
+      if (totalPower(s, payers) < need) return `The paying ${add} Groups need at least ${need} Power in total.`;
+      return null;
+    },
+    apply(s, _pl, play, ctx) { pay(s, play.payWith); if (ctx) shift(s, play); },
+    resolve: (s, _pl, play) => shift(s, play),
+  };
+  function shift(s: GameState, play: PlotPlay) {
+    if (!inPlay(s, play.target)) return;
+    s.cards[play.target!].mods.push({ source: play.card, kind: 'addAlign', align: add, until: 'permanent' });
+    s.cards[play.card].linkedTo = play.target;
+  }
+}
+
+/** Disaster: Instant Attack to Destroy a Place. */
+function disaster(opts: { power: (s: GameState, t: string) => number; destroyMargin: number | null; hugeAllowed: boolean; also?: (s: GameState) => void }): PlotHandler {
+  return {
+    timing: ['instant'],
+    needs: { target: 'place' },
+    check(s, _pl, play) {
+      if (!inPlay(s, play.target) || def(s, play.target!).subtype !== 'Place') return 'Choose a Place in play.';
+      if (!opts.hugeAllowed && hasAttr(s, play.target!, 'Huge')) return 'This Disaster cannot strike a Huge Place.';
+      return null;
+    },
+    apply(s, pl, play) {
+      opts.also?.(s);
+      startInstantAttack(s, pl, { plot: play.card, target: play.target!, power: opts.power(s, play.target!), disaster: { destroyMargin: opts.destroyMargin } });
+    },
+  };
+}
+
+/**
+ * Impostor / Media Blitz: play from hand a duplicate of a Group that was destroyed (or of a
+ * Personality that was Assassinated). It enters your Power Structure on an open arrow (of `helper`
+ * if given, facing `mode` if given), and the original stops counting as destroyed for Goals.
+ */
+function duplicateReturn(kind: 'assassinated' | 'destroyed', payOk: (s: GameState, pl: string, g: string, dup: string) => boolean, payMsg: string): PlotHandler {
+  const original = (s: GameState, dup: string) => Object.values(s.cards).find((c) => c.cardId === s.cards[dup].cardId && c.iid !== dup && c.zone === 'destroyed'
+    && (kind === 'assassinated' ? !!c.killed && def(s, c.iid).subtype === 'Personality' : !(c.killed && def(s, c.iid).subtype === 'Personality')));
+  const candidates = (s: GameState, pl: string) => player(s, pl).hand.filter((i) => def(s, i).type === 'Group' && !!original(s, i)
+    && !Object.values(s.cards).some((c) => c.cardId === s.cards[i].cardId && c.zone === 'structure'));
+  const spot = (s: GameState, pl: string, play: PlotPlay): { m: string; side: Side } | undefined => {
+    const masters = play.helper ? [play.helper] : [illOf(s, pl), ...structureCards(s, pl).filter((g) => g !== illOf(s, pl))];
+    for (const m of masters) {
+      if (!own(s, pl, m)) continue;
+      const side = openArrows(s, m).find((sd) => !play.mode || sd === play.mode);
+      if (side) return { m, side };
+    }
+    return undefined;
+  };
+  const pick = (s: GameState, pl: string, play: PlotPlay) => (play.target ? play.target : candidates(s, pl)[0]);
+  return {
+    timing: ['anytime'],
+    needs: { pay: 'tokens' },
+    check(s, pl, play) {
+      const dup = pick(s, pl, play);
+      if (!dup || !candidates(s, pl).includes(dup)) {
+        return kind === 'assassinated' ? 'You need a card in hand that duplicates an Assassinated Personality.' : 'You need a Group card in hand that duplicates a destroyed Group (not an Assassinated Personality).';
+      }
+      const err = spend(s, pl, play.payWith);
+      if (err) return err;
+      if (play.payWith?.length !== 1 || !payOk(s, pl, play.payWith[0], dup)) return payMsg;
+      if (!spot(s, pl, play)) return 'You need an open control arrow to place it on.';
+      return null;
+    },
+    apply(s, pl, play, ctx) { pay(s, play.payWith); if (ctx) bring(s, pl, play); },
+    resolve: (s, pl, play) => bring(s, pl, play),
+  };
+  function bring(s: GameState, pl: string, play: PlotPlay) {
+    const dup = pick(s, pl, play);
+    if (!dup || !player(s, pl).hand.includes(dup)) return;
+    const orig = original(s, dup);
+    const at = spot(s, pl, play);
+    if (!orig || !at) { log(s, 'There is no longer room for the duplicate.', pl); return; }
+    for (const p of s.players) p.destroyedCredit = p.destroyedCredit.filter((x) => x !== orig.iid);
+    placeGroup(s, dup, pl, at.m, at.side);
+    s.cards[dup].tokens = 0;
+    log(s, `${cardName(s, dup)} returns to play under ${player(s, pl).name}'s control; the original no longer counts as destroyed.`, pl);
+    hooksOf(s, dup)?.onEnterPlay?.(s, dup);
+  }
+}
+
+// ---------------------------------------------------------------- the cards
+
+registerPlots({
+  // ---- linked stat changes
+  'hidden-influence': {
+    timing: ['anytime'],
+    linked: true,
+    needs: { target: 'anyGroup' },
+    check(s, pl, play) {
+      if (!inPlay(s, play.target) || !isGroup(s, play.target)) return 'Choose a Group in play.';
+      return s.cards[illOf(s, pl)].tokens >= 1 ? null : 'This costs an action from your Illuminati.';
+    },
+    apply(s, pl, play, ctx) { s.cards[illOf(s, pl)].tokens--; if (ctx) s.cards[play.card].linkedTo = play.target; },
+    resolve(s, _pl, play) { if (inPlay(s, play.target)) s.cards[play.card].linkedTo = play.target; },
+  },
+  'messiah': {
+    timing: ['anytime'],
+    linked: true,
+    needs: { target: 'personality' },
+    check(s, pl, play, ctx) {
+      if (ctx) return 'Messiah cannot be played during an attack.';
+      if (!own(s, pl, play.target) || def(s, play.target!).subtype !== 'Personality') return 'Choose a Personality you control.';
+      if (Object.values(s.cards).some((c) => c.cardId === 'messiah' && c.zone === 'table' && c.linkedTo)) return 'Only one Messiah can be in play at a time.';
+      return null;
+    },
+    apply() {},
+    resolve(s, _pl, play) { if (inPlay(s, play.target)) s.cards[play.card].linkedTo = play.target; },
+  },
+  'never-surrender': {
+    timing: ['anytime'],
+    linked: true,
+    needs: { target: 'anyGroup' },
+    check(s, pl, play, ctx) {
+      const t = play.target;
+      if (!t || !s.cards[t] || def(s, t).type !== 'Group' || !alignments(s, t).includes('Fanatic')) return 'Choose a Fanatic Group.';
+      const justPlayed = !!ctx && ctx.fromHand && ctx.target === t && ctx.attackerPlayer !== pl;
+      if (!inPlay(s, t) && !justPlayed) return 'Choose a Fanatic Group in play, or one a rival has just played from his hand.';
+      return null;
+    },
+    ...effectNow((s, _pl, play) => {
+      const t = s.cards[play.target!];
+      if (t.zone === 'structure' || (s.attack?.fromHand && s.attack.target === play.target)) s.cards[play.card].linkedTo = play.target;
+    }),
+  },
+  'resistance-is-useless': {
+    timing: ['anytime'],
+    linked: true,
+    needs: { target: 'anyGroup', pay: 'tokens' },
+    check(s, pl, play) {
+      if (!inPlay(s, play.target) || !isGroup(s, play.target)) return 'Choose a Group in play.';
+      const err = spend(s, pl, play.payWith);
+      if (err) return err;
+      return play.payWith?.length === 1 && hasAttr(s, play.payWith[0], 'Media') ? null : 'Pay with the action of one of your Media Groups.';
+    },
+    ...(() => {
+      const link = (s: GameState, _pl: string, play: PlotPlay) => {
+        if (!inPlay(s, play.target)) return;
+        s.cards[play.card].linkedTo = play.target;
+        s.cards[play.card].data = { turn: s.turn };
+      };
+      return {
+        apply: (s: GameState, pl: string, play: PlotPlay, ctx?: AttackCtx) => { pay(s, play.payWith); if (ctx) link(s, pl, play); },
+        resolve: link,
+      };
+    })(),
+  },
+
+  // ---- alignment changes (same family as Liberal Agenda etc.)
+  'nationalization': alignmentShift('Government'),
+  'privatization': alignmentShift('Corporate'),
+  'power-corrupts': alignmentShift('Criminal'),
+
+  // ---- Action tokens
+  'market-manipulation': {
+    timing: ['anytime'],
+    needs: { target: 'anyGroup' },
+    check(s, pl, play) {
+      const t = play.target;
+      if (t && (!inPlay(s, t) || !isGroup(s, t) || !(alignments(s, t).includes('Corporate') || hasAttr(s, t, 'Bank')))) return 'Choose a Corporate or Bank Group in play.';
+      for (const g of play.targets ?? []) {
+        if (!inPlay(s, g) || !isGroup(s, g) || !hasAttr(s, g, 'Bank')) return 'Only Bank Groups can be added to the list.';
+        if (protectedPlayer(s, pl, s.cards[g].controller)) return 'That player has not finished a first turn yet.';
+      }
+      return null;
+    },
+    ...effectNow((s, pl, play) => {
+      const banks = play.targets ?? Object.values(s.cards).filter((c) => c.zone === 'structure' && c.controller !== pl && def(s, c.iid).type === 'Group'
+        && hasAttr(s, c.iid, 'Bank') && !protectedPlayer(s, pl, c.controller)).map((c) => c.iid);
+      const all = [...new Set([...(play.target ? [play.target] : []), ...banks])].filter((g) => inPlay(s, g));
+      for (const g of all) s.cards[g].tokens = 0;
+      log(s, all.length ? `Action tokens removed from ${all.map((g) => cardName(s, g)).join(', ')}.` : 'No Action tokens removed.', pl);
+    }),
+  },
+  'mass-murder': {
+    timing: ['anytime'],
+    needs: { target: 'anyGroup', pay: 'tokens' },
+    check(s, pl, play) {
+      const media = (g?: string) => inPlay(s, g) && isGroup(s, g) && hasAttr(s, g!, 'Media');
+      if (play.target && !media(play.target)) return 'Choose a Media Group.';
+      for (const g of play.targets ?? []) {
+        if (!media(g)) return 'Only Media Groups can lose their tokens.';
+        if (protectedPlayer(s, pl, s.cards[g].controller)) return 'That player has not finished a first turn yet.';
+      }
+      const payers = play.payWith ?? [];
+      const err = spend(s, pl, payers);
+      if (err) return err;
+      if (payers.length === 1 && payers[0] === illOf(s, pl)) return null;
+      if (!payers.length || !payers.every((g) => media(g)) || totalPower(s, payers) < 5) return 'Pay with your Illuminati, or with Media Groups whose Power totals 5 or more.';
+      return null;
+    },
+    apply(s, pl, play, ctx): PlotEffect | void {
+      pay(s, play.payWith);
+      if (!ctx) return;
+      strip(s, pl, play);
+      // Cancel the just-taken action of the chosen Media Group, if it is acting in this attack.
+      if (play.target && [ctx.attacker, ...ctx.aid.map((a) => a.iid), ...ctx.oppose.map((o) => o.iid)].includes(play.target)) return { t: 'cancelGroup', group: play.target };
+    },
+    resolve: (s, pl, play) => strip(s, pl, play),
+  },
+  'miracle-diet-plan': {
+    timing: ['anytime'],
+    linked: true,
+    needs: { target: 'rivalGroup', helper: true, pay: 'tokens' },
+    check(s, pl, play, ctx) {
+      if (ctx) return 'Miracle Diet Plan cannot be played during an attack.';
+      const err = spend(s, pl, play.payWith);
+      if (err) return err;
+      if (play.payWith?.length !== 1 || !hasAttr(s, play.payWith[0], 'Media')) return 'Pay with the action of one of your Media Groups.';
+      if (!own(s, pl, play.helper) || !isGroup(s, play.helper) || !hasAttr(s, play.helper!, 'Science')) return 'Choose a Science Group you control (as the helper) to triple its next action.';
+      if (!inPlay(s, play.target) || !isGroup(s, play.target) || s.cards[play.target!].controller === pl) return 'Choose a rival Group (not an Illuminati) to lose its Action tokens.';
+      return null;
+    },
+    apply(s, _pl, play) { pay(s, play.payWith); },
+    resolve(s, pl, play) {
+      if (inPlay(s, play.target)) { s.cards[play.target!].tokens = 0; log(s, `${cardName(s, play.target!)} loses its Action tokens.`, pl); }
+      if (own(s, pl, play.helper)) s.cards[play.card].linkedTo = play.helper;
+    },
+  },
+  'reach-out': {
+    timing: ['anytime'],
+    needs: { target: 'rivalGroup' },
+    check(s, pl, play) {
+      if (s.phase !== 'endOfTurn' || activePlayer(s).id !== pl || s.attack) return 'Play this only at the end of your own turn.';
+      if (!rivalOf(s, pl, play.target) || s.cards[play.target!].zone !== 'structure') return 'Choose a rival (one of his Groups).';
+      return s.cards[illOf(s, pl)].tokens >= 1 ? null : 'This costs an action from your Illuminati.';
+    },
+    apply(s, pl) { s.cards[illOf(s, pl)].tokens--; },
+    resolve(s, pl, play) {
+      const rival = s.cards[play.target!].controller;
+      for (const who of [rival, pl]) if (who) for (const g of structureCards(s, who)) s.cards[g].tokens = 0;
+      log(s, `${rival ? player(s, rival).name : 'The rival'}'s Groups and ${player(s, pl).name}'s own Groups lose all their Action tokens.`, pl);
+    },
+  },
+
+  // ---- hands and hidden Plots
+  'let-s-you-and-him-fight': {
+    timing: ['anytime'],
+    needs: { target: 'rivalGroup' },
+    check(s, pl, play) {
+      if (!rivalOf(s, pl, play.target)) return 'Choose a rival (one of his Groups).';
+      return s.cards[illOf(s, pl)].tokens >= 1 ? null : 'This costs an action from your Illuminati.';
+    },
+    apply(s, pl) { s.cards[illOf(s, pl)].tokens--; },
+    resolve(s, pl, play) {
+      const rival = rivalOf(s, pl, play.target);
+      if (!rival) return;
+      const pool = player(s, rival).hand.filter((i) => ['Group', 'Resource'].includes(def(s, i).type));
+      if (!pool.length) { log(s, `${player(s, rival).name} has no Group cards in hand.`, pl); return; }
+      let lose = pool[0];
+      if (pool.length > 1) {
+        const a = pool.splice(Math.floor(nextRandom(s) * pool.length), 1)[0];
+        const b = pool[Math.floor(nextRandom(s) * pool.length)];
+        // The player picks which of the two is discarded: the more valuable card goes.
+        const worth = (i: string) => (def(s, i).power ?? 0) + (def(s, i).arrowsOut?.length ?? 0) + (def(s, i).type === 'Resource' ? 3 : 0);
+        lose = worth(b) > worth(a) ? b : a;
+        log(s, `Drawn at random: ${cardName(s, a)} and ${cardName(s, b)}.`, pl);
+      }
+      discardCard(s, lose);
+      log(s, `${player(s, rival).name} discards ${cardName(s, lose)}.`, pl);
+    },
+  },
+  'logic-bomb': {
+    timing: ['anytime'],
+    needs: { target: 'rivalGroup', pay: 'tokens' },
+    check(s, pl, play) {
+      const rival = rivalOf(s, pl, play.target);
+      if (!rival) return 'Choose a rival (one of his Groups or hidden Plots).';
+      if (play.targets?.length && (play.targets.length > 1 || !hiddenPlots(s, rival).includes(play.targets[0]))) return 'You may take one of his hidden Plots.';
+      const err = spend(s, pl, play.payWith);
+      if (err) return err;
+      return play.payWith?.length === 1 && power(s, play.payWith[0]) >= 6 ? null : 'Pay with the action of one Group with Power 6 or more.';
+    },
+    apply(s, _pl, play) { pay(s, play.payWith); },
+    resolve(s, pl, play) {
+      const rival = rivalOf(s, pl, play.target);
+      if (!rival) return;
+      const hidden = hiddenPlots(s, rival);
+      log(s, `${player(s, pl).name} looks at ${player(s, rival).name}'s ${hidden.length} hidden Plot${hidden.length === 1 ? '' : 's'}.`, pl);
+      const take = play.targets?.[0] && hidden.includes(play.targets[0]) ? play.targets[0]
+        : def(s, play.target!).type === 'Plot' && hidden.includes(play.target!) ? play.target!
+          : hidden.length ? hidden[Math.floor(nextRandom(s) * hidden.length)] : undefined;
+      if (!take) return;
+      moveToHand(s, take, pl, true);
+      log(s, `${player(s, pl).name} takes ${cardName(s, take)} and exposes it.`, pl);
+    },
+  },
+  'mutual-betrayal': {
+    timing: ['anytime'],
+    needs: { target: 'rivalGroup', pay: 'tokens' },
+    check(s, pl, play) {
+      const t = play.targets ?? [];
+      const rival = rivalOf(s, pl, play.target) ?? t.map((x) => rivalOf(s, pl, x)).find(Boolean);
+      if (!rival) return 'Choose a rival.';
+      if (protectedPlayer(s, pl, rival)) return 'That player has not finished a first turn yet.';
+      const theirs = t.filter((x) => hiddenPlots(s, rival).includes(x));
+      const mine = t.filter((x) => hiddenPlots(s, pl, play.card).includes(x));
+      if (new Set(t).size !== t.length || theirs.length + mine.length !== t.length) return 'List only his hidden Plots and your own hidden Plots.';
+      if (theirs.length !== mine.length) return 'For each of his Plots you expose, expose one of your own.';
+      const err = spend(s, pl, play.payWith);
+      if (err) return err;
+      return play.payWith?.length === 1 ? null : 'Pay with the action of one Group.';
+    },
+    apply(s, _pl, play) { pay(s, play.payWith); },
+    resolve(s, pl, play) {
+      const t = play.targets ?? [];
+      const rival = rivalOf(s, pl, play.target) ?? t.map((x) => rivalOf(s, pl, x)).find(Boolean);
+      if (rival) log(s, `${player(s, pl).name} looks at ${player(s, rival).name}'s hidden Plots.`, pl);
+      const still = t.filter((x) => s.cards[x].zone === 'hand' && !s.cards[x].exposed);
+      if (still.length !== t.length) return; // something changed hands meanwhile: expose nothing
+      for (const x of t) s.cards[x].exposed = true;
+      if (t.length) log(s, `Exposed: ${t.map((x) => cardName(s, x)).join(', ')}.`, pl);
+    },
+  },
+  'nice-idea-it-s-mine-now': {
+    timing: ['anytime'],
+    check(s, pl, play) {
+      if (activePlayer(s).id !== pl) return 'Only on your own turn.';
+      const goal = play.target ?? exposedGoals(s, pl)[0];
+      if (!goal || !exposedGoals(s, pl).includes(goal)) return 'Choose an exposed Goal card of a rival.';
+      return s.cards[illOf(s, pl)].tokens >= 1 ? null : 'This costs an action from your Illuminati.';
+    },
+    apply(s, pl) { s.cards[illOf(s, pl)].tokens--; },
+    resolve(s, pl, play) {
+      const goal = play.target ?? exposedGoals(s, pl)[0];
+      if (!goal || !exposedGoals(s, pl).includes(goal)) return;
+      moveToHand(s, goal, pl, true);
+      log(s, `${player(s, pl).name} takes the Goal ${cardName(s, goal)}.`, pl);
+    },
+  },
+  'impostor': duplicateReturn('assassinated',
+    (s, _pl, g, dup) => alignments(s, g).some((a) => a !== 'Fanatic' && alignments(s, dup).includes(a)),
+    'Pay with the action of one of your Groups sharing an alignment with that Personality.'),
+  'media-blitz': duplicateReturn('destroyed',
+    (s, _pl, g) => hasAttr(s, g, 'Media'),
+    'Pay with the action of one of your Media Groups.'),
+
+  // ---- attacks
+  'mistaken-identity': {
+    timing: ['attack', 'roll'],
+    check: (_s, _pl, _play, ctx) => (ctx?.assassination ? null : 'Play this against an Assassination.'),
+    apply: (): PlotEffect => ({ t: 'fail' }),
+  },
+  'mother-s-march': {
+    timing: ['roll'],
+    needs: { pay: 'tokens' },
+    check(s, pl, play, ctx) {
+      if (!ctx?.roll || ctx.type !== 'destroy') return 'Play this right after an Attack to Destroy has succeeded.';
+      if (currentOutcome(s, ctx) !== 'success') return 'Only after the Attack to Destroy has succeeded.';
+      const err = spend(s, pl, play.payWith);
+      if (err) return err;
+      return play.payWith?.length === 1 && power(s, play.payWith[0]) >= 3 ? null : 'Pay with the action of one Group with Power 3 or more.';
+    },
+    apply(s, pl, play, ctx): PlotEffect {
+      pay(s, play.payWith);
+      ctx!.attackBonus.push({ player: pl, plot: play.card, amount: -4, label: "Mothers' March" });
+      const dice = roll2d6(s);
+      log(s, `Re-roll at −4: ${dice[0]} + ${dice[1]} = ${dice[0] + dice[1]}.`, pl);
+      return { t: 'reroll', dice };
+    },
+  },
+  'payoff': {
+    timing: ['counter', 'attack'],
+    needs: { target: 'plot' },
+    check(s, pl, play, ctx) {
+      const pool = ctx?.plays ?? [];
+      const pp = pool.find((p) => p.iid === play.target);
+      if (!pp || !s.cards[pp.iid] || def(s, pp.iid).type !== 'Group' || pp.player === pl) return 'Play this when a rival plays a duplicate of one of your Groups.';
+      if (!Object.values(s.cards).some((c) => c.zone === 'structure' && c.controller === pl && c.cardId === s.cards[pp.iid].cardId)) return 'That card does not duplicate a Group you control.';
+      return null;
+    },
+    apply: (_s, _pl, play): PlotEffect => ({ t: 'cancelPlot', target: play.target! }),
+  },
+  'plague-of-demons': {
+    timing: ['instant', 'declare', 'attack'],
+    needs: { target: 'anyGroup', mode: ['disaster', 'boost'], pay: 'tokens' },
+    check(s, pl, play, ctx) {
+      if ((play.mode ?? 'disaster') === 'boost') {
+        if (!ctx || ctx.type !== 'destroy' || !matches(s, ctx.target, { attributes: ['Magic'] })) return 'Discard it for +10 to an Attack to Destroy a Magic Group.';
+        if (play.target && play.target !== ctx.target) return 'The bonus goes to the attack on the Magic Group.';
+        return null;
+      }
+      if (ctx) return 'The Disaster is an Instant Attack: play it when no attack is under way.';
+      if (!inPlay(s, play.target) || def(s, play.target!).subtype !== 'Place') return 'Choose a Place in play.';
+      if (hasAttr(s, play.target!, 'Huge')) return 'Plague of Demons cannot strike a Huge Place.';
+      const err = spend(s, pl, play.payWith);
+      if (err) return err;
+      return play.payWith?.length === 1 && matches(s, play.payWith[0], { attributes: ['Magic'] }) ? null : 'Spend the action of one of your Magic Groups.';
+    },
+    apply(s, pl, play) {
+      // Plays during an attack come here without ctx (Instant-capable Plot): use the attack in progress.
+      if ((play.mode ?? 'disaster') === 'boost') {
+        s.attack?.attackBonus.push({ player: pl, plot: play.card, amount: 10, label: 'Plague of Demons' });
+        return;
+      }
+      const g = play.payWith![0];
+      const p = 10 + power(s, g);
+      pay(s, play.payWith);
+      startInstantAttack(s, pl, { plot: play.card, target: play.target!, power: p, disaster: { destroyMargin: 6 } });
+    },
+  },
+  'nuclear-accident': disaster({
+    power: (s, t) => (hasAttr(s, t, 'Huge') ? 14 : 18), destroyMargin: 5, hugeAllowed: true,
+    also: (s) => {
+      for (const c of Object.values(s.cards)) {
+        if (c.cardId === 'nuclear-power-companies' && c.zone === 'structure' && c.tokens > 0) { c.tokens = 0; log(s, 'Nuclear Power Companies loses its action token.'); }
+      }
+    },
+  }),
+  'rain-of-frogs': disaster({
+    power: (s, t) => 10 + 4 * Object.values(s.cards).filter((c) => c.cardId === 'the-frog-god' && c.zone === 'resources' && c.controller === s.cards[t].controller).length,
+    destroyMargin: 7, hugeAllowed: true,
+  }),
+
+  // ---- turn structure
+  'power-grab': {
+    timing: ['anytime'],
+    needs: { helper: true },
+    check(s, pl, play, ctx) {
+      if (ctx || s.phase !== 'main' || activePlayer(s).id !== pl) return 'Play this on your own turn, right after your automatic takeover.';
+      let i = s.log.length - 1;
+      while (i >= 0 && !(s.log[i].turn === s.turn && s.log[i].player === pl && /automatically|into play/.test(s.log[i].text))) i--;
+      if (!s.turnFlags.takeoverDone || i < 0 || s.log.slice(i + 1).some((e) => e.player === pl)) return 'Play this right after your automatic takeover, before doing anything else.';
+      return grabOption(s, pl, play) ? null : 'You have no second automatic takeover to make (choose a card in hand and an open arrow).';
+    },
+    apply() {},
+    resolve(s, pl, play) {
+      const o = grabOption(s, pl, play);
+      if (o) {
+        if (def(s, o.card).type === 'Resource') playResourceCard(s, o.card, pl);
+        else {
+          placeGroup(s, o.card, pl, o.onto, o.side);
+          log(s, `${player(s, pl).name} takes over ${cardName(s, o.card)} automatically.`, pl);
+          hooksOf(s, o.card)?.onEnterPlay?.(s, o.card);
+          giveToken(s, o.card);
+        }
+      }
+      log(s, `${player(s, pl).name}'s turn ends at once.`, pl);
+      s.phase = 'endOfTurn';
+    },
+  },
+});
+
+function strip(s: GameState, pl: string, play: PlotPlay) {
+  const list = play.targets ?? Object.values(s.cards).filter((c) => c.zone === 'structure' && c.controller !== pl && def(s, c.iid).type === 'Group'
+    && hasAttr(s, c.iid, 'Media') && !protectedPlayer(s, pl, c.controller)).map((c) => c.iid);
+  const all = [...new Set([...(play.target ? [play.target] : []), ...list])].filter((g) => inPlay(s, g));
+  for (const g of all) s.cards[g].tokens = 0;
+  log(s, all.length ? `Media Groups lose their Action tokens: ${all.map((g) => cardName(s, g)).join(', ')}.` : 'No Media Groups lose tokens.', pl);
+}
+
+function exposedGoals(s: GameState, pl: string): string[] {
+  return s.players.filter((p) => p.id !== pl && !p.eliminated && !protectedPlayer(s, pl, p.id))
+    .flatMap((p) => p.hand.filter((i) => def(s, i).subtype === 'Goal' && s.cards[i].exposed));
+}
+
+function grabOption(s: GameState, pl: string, play: PlotPlay) {
+  return takeoverOptions(s, pl).find((o) => (!play.target || o.card === play.target)
+    && (def(s, o.card).type === 'Resource' || ((!play.helper || o.onto === play.helper) && (!play.mode || o.side === play.mode))));
+}
+
+// ---------------------------------------------------------------- ongoing effects of linked Plots
+
+const defenseAbilityBonus = (s: GameState, t: string, ctx: AttackCtx): number => {
+  if (!ctx.targetPlayer || isSecret(s, t) || (!!ctx.attacker && isSecret(s, ctx.attacker))) return 0;
+  const attackers = ctx.instant ? [] : attackingGroups(ctx);
+  let n = 0;
+  for (const g of structureCards(s, ctx.targetPlayer)) {
+    for (const a of abilitiesOf(s, g)) {
+      if (a.kind !== 'structureDefense' && !(a.kind === 'selfDefense' && g === t)) continue;
+      const kindOk = !a.on || a.on === 'both' || a.on === ctx.type;
+      if (kindOk && (!ctx.instant || a.instant) && (!a.vs || attackers.some((x) => matches(s, x, a.vs)))) n += a.value;
+    }
+  }
+  return n;
+};
+
+const churches = (s: GameState, pl?: string) => (pl ? structureCards(s, pl).filter((g) => def(s, g).type === 'Group' && (def(s, g).attributes ?? []).includes('Church')).length : 0);
+
+registerHooks({
+  // Global Power is capped at Power, so a large bonus makes it equal to Power.
+  'hidden-influence': {
+    globalMod: (s, self, iid) => (liveLink(s, self) === iid ? 1000 : 0),
+    onTurnStart: dropIfGone,
+  },
+  'messiah': {
+    powerMod: (s, self, iid) => (liveLink(s, self) === iid ? 4 + 2 * churches(s, s.cards[self].controller) : 0),
+    resistanceMod: (s, self, iid) => (liveLink(s, self) === iid ? 4 + 2 * churches(s, s.cards[self].controller) : 0),
+    onTurnStart: dropIfGone,
+  },
+  // Resistance raised to 12 (measured from the printed value).
+  'never-surrender': {
+    resistanceMod: (s, self, iid) => (liveLink(s, self) === iid ? Math.max(0, 12 - (def(s, iid).resistance ?? 0)) : 0),
+    onAttackEnd: (s, self) => dropIfGone(s, self),
+    onTurnStart: dropIfGone,
+  },
+  'resistance-is-useless': {
+    resistanceMod: (s, self, iid) => (liveLink(s, self) === iid && s.cards[self].data?.turn === s.turn ? -1000 : 0),
+    // No bonus from shared alignments with its master or from special abilities (control attacks).
+    attackMod(s, self, ctx, side) {
+      const t = liveLink(s, self);
+      if (side !== 'defense' || ctx.type !== 'control' || t !== ctx.target || s.cards[self].data?.turn !== s.turn) return 0;
+      let n = 0;
+      const m = s.cards[t].master;
+      if (!ctx.fromHand && m && def(s, m).type === 'Group') n += alignments(s, t).filter((x) => x !== 'Fanatic' && alignments(s, m).includes(x)).length * 4;
+      return -(n + defenseAbilityBonus(s, t, ctx));
+    },
+    onTurnStart: (s, self) => { if (s.cards[self].data?.turn !== s.turn) discardCard(s, self); },
+  },
+  // The Science Group's next action (in an attack) is made at triple Power.
+  'miracle-diet-plan': {
+    attackMod(s, self, ctx, side) {
+      const g = s.cards[self].linkedTo;
+      if (!g || cancelledGroups(ctx).has(g) || s.cards[g]?.zone !== 'structure') return 0;
+      const attacking = ctx.attacker === g || ctx.aid.some((a) => a.iid === g);
+      const defending = ctx.oppose.some((o) => o.iid === g);
+      if ((side === 'attack' && attacking) || (side === 'defense' && defending)) return 2 * power(s, g);
+      return 0;
+    },
+    onAttackEnd(s, self, ctx) {
+      const g = s.cards[self].linkedTo;
+      if (g && [ctx.attacker, ...ctx.aid.map((a) => a.iid), ...ctx.oppose.map((o) => o.iid)].includes(g)) {
+        log(s, 'The Miracle Diet Plan has been used.');
+        discardCard(s, self);
+      }
+    },
+    onTurnStart: dropIfGone,
+  },
+  // Alignment-change Plots only need to leave when their Group does.
+  'nationalization': { onTurnStart: dropIfGone },
+  'privatization': { onTurnStart: dropIfGone },
+  'power-corrupts': { onTurnStart: dropIfGone },
+});

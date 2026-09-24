@@ -184,3 +184,12 @@ p { margin: 0; }
 .res b { font-family: var(--display); font-size: 14px; }
 .res.selected { box-shadow: 0 0 0 2px var(--brass); }
 .hcard.res-card { border-color: #4b3d5c; }
+
+/* Online lobby */
+.auth { max-width: 420px; }
+.auth label, #new label, #join label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
+.auth input, #new select, #join input { font: inherit; color: var(--ink); background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; }
+.invite { display: flex; gap: 10px; align-items: center; }
+.invite code { font: 600 28px var(--mono); letter-spacing: .2em; color: var(--brass); }
+.invite button, .save button { cursor: pointer; }
+.seats { margin: 0; padding-left: 18px; }

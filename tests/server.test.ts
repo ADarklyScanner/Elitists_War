@@ -51,3 +51,18 @@ describe('online play service', () => {
     expect(changed).toBeGreaterThanOrEqual(1);
   });
 });
+
+describe('website API handler', () => {
+  it('creates, lists, joins, views and moves', async () => {
+    const { handle } = await import('../src/server/api');
+    const store = new MemoryStore();
+    const made = await handle(store, 'u1', { op: 'new', name: 'Ann', illuminati: 'ufos', seats: 2 }) as { game: { invite: string; id: string; started: boolean } };
+    expect(made.game.started).toBe(false);
+    const joined = await handle(store, 'u2', { op: 'join', code: made.game.invite, name: 'Bob', illuminati: 'the-network' }) as { game: { started: boolean; me: string }; state: { players: { hand: string[] }[] } };
+    expect(joined.game.started).toBe(true);
+    expect(joined.game.me).toBe('p2');
+    const list = await handle(store, 'u1', { op: 'list' }) as { games: unknown[] };
+    expect(list.games.length).toBe(1);
+    await expect(handle(store, 'u3', { op: 'view', gameId: made.game.id })).rejects.toThrow(/not found/);
+  });
+});
