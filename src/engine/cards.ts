@@ -7,6 +7,10 @@ export const CARDS: Record<string, CardDef> = Object.fromEntries(
 
 export const ALL_CARDS: CardDef[] = rawCards as CardDef[];
 
+// Face-down cards in an online player's view of a rival's hand or a deck.
+CARDS['hidden-plot'] = { id: 'hidden-plot', name: 'Plot card', type: 'Plot', subtype: 'Hidden', rarity: null, text: 'A face-down Plot card.' };
+CARDS['hidden-group'] = { id: 'hidden-group', name: 'Group card', type: 'Group', subtype: 'Hidden', rarity: null, text: 'A face-down card.' };
+
 export const OPPOSITE: Partial<Record<Alignment, Alignment>> = {
   Government: 'Corporate', Corporate: 'Government',
   Liberal: 'Conservative', Conservative: 'Liberal',

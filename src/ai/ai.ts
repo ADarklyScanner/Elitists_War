@@ -5,7 +5,26 @@ import {
   applyAction, attackStrength, canAid, canOppose, checkPlot, currentOutcome, def, openArrows, player,
   plotsInHand, handLimit, power, resistance, structureCards, takeoverOptions, validateAttack, waitingFor,
   alignments, abilitiesOf, PLOTS, subtree, goalCount, goalNeeded, depth, bestLead, plotOptions,
+  HOOKS, checkAbility, resourcesOf, canEnterPlay, type AbilityParams,
 } from '../engine';
+
+/** Activated abilities of our cards with a given AI hint, tried against a few likely targets. */
+function abilityMoves(s: GameState, pl: string, hint: string, targets: (string | undefined)[]): Action[] {
+  const out: Action[] = [];
+  const mine = [...structureCards(s, pl), ...resourcesOf(s, pl)];
+  for (const card of mine) {
+    for (const ab of HOOKS[s.cards[card].cardId]?.actions ?? []) {
+      if (ab.ai !== hint) continue;
+      if (!ab.usesToken && !ab.oncePerTurn) continue; // free, repeatable abilities could loop forever
+      const modes = ab.needs?.modes ?? [undefined];
+      for (const target of ab.needs?.target ? targets : [undefined]) for (const mode of modes) {
+        const params: AbilityParams = { target, mode };
+        if (!checkAbility(s, pl, card, ab.id, params)) out.push({ type: 'useAbility', card, ability: ab.id, params });
+      }
+    }
+  }
+  return out;
+}
 
 /** Chance that 2d6 rolls `strength` or less (11 and 12 always fail). */
 export function successChance(strength: number): number {
@@ -134,7 +153,19 @@ function mainPhase(s: GameState, pl: string): Action {
     if (tryAction(s, pl, withPlots)) return withPlots;
     if (tryAction(s, pl, best.action)) return best.action;
   }
-  // 3. Buy a Plot with a spare Illuminati token.
+  // 3. Resources: bring one into play with the Illuminati's action, and link where a card wants it.
+  if (s.cards[me.illuminati].tokens > 0 && !s.turnFlags.resourcePlayed) {
+    const r = me.hand.find((h) => def(s, h).type === 'Resource' && canEnterPlay(s, h, pl));
+    if (r) { const a: Action = { type: 'playResource', card: r }; if (tryAction(s, pl, a)) return a; }
+  }
+  for (const r of resourcesOf(s, pl)) {
+    const rule = HOOKS[s.cards[r].cardId]?.linkTo;
+    if (!rule || s.cards[r].linkMovedTurn || (s.cards[r].linkedTo && s.cards[r].linkedTo !== me.illuminati)) continue;
+    const best = structureCards(s, pl).filter((g) => g !== me.illuminati && rule(s, r, g)).sort((a, b) => power(s, b) - power(s, a))[0];
+    if (best) { const a: Action = { type: 'link', resource: r, to: best }; if (tryAction(s, pl, a)) return a; }
+  }
+  for (const a of abilityMoves(s, pl, 'draw', [undefined])) if (tryAction(s, pl, a)) return a;
+  // 4. Buy a Plot with a spare Illuminati token.
   if (s.cards[me.illuminati].tokens > 0 && plotsInHand(s, pl).length < 4 && me.plotDeck.length) {
     const a: Action = { type: 'buyPlot', payWith: [me.illuminati] };
     if (tryAction(s, pl, a)) return a;
@@ -148,6 +179,12 @@ function respondToAttack(s: GameState, pl: string): Action {
   const mine = structureCards(s, pl).filter((g) => s.cards[g].tokens > 0);
   if (ctx.attackerPlayer === pl) {
     if (chance < 0.72) {
+      const dup = player(s, pl).hand.find((h) => s.cards[h].cardId === s.cards[ctx.target].cardId && h !== ctx.target);
+      if (dup && ctx.targetPlayer && ctx.targetPlayer !== pl) {
+        const a: Action = { type: 'agent', card: dup, as: 'aid' };
+        if (tryAction(s, pl, a)) return a;
+      }
+      for (const a of abilityMoves(s, pl, 'boostAttack', [ctx.target, ctx.attacker])) if (tryAction(s, pl, a)) return a;
       const helpers = mine.map((g) => ({ g, r: canAid(s, pl, g) })).filter((x) => x.r.ok)
         .sort((a, b) => power(s, b.g) - power(s, a.g));
       for (const h of helpers) {
@@ -165,6 +202,8 @@ function respondToAttack(s: GameState, pl: string): Action {
       const a: Action = { type: 'playPlot', play };
       if (worth >= 6 && PLOTS[s.cards[c].cardId]?.needs?.mode && tryAction(s, pl, a)) return a;
     }
+    for (const a of abilityMoves(s, pl, 'cancelAttacker', [ctx.attacker])) if (worth >= 6 && tryAction(s, pl, a)) return a;
+    for (const a of abilityMoves(s, pl, 'boostDefense', [ctx.target, ctx.attacker])) if (tryAction(s, pl, a)) return a;
     const defenders = mine.map((g) => ({ g, r: canOppose(s, pl, g) })).filter((x) => x.r.ok)
       .sort((a, b) => Number(b.r.self) - Number(a.r.self) || power(s, b.g) - power(s, a.g));
     for (const d of defenders) {

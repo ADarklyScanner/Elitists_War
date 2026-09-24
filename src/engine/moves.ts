@@ -6,6 +6,8 @@ import { cardName, def } from './cards';
 import { openArrows, structureCards } from './geometry';
 import { alignments, power } from './stats';
 import { PLOTS } from './plotTypes';
+import { HOOKS } from './hooks';
+import { checkAbility, resourcesOf } from './game';
 
 const ALIGNMENTS: Alignment[] = ['Government', 'Corporate', 'Liberal', 'Conservative', 'Peaceful', 'Violent', 'Straight', 'Weird', 'Criminal', 'Fanatic'];
 
@@ -120,6 +122,42 @@ export function responseOptions(s: GameState, pl: string): MoveOption[] {
     }
   }
   for (const c of plotsInHand(s, pl)) for (const o of plotOptions(s, pl, c)) out.push({ label: `${cardName(s, c)}: ${o.label}`, action: o.action });
+  // Agents: a duplicate of the attacked Group in your hand (R031).
+  const ctx = s.attack;
+  if (s.window.kind === 'attack' && ctx && !ctx.instant) {
+    for (const h of player(s, pl).hand) {
+      if (h === ctx.target || s.cards[h].cardId !== s.cards[ctx.target].cardId) continue;
+      for (const as of ['aid', 'oppose'] as const) {
+        const a: Action = { type: 'agent', card: h, as };
+        if (legal(s, pl, a)) out.push({ label: `Agents in ${cardName(s, h)}: ${as === 'aid' ? '+10 to the attack' : '−6 to the attack'}`, action: a });
+      }
+    }
+  }
+  for (const card of [...structureCards(s, pl), ...resourcesOf(s, pl)]) out.push(...abilityOptions(s, pl, card));
+  return out;
+}
+
+/** Legal uses of a card's activated abilities right now. */
+export function abilityOptions(s: GameState, pl: string, card: string): MoveOption[] {
+  const out: MoveOption[] = [];
+  const inPlay = Object.values(s.cards).filter((c) => c.zone === 'structure' || c.zone === 'resources').map((c) => c.iid);
+  const plays = (s.window?.kind === 'plot' ? s.window.plays ?? [] : s.attack?.plays ?? []).map((p) => p.iid).filter((i) => s.cards[i]);
+  for (const ab of HOOKS[s.cards[card].cardId]?.actions ?? []) {
+    const n = ab.needs ?? {};
+    let targets: (string | undefined)[] = [undefined];
+    if (n.target === 'plot') targets = plays;
+    else if (n.target === 'actingGroup') targets = s.attack ? [s.attack.attacker, ...s.attack.aid.map((a) => a.iid), ...s.attack.oppose.map((o) => o.iid)].filter((x): x is string => !!x) : [];
+    else if (n.target === 'resource') targets = inPlay.filter((i) => s.cards[i].zone === 'resources');
+    else if (n.target) targets = inPlay.filter((i) => s.cards[i].zone === 'structure');
+    const modes = n.modes ?? [undefined];
+    const aligns = n.alignment ? ALIGNMENTS : [undefined];
+    for (const target of targets) for (const mode of modes) for (const alignment of aligns) {
+      const params = { target, mode, alignment };
+      if (checkAbility(s, pl, card, ab.id, params)) continue;
+      const bits = [ab.label, target ? `on ${cardName(s, target)}` : '', mode ?? '', alignment ?? ''].filter(Boolean);
+      out.push({ label: `${cardName(s, card)}: ${bits.join(' · ')}`, action: { type: 'useAbility', card, ability: ab.id, params } });
+    }
+  }
   return out;
 }
 

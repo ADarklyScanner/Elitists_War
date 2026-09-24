@@ -6,7 +6,7 @@ import {
   goalCount, goalNeeded, hasResponse, ILLUMINATI, isImplemented, GROUP_ABILITIES, openArrows, outSides,
   plotOptions, plotsInHand, handLimit, power, resistance, globalPower, alignments, randomDeck,
   responseOptions, structureCards, subtree, takeoverOptions, waitingFor, DELTA, PLOTS, NWO_EFFECTS,
-  describePlay, player, leadOptions, abilitiesOf,
+  describePlay, player, leadOptions, abilitiesOf, abilityOptions, resourcesOf, canEnterPlay, HOOKS,
 } from '../engine';
 import { chooseAction, successChance } from '../ai/ai';
 
@@ -20,7 +20,9 @@ type Sel =
   | { kind: 'move'; group: string }
   | { kind: 'plot'; card: string }
   | { kind: 'takeover'; card: string }
-  | { kind: 'discard'; cards: string[] };
+  | { kind: 'discard'; cards: string[] }
+  | { kind: 'resource'; iid: string }
+  | { kind: 'link'; resource: string };
 
 interface Ui {
   game: GameState | null;
@@ -206,6 +208,11 @@ function renderSide(s: GameState, pl: string, mine: boolean): string {
         ${mine ? '' : `<span class="muted">${p.hand.filter((i) => def(s, i).type === 'Plot').length} Plots · ${p.hand.filter((i) => def(s, i).type !== 'Plot').length} Groups in hand</span>`}
       </div>
       <div class="board-scroll"><div class="grid" style="grid-template-columns:repeat(${maxX - minX + 1},var(--cell));grid-template-rows:repeat(${maxY - minY + 1},var(--cell))">${cells.join('')}</div></div>
+      ${resourcesOf(s, pl).length ? `<div class="res-row"><span class="label">Resources</span>${resourcesOf(s, pl).map((r) => {
+        const c = s.cards[r];
+        const sel = (ui.sel.kind === 'resource' && ui.sel.iid === r) || (ui.sel.kind === 'link' && ui.sel.resource === r);
+        return `<button class="res ${sel ? 'selected' : ''}" data-res="${r}"><b>${esc(cardName(s, r))}</b>${c.tokens ? '<span class="token-inline"></span>' : ''}<span class="muted small">${c.linkedTo && s.cards[c.linkedTo] && def(s, c.linkedTo).type !== 'Illuminati' ? `linked to ${esc(cardName(s, c.linkedTo))}` : 'unlinked'}</span></button>`;
+      }).join('')}</div>` : ''}
     </div>`;
 }
 
@@ -277,9 +284,9 @@ function handCard(s: GameState, iid: string): string {
   const targetable = sel.kind === 'attack' && sel.type === 'control' && attackOptions(s, ui.me, sel.attacker).some((o) => o.target === iid);
   return `
     <button class="hcard ${isPlot ? 'plot' : 'group'} ${selected ? 'selected' : ''} ${targetable ? 'targetable' : ''} ${isPlot && !playable ? 'inactive' : ''}" data-hand="${iid}">
-      <span class="kind">${isPlot ? esc(d.subtype === 'Plot' ? 'Plot' : d.subtype) : esc(d.subtype)}</span>
+      <span class="kind">${isPlot ? esc(d.subtype === 'Plot' ? 'Plot' : d.subtype) : d.type === 'Resource' ? 'Resource' : esc(d.subtype)}</span>
       <span class="name">${esc(d.name)}</span>
-      ${isPlot ? `<span class="txt">${esc(d.modifier ?? d.text)}</span>` : `
+      ${isPlot || d.type === 'Resource' ? `<span class="txt">${esc(d.modifier ?? d.text)}</span>` : `
         <span class="aligns">${(d.alignments ?? []).map(chip).join('')}</span>
         <span class="stats"><span class="pw">${d.power}${d.globalPower ? `<small>/${d.globalPower}</small>` : ''}</span><span class="rs">${d.resistance}</span></span>`}
     </button>`;
@@ -367,6 +374,7 @@ function renderMainConsole(s: GameState): string {
         ${canMove ? `<button data-act="move">Move</button>` : ''}
         <button class="linkish" data-act="clear">Cancel</button>
       </div>
+      ${abilityButtons(s, sel.iid)}
       ${!canControl && !canDestroy && s.cards[sel.iid].tokens ? `<p class="muted">${s.players.some((p) => p.id !== ui.me && p.turnsTaken < 1) || me.turnsTaken < 1 ? 'No attacks on your rival until you have both finished a turn. You can still attack Groups in your hand to control.' : 'No legal targets right now.'}</p>` : ''}`;
   }
   if (sel.kind === 'attack') {
@@ -387,6 +395,20 @@ function renderMainConsole(s: GameState): string {
       }).join('')}</div>` : ''}
       ${abilitiesOf(s, player(s, ui.me).illuminati).some((a) => a.kind === 'freePrivilegedAttack') && !s.turnFlags.bavarianPrivilege ? `<label class="toggle"><input type="checkbox" id="priv" ${sel.privileged ? 'checked' : ''}> Make it Privileged (your Illuminati's free Privileged attack this turn: only you and the defender can take part)</label>` : ''}
       <div class="btns"><button class="primary" data-act="declare">Declare attack</button><button class="linkish" data-act="clear">Cancel</button></div>`;
+  }
+  if (sel.kind === 'resource') {
+    const d = def(s, sel.iid);
+    const inHand = s.cards[sel.iid].zone === 'hand';
+    if (inHand) {
+      const can = !s.turnFlags.resourcePlayed && s.cards[me.illuminati].tokens > 0 && canEnterPlay(s, sel.iid, ui.me);
+      return `<h2>${esc(d.name)}</h2><p class="small">${esc(d.text)}</p>
+        <div class="btns"><button class="primary" data-act="playResource" ${can ? '' : 'disabled'}>Put into play (Illuminati token, once per turn)</button><button class="linkish" data-act="clear">Close</button></div>`;
+    }
+    return `<h2>${esc(d.name)}</h2><p class="small">${esc(d.text)}</p>
+      <div class="btns"><button data-act="linkStart">Link to a Group</button><button class="linkish" data-act="clear">Close</button></div>${abilityButtons(s, sel.iid)}`;
+  }
+  if (sel.kind === 'link') {
+    return `<h2>Link ${esc(cardName(s, sel.resource))}</h2><p>Tap one of your Groups to link it to. A link can be moved once per turn.</p><div class="btns"><button class="linkish" data-act="clear">Cancel</button></div>`;
   }
   if (sel.kind === 'move') {
     return `<h2>Move ${esc(cardName(s, sel.group))}</h2><p>Tap a + to move it (and its puppets) there. Costs one Action token.</p>
@@ -420,6 +442,13 @@ function renderMainConsole(s: GameState): string {
     </div>
     ${reliefs.length ? `<div class="label">Relief for Devastated Places (needs 3× printed Power)</div><div class="opts">${reliefs.map((r, i) => `<button data-relief="${i}" ${r.ok ? '' : 'disabled'}>Relieve ${esc(cardName(s, r.place))} (needs ${r.need})${r.ok ? ` with ${r.pay.map((g) => esc(cardName(s, g))).join(', ')}` : ' — not enough Power with tokens'}</button>`).join('')}</div>` : ''}
     <label class="toggle"><input type="checkbox" id="autopass" ${ui.autoPass ? 'checked' : ''}> Pass for me when I have no possible response</label>`;
+}
+
+function abilityButtons(s: GameState, card: string): string {
+  const opts = abilityOptions(s, ui.me, card);
+  (window as unknown as { __abil: typeof opts }).__abil = opts;
+  if (!opts.length) return (HOOKS[s.cards[card].cardId]?.actions?.length ? '<p class="muted small">Its special ability cannot be used right now.</p>' : '');
+  return `<div class="label">Special abilities</div><div class="opts">${opts.map((o, i) => `<button data-abil="${i}">${esc(o.label)}</button>`).join('')}</div>`;
 }
 
 function renderInspect(s: GameState): string {
@@ -495,6 +524,7 @@ function onTableCard(iid: string) {
     const opt = attackOptions(s, ui.me, sel.attacker).find((o) => o.target === iid && o.type === sel.type);
     if (opt) { ui.sel = { kind: 'confirm', attacker: sel.attacker, target: iid, type: sel.type, side: opt.sides[0], plots: [] }; render(); return; }
   }
+  if (sel.kind === 'link' && s.cards[iid].controller === ui.me) { act({ type: 'link', resource: sel.resource, to: iid }); return; }
   if (idle(s) && s.cards[iid].controller === ui.me && sel.kind !== 'move') {
     ui.sel = { kind: 'group', iid };
   }
@@ -511,8 +541,12 @@ function onHandCard(iid: string) {
     if (d.type !== 'Plot') return render();
     const cards = sel.kind === 'discard' ? sel.cards : [];
     ui.sel = { kind: 'discard', cards: cards.includes(iid) ? cards.filter((c) => c !== iid) : [...cards, iid] };
+  } else if (s.prompt?.player === ui.me && s.prompt.kind === 'takeover' && d.type === 'Resource') {
+    if (canEnterPlay(s, iid, ui.me)) { act({ type: 'takeover', card: iid, onto: player(s, ui.me).illuminati, side: 'TOP' }); return; }
   } else if (s.prompt?.player === ui.me && s.prompt.kind === 'takeover' && d.type === 'Group') {
     ui.sel = { kind: 'takeover', card: iid };
+  } else if (d.type === 'Resource' && idle(s)) {
+    ui.sel = { kind: 'resource', iid };
   } else if (sel.kind === 'attack' && sel.type === 'control' && attackOptions(s, ui.me, sel.attacker).some((o) => o.target === iid)) {
     ui.sel = { kind: 'confirm', attacker: sel.attacker, target: iid, type: 'control', side: openArrows(s, sel.attacker)[0], plots: [] };
   } else if (d.type === 'Plot' && (idle(s) || (s.window && waitingFor(s).includes(ui.me)))) {
@@ -555,6 +589,16 @@ function bind() {
     ui.sel = { ...sel, plots: sel.plots.some((p) => p.card === pick.c) ? sel.plots.filter((p) => p.card !== pick.c) : [...sel.plots.filter((p) => p.card !== pick.c), play] };
     render();
   });
+  app.querySelectorAll<HTMLElement>('[data-res]').forEach((b) => b.onclick = () => {
+    const r = b.dataset.res!;
+    ui.inspect = r;
+    if (s.cards[r].controller === ui.me && (idle(s) || (s.window && waitingFor(s).includes(ui.me)))) ui.sel = { kind: 'resource', iid: r };
+    render();
+  });
+  app.querySelectorAll<HTMLElement>('[data-abil]').forEach((b) => b.onclick = () => {
+    const o = (window as unknown as { __abil: { action: Action }[] }).__abil[Number(b.dataset.abil)];
+    act(o.action);
+  });
   app.querySelectorAll<HTMLElement>('[data-lead]').forEach((b) => b.onclick = () => act({ type: 'chooseLead', card: b.dataset.lead! }));
   app.querySelectorAll<HTMLElement>('[data-relief]').forEach((b) => b.onclick = () => {
     const r = (window as unknown as { __relief: { place: string; pay: string[] }[] }).__relief[Number(b.dataset.relief)];
@@ -576,6 +620,8 @@ function bind() {
       case 'return': if (sel.kind === 'discard') act({ type: 'discard', cards: sel.cards, toDeck: true }); break;
       case 'callOff': act({ type: 'callOff' }); break;
       case 'drawGroup': act({ type: 'drawGroup' }); break;
+      case 'playResource': if (sel.kind === 'resource') act({ type: 'playResource', card: sel.iid }); break;
+      case 'linkStart': if (sel.kind === 'resource') { ui.sel = { kind: 'link', resource: sel.iid }; render(); } break;
       case 'buy-ill': act({ type: 'buyPlot', payWith: [player(s, ui.me).illuminati] }); break;
       case 'buy-two': {
         const ill = player(s, ui.me).illuminati;

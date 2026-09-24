@@ -177,3 +177,10 @@ p { margin: 0; }
 .saves { display: flex; flex-direction: column; gap: 8px; }
 .save { display: flex; gap: 8px; align-items: center; }
 .save > button:first-child { flex: 1; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); padding: 10px 12px; text-align: left; display: flex; flex-direction: column; gap: 2px; }
+
+/* Resources beside a Power Structure */
+.res-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 0 12px 12px; }
+.res { display: flex; flex-direction: column; gap: 2px; text-align: left; border: 1px solid #4b3d5c; background: linear-gradient(170deg, #26213a, #1b1828); border-radius: 7px; padding: 6px 10px; font-size: 12.5px; }
+.res b { font-family: var(--display); font-size: 14px; }
+.res.selected { box-shadow: 0 0 0 2px var(--brass); }
+.hcard.res-card { border-color: #4b3d5c; }
