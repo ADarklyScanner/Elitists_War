@@ -31,6 +31,9 @@ function abilityMoves(s: GameState, pl: string, hint: string, targets: (string |
 /** Chance that 2d6 rolls `strength` or less (11 and 12 always fail). */
 export { successChance };
 
+/** Knobs for the computer player's appetite for risk. */
+export const AI_TUNING = { minChance: 0.4, actionCost: 2 };
+
 const tryAction = (s: GameState, pl: string, a: Action): boolean => {
   try { applyAction(s, pl, a); return true; } catch { return false; }
 };
@@ -153,14 +156,14 @@ function mainPhase(s: GameState, pl: string): Action {
   const generic = genericMainMoves(s, pl);
   if (generic) return generic;
   // 2. Best attack: the most promising few are played out both ways and weighed by their odds.
-  const plans = planAttacks(s, pl).filter((p) => p.chance >= 0.25).slice(0, 8);
+  const plans = planAttacks(s, pl).filter((p) => p.chance >= AI_TUNING.minChance).slice(0, 8);
   const now = evaluate(s, pl);
   let best: AttackPlan | undefined;
   let bestGain = 0.5;
   for (const p of plans) {
     let after: GameState;
     try { after = applyAction(s, pl, p.action); } catch { continue; }
-    const gain = p.chance * attackOutcomeScore(after, pl, true) + (1 - p.chance) * attackOutcomeScore(after, pl, false) - now;
+    const gain = p.chance * attackOutcomeScore(after, pl, true) + (1 - p.chance) * attackOutcomeScore(after, pl, false) - now - AI_TUNING.actionCost;
     if (gain > bestGain) { bestGain = gain; best = p; }
   }
   if (best) {
