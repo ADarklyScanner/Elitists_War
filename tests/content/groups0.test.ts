@@ -5,6 +5,7 @@ import {
   startInstantAttack, validateAttack, waitingFor, type Action, type AttackType, type GameState,
 } from '../../src/engine';
 import { roll2d6 } from '../../src/engine/rng';
+import { canAid, drawPlot, GOALS, player as playerOf } from '../../src/engine';
 import { give, scenario } from '../helpers';
 
 const act = (s: GameState, pl: string, a: Action) => applyAction(s, pl, a);
@@ -645,5 +646,176 @@ describe('Local Police Departments', () => {
     expect(power(s, mafia)).toBe(7);
     expect(resistance(s, mafia)).toBe(10);
     expect(power(s, kkk)).toBe(2);
+  });
+});
+
+// ---------------------------------------------------------------- parts added with the newer hooks
+
+const va = (s: GameState, attacker: string, target: string, attackType: AttackType) =>
+  validateAttack(s, 'p1', { type: 'attack', attackType, attacker, target });
+
+describe('Deprogrammers', () => {
+  it('may attack the Discordian Society\'s Groups although they are Straight', () => {
+    const s = scenario();
+    s.cards[ill(s, 'p2')].cardId = 'discordian-society';
+    const dp = put(s, 'p1', 'deprogrammers');
+    const fb = put(s, 'p1', 'fred-birch-society');
+    const gun = put(s, 'p2', 'gun-lobby');
+    expect(va(s, dp, gun, 'destroy')).toBeNull();
+    expect(va(s, fb, gun, 'destroy')).toMatch(/immune/);
+  });
+});
+
+describe('Druids and Secret Groups', () => {
+  it('may aid an attack on a Secret Magic Group, not on another Secret Group', () => {
+    const s0 = scenario();
+    const dr = put(s0, 'p1', 'druids');
+    const vamp = put(s0, 'p2', 'vampires');
+    const s = attack(s0, ill(s0, 'p1'), vamp, 'destroy');
+    expect(canAid(s, 'p1', dr).ok).toBe(true);
+    const s1 = scenario();
+    const dr1 = put(s1, 'p1', 'druids');
+    const sub = put(s1, 'p2', 'subliminals');
+    const t = attack(s1, ill(s1, 'p1'), sub, 'destroy');
+    expect(canAid(t, 'p1', dr1)).toMatchObject({ ok: false, why: expect.stringMatching(/Secret/) });
+  });
+  it('still cannot lead an attack on a Secret Magic Group', () => {
+    const s = scenario();
+    const dr = put(s, 'p1', 'druids');
+    const vamp = put(s, 'p2', 'vampires');
+    expect(va(s, dr, vamp, 'destroy')).toMatch(/Secret/);
+  });
+});
+
+describe('Elders of Zion', () => {
+  it('spend their action and an Illuminati action to move Groups for free', () => {
+    const s0 = scenario();
+    const ez = put(s0, 'p1', 'elders-of-zion');
+    const mafia = put(s0, 'p1', 'the-mafia');
+    const gun = put(s0, 'p1', 'gun-lobby');
+    let s = use(s0, 'p1', ez, 'reorganize');
+    expect(s.cards[ez].tokens).toBe(0);
+    expect(s.cards[ill(s, 'p1')].tokens).toBe(0);
+    s.cards[gun].tokens = 0; s.cards[mafia].tokens = 0;
+    s = act(s, 'p1', { type: 'move', group: gun, onto: mafia, side: openArrows(s, mafia)[0], payWith: gun });
+    expect(s.cards[gun].master).toBe(mafia);
+  });
+  it('need the Illuminati action too', () => {
+    const s = scenario();
+    const ez = put(s, 'p1', 'elders-of-zion');
+    s.cards[ill(s, 'p1')].tokens = 0;
+    expect(() => use(s, 'p1', ez, 'reorganize')).toThrow(/Illuminati/);
+  });
+});
+
+describe('Evil Geniuses: linked Resources are locked', () => {
+  it('a Resource linked to them cannot be moved', () => {
+    const s0 = scenario();
+    const eg = put(s0, 'p1', 'evil-geniuses-for-a-better-tomorrow');
+    const cy = give(s0, 'p1', 'cyborg-soldiers', { hand: true });
+    const s = use(s0, 'p1', eg, 'gadget', { target: cy });
+    s.cards[cy].linkMovedTurn = undefined;
+    expect(() => act(s, 'p1', { type: 'link', resource: cy, to: ill(s, 'p1') })).toThrow(/locked/);
+  });
+});
+
+describe('Fred Birch Society', () => {
+  function destroyed(s: GameState, ids: string[]) {
+    for (const id of ids) {
+      const g = give(s, 'p2', id, { hand: true });
+      hand(s, 'p2').splice(hand(s, 'p2').indexOf(g), 1);
+      s.cards[g].zone = 'destroyed';
+      playerOf(s, 'p1').destroyedCredit.push(g);
+    }
+  }
+  const LIBERAL = ['democrats', 'feminists', 'eff', 'big-media', 'black-activists'];
+  it('counts as two Conservative Groups for Goal cards', () => {
+    const s = scenario();
+    destroyed(s, LIBERAL);
+    put(s, 'p1', 'fred-birch-society');
+    put(s, 'p1', 'gun-lobby');
+    expect(GOALS['let-them-eat-cake'](s, 'p1')).toMatch(/3 Conservative/);
+  });
+  it('an ordinary Conservative Group counts once', () => {
+    const s = scenario();
+    destroyed(s, LIBERAL);
+    put(s, 'p1', 'kkk');
+    put(s, 'p1', 'gun-lobby');
+    expect(GOALS['let-them-eat-cake'](s, 'p1')).toBeNull();
+  });
+  it('also counts twice when destroyed', () => {
+    const run = (dead: string[]) => {
+      const s = scenario();
+      destroyed(s, dead);
+      const placed = [ill(s, 'p1')];
+      for (const id of LIBERAL) placed.push(put(s, 'p1', id, placed.find((m) => openArrows(s, m).length)));
+      return GOALS['power-to-the-people'](s, 'p1');
+    };
+    expect(run(['fred-birch-society', 'kkk'])).toMatch(/3 Conservative/);
+    expect(run(['gun-lobby', 'kkk'])).toBeNull();
+  });
+});
+
+describe('Intellectuals: the Media master cannot be captured', () => {
+  it('forbids an Attack to Control on it, not an Attack to Destroy', () => {
+    const s = scenario();
+    const mafia = put(s, 'p1', 'the-mafia');
+    const comics = put(s, 'p2', 'comic-books');
+    put(s, 'p2', 'intellectuals', comics);
+    expect(va(s, mafia, comics, 'control')).toMatch(/Intellectuals/);
+    expect(va(s, mafia, comics, 'destroy')).toBeNull();
+  });
+  it('a non-Media master may be captured', () => {
+    const s = scenario();
+    const mafia = put(s, 'p1', 'the-mafia');
+    const kkk = put(s, 'p2', 'kkk');
+    put(s, 'p2', 'intellectuals', kkk);
+    expect(va(s, mafia, kkk, 'control')).toBeNull();
+  });
+});
+
+describe('Junk Mail', () => {
+  it('may attack a Secret Group, with +6 to control it', () => {
+    const s0 = scenario();
+    const jm = put(s0, 'p1', 'junk-mail');
+    const sub = put(s0, 'p2', 'subliminals');
+    expect(va(s0, jm, sub, 'control')).toBeNull();
+    expect(line(attack(s0, jm, sub, 'control'), 'Attack', 'Junk Mail')).toBe(6);
+  });
+  it('other Groups still cannot; no bonus against a non-Secret Group', () => {
+    const s0 = scenario();
+    const jm = put(s0, 'p1', 'junk-mail');
+    const mafia = put(s0, 'p1', 'the-mafia');
+    const sub = put(s0, 'p2', 'subliminals');
+    const gun = put(s0, 'p2', 'gun-lobby');
+    expect(va(s0, mafia, sub, 'control')).toMatch(/Secret/);
+    expect(line(attack(s0, jm, gun, 'control'), 'Attack', 'Junk Mail')).toBe(0);
+  });
+  it('may oppose an attack on a Secret Group', () => {
+    const s0 = scenario();
+    const sub = put(s0, 'p2', 'subliminals');
+    const jm = put(s0, 'p2', 'junk-mail');
+    const s = attack(s0, ill(s0, 'p1'), sub, 'destroy');
+    expect(canOppose(s, 'p2', jm).ok).toBe(true);
+  });
+});
+
+describe('Liquor Companies', () => {
+  it('cancel the rival\'s next card draw, once', () => {
+    const s0 = scenario();
+    const lq = put(s0, 'p1', 'liquor-companies');
+    const s = use(s0, 'p1', lq, 'dry', { target: ill(s0, 'p2') });
+    expect(s.cards[lq].tokens).toBe(0);
+    expect(drawPlot(s, playerOf(s, 'p2'))).toEqual([]);
+    expect(drawPlot(s, playerOf(s, 'p2')).length).toBe(1);
+  });
+  it('one cancellation at a time; it lapses at the start of your next turn', () => {
+    const s0 = scenario();
+    const lq = put(s0, 'p1', 'liquor-companies');
+    const s = use(s0, 'p1', lq, 'dry', { target: ill(s0, 'p2') });
+    s.cards[lq].tokens = 1;
+    expect(() => use(s, 'p1', lq, 'dry', { target: ill(s, 'p2') })).toThrow(/already/);
+    // Your own draws are never affected.
+    expect(drawPlot(s, playerOf(s, 'p1')).length).toBe(1);
   });
 });

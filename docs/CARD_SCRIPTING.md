@@ -86,6 +86,10 @@ To give a player an extra turn next, set `s.extraTurnFor = playerId`.
 - `disablesAbilities` works on table cards only. It switches off a Group's own abilities and hooks.
 - `beforeDraw` returns `'skip'` or `'bottom'` to change a draw.
 - `onDraw` runs after a card is drawn.
+- `lockLinks` stops Resources linked to the card from being linked elsewhere.
+- `worksInSecretAttacks: true` keeps the card's `attackMod` in attacks by or against Secret Groups (R014 normally drops it).
+- `goalAlignWeight(s, iid, alignment)` says how many Groups of that alignment the card counts as for Goal cards
+  (in play or destroyed); Goal code reads it with `goalAlignWeight()` from game.ts.
 
 Modifiers `{kind:'addAttr'|'removeAttr', attr}` and `{kind:'addArrow', side}` change attributes and arrows
 while the card is in play.

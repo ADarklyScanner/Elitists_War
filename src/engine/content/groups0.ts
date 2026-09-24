@@ -68,10 +68,8 @@ registerAbilities({
   'deprogrammers': [
     { kind: 'attackBonus', on: 'destroy', target: { alignments: ['Weird', 'Fanatic'] }, value: 4, scope: 'direct' },
     { kind: 'attackBonus', on: 'destroy', target: { allAlignments: ['Weird', 'Fanatic'] }, value: 4, scope: 'direct' },
-    { kind: 'pending', note: 'May affect Discordian-protected Straight targets' },
   ],
   'druids': [
-    { kind: 'pending', note: 'May also aid/oppose attacks by or against Secret Magic groups (engine applies the Secret restriction before card permissions)' },
   ],
   'eco-guerrillas': [
     { kind: 'attackBonus', on: 'destroy', target: { alignments: ['Corporate'] }, value: 6, scope: 'direct' },
@@ -80,13 +78,9 @@ registerAbilities({
   'eff': [
     { kind: 'attackBonus', on: 'control', target: { attributes: ['Computer'] }, value: 4, scope: 'direct' },
   ],
-  'elders-of-zion': [
-    { kind: 'pending', note: 'Own action + Illuminati action: reorganize entire Power Structure' },
-  ],
+  'elders-of-zion': [],
   'empty-vee': [],
-  'evil-geniuses-for-a-better-tomorrow': [
-    { kind: 'pending', note: 'Resources linked here cannot be unlinked (needs a link-lock rule for Resources)' },
-  ],
+  'evil-geniuses-for-a-better-tomorrow': [],
   'fast-food-chains': [
     { kind: 'attackBonus', on: 'destroy', target: { attributes: ['Green'] }, value: 6, scope: 'direct' },
   ],
@@ -109,9 +103,7 @@ registerAbilities({
   'flat-earthers': [],
   'fnord-motor-company': [],
   'fraternal-orders': [],
-  'fred-birch-society': [
-    { kind: 'pending', note: 'Counts double as Conservative for Illuminated goals only' },
-  ],
+  'fred-birch-society': [],
   'gay-activists': [],
   'girlie-magazines': [
     { kind: 'attackBonus', on: 'control', target: { alignments: ['Straight'] }, value: 5, scope: 'direct' },
@@ -124,11 +116,9 @@ registerAbilities({
     { kind: 'attackBonus', on: 'control', target: { attributes: ['Computer'] }, value: 4, scope: 'direct' },
     { kind: 'attackBonus', on: 'both', target: { attributes: ['Computer'] }, value: 2, scope: 'any' },
   ],
-  'intellectuals': [
-    { kind: 'pending', note: 'Media master cannot be captured except by Disaster or Assassination (needs an immunity hook that knows the attack type)' },
-  ],
+  'intellectuals': [],
   'international-cocaine-smugglers': [
-    { kind: 'pending', note: '+4 to control specified drug/crime/media groups and qualifying Personalities (target list unspecified)' },
+    { kind: 'pending', note: '+4 to control certain drug, crime and media Groups and some Personalities: the card data does not name which ones, so the bonus is not applied' },
   ],
   'international-communist-conspiracy': [
     { kind: 'attackBonus', on: 'control', target: { attributes: ['Communist'] }, value: 3, scope: 'direct' },
@@ -139,10 +129,8 @@ registerAbilities({
   'joggers': [
     { kind: 'cannotBeDestroyed' },
   ],
-  'junk-mail': [
-    { kind: 'attackBonus', on: 'control', target: { attributes: ['Secret'] }, value: 6, scope: 'direct' },
-    { kind: 'pending', note: 'May directly attack, aid or oppose Secret groups' },
-  ],
+  // Junk Mail's +6 against Secret Groups is scripted below: it must work in Secret attacks (R014).
+  'junk-mail': [],
   'kkk': [],
   'l-4-society': [
     { kind: 'attackBonus', on: 'both', target: { attributes: ['Science', 'Space'] }, value: 4, scope: 'direct' },
@@ -153,7 +141,6 @@ registerAbilities({
   'libertarians': [],
   'liquor-companies': [
     { kind: 'attackBonus', on: 'control', target: { attributes: ['Media'] }, value: 4, scope: 'direct' },
-    { kind: 'pending', note: 'Action: cancel one rival card-draw opportunity' },
   ],
   'loan-sharks': [
     { kind: 'powerPer', per: { alignments: ['Criminal'] }, value: 1 },
@@ -208,6 +195,12 @@ function rivalFor(s: GameState, pl: string, p: AbilityParams): string | null {
 }
 const rivalError = (s: GameState, pl: string, r: string | null) =>
   !r ? 'Choose a card of the rival you want to target.' : protectedPlayer(s, pl, r) ? 'That player has not finished a first turn yet.' : null;
+
+/** `target` is in the Power Structure of the Discordian Society. */
+const discordianTarget = (s: GameState, target: string) => {
+  const c = s.cards[target];
+  return c?.zone === 'structure' && !!c.controller && s.cards[player(s, c.controller).illuminati].cardId === 'discordian-society';
+};
 
 const isGadget = (s: GameState, iid: string) => def(s, iid).type === 'Resource' && /\bGadget\b/.test(`${def(s, iid).notes ?? ''} ${def(s, iid).text}`);
 
@@ -376,9 +369,16 @@ registerHooks({
     }],
   },
 
+  'deprogrammers': {
+    // The Discordians' protection against Straight Groups does not stop the Deprogrammers.
+    ignoreImmunity: (s, self, attacker, target) => attacker === self && discordianTarget(s, target),
+  },
+
   'druids': {
     mayJoin: (s, self, ctx, group) =>
       group === self && (is(s, ctx.attacker, { attributes: ['Magic'] }) || is(s, ctx.target, { attributes: ['Magic'] })),
+    // They may help in attacks by or against Magic Groups even when those are Secret (not lead an attack on one).
+    secretOverride: (s, self, group, secret) => !!s.attack && group === self && is(s, secret, { attributes: ['Magic'] }),
     attackMod(s, self, ctx, side) {
       const place = s.cards[self].data?.place as string | undefined;
       return side === 'defense' && !!ctx.disaster && !!place && ctx.target === place && own(s, ctl(s, self)!, place) ? 8 : 0;
@@ -396,6 +396,27 @@ registerHooks({
         own(s, pl, p.target) && def(s, p.target!).subtype === 'Place' ? (s.cards[self].data?.place === p.target ? 'Already linked there.' : null) : 'Choose a Place you control.',
       apply(s, pl, self, p) { s.cards[self].data = { ...s.cards[self].data, place: p.target }; log(s, `${cardName(s, self)} link to ${cardName(s, p.target!)}.`, pl); },
     }],
+  },
+
+  'elders-of-zion': {
+    actions: [{
+      id: 'reorganize', label: 'Reorganize your Power Structure (also spends an Illuminati action)', timing: ['main'], usesToken: true, ai: 'never',
+      check(s, pl) {
+        if (s.turnFlags.freeMoves === pl) return 'You can already move your Groups freely.';
+        return s.cards[player(s, pl).illuminati].tokens > 0 ? null : 'Your Illuminati also needs an Action token.';
+      },
+      apply(s, pl, self) {
+        s.cards[player(s, pl).illuminati].tokens--;
+        s.turnFlags.freeMoves = pl;
+        s.cards[self].data = { ...s.cards[self].data, reorgTurn: s.turn };
+        log(s, `${cardName(s, self)}: ${player(s, pl).name} may now move Groups without paying, until the next attack.`, pl);
+      },
+    }],
+    // The reorganization is one step: it ends with the controller's next attack.
+    onAttackEnd(s, self, ctx) {
+      const pl = ctl(s, self);
+      if (pl && ctx.attackerPlayer === pl && s.cards[self].data?.reorgTurn === s.turn && s.turnFlags.freeMoves === pl) s.turnFlags.freeMoves = undefined;
+    },
   },
 
   'eff': {
@@ -416,6 +437,9 @@ registerHooks({
   },
 
   'evil-geniuses-for-a-better-tomorrow': {
+    // Resources linked here stay here; they are lost or captured with the Evil Geniuses (the engine
+    // already moves or destroys linked Resources with their Group).
+    lockLinks: () => true,
     actions: [{
       id: 'gadget', label: 'Take over a Gadget from your hand and link it here', timing: ['main'], usesToken: true, ai: 'never',
       needs: { target: 'resource' },
@@ -523,6 +547,11 @@ registerHooks({
     }],
   },
 
+  'fred-birch-society': {
+    // Two Conservative Groups for Goal cards; one Group everywhere else.
+    goalAlignWeight: (_s, _iid, alignment) => (alignment === 'Conservative' ? 2 : 1),
+  },
+
   'gay-activists': {
     actions: [{
       id: 'reverse', label: 'Reverse one alignment of a Group until end of turn', timing: ['main'], usesToken: true, ai: 'never',
@@ -569,6 +598,12 @@ registerHooks({
     preventDestroy(s, self, target, ctx) {
       const m = s.cards[self].master;
       return target === m && is(s, m, { attributes: ['Media'] }) && !ctx?.assassination && !ctx?.disaster;
+    },
+    // Disasters and Assassinations only destroy, so the Media master can never be captured.
+    forbidAttack(s, self, _attacker, target, type) {
+      const m = s.cards[self].master;
+      return type === 'control' && target === m && is(s, m, { attributes: ['Media'] })
+        ? `The Intellectuals protect ${cardName(s, m!)}: it cannot be taken over.` : null;
     },
   },
 
@@ -617,6 +652,14 @@ registerHooks({
     attackMod: (s, self, ctx, side) => (side === 'attack' && !!ctx.assassination && ctx.attackerPlayer === ctl(s, self) ? 2 : 0),
   },
 
+  'junk-mail': {
+    // May attack, aid or oppose Secret Groups, and its +6 still counts in those attacks.
+    secretOverride: (_s, self, group) => group === self,
+    worksInSecretAttacks: true,
+    attackMod: (s, self, ctx, side) =>
+      side === 'attack' && !ctx.instant && ctx.type === 'control' && ctx.attacker === self && live(ctx, self) && is(s, ctx.target, { attributes: ['Secret'] }) ? 6 : 0,
+  },
+
   'kkk': {
     // Destroying a Peaceful group with the KKK's help: every Violent group on both sides counts double.
     attackMod(s, self, ctx, side) {
@@ -657,6 +700,30 @@ registerHooks({
       c.mods.push({ source: self, kind: 'setPower', value: def(s, victim).power ?? 0, until: 'permanent' });
       log(s, `${cardName(s, self)} now have the Power of ${cardName(s, victim)}.`);
     },
+  },
+
+  'liquor-companies': {
+    actions: [{
+      id: 'dry', label: 'Cancel a rival\'s next card draw', timing: ['anytime'], usesToken: true, ai: 'never',
+      needs: { target: 'rival' },
+      check(s, pl, self, p) {
+        const err = rivalError(s, pl, rivalFor(s, pl, p));
+        if (err) return err;
+        return s.cards[self].data?.cancelDraw ? 'A rival\'s draw is already going to be cancelled.' : null;
+      },
+      apply(s, pl, self, p) {
+        const r = rivalFor(s, pl, p)!;
+        s.cards[self].data = { ...s.cards[self].data, cancelDraw: r };
+        log(s, `${cardName(s, self)}: ${player(s, r).name} will miss the next card draw.`, pl);
+      },
+    }],
+    beforeDraw(s, self, pl) {
+      if (s.cards[self].data?.cancelDraw !== pl) return undefined;
+      s.cards[self].data = { ...s.cards[self].data, cancelDraw: undefined };
+      return 'skip';
+    },
+    // An unused cancellation lapses when the controller's next turn begins.
+    onTurnStart(s, self) { if (s.cards[self].data?.cancelDraw) s.cards[self].data = { ...s.cards[self].data, cancelDraw: undefined }; },
   },
 
   'local-police-departments': {

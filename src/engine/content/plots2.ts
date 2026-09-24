@@ -10,7 +10,7 @@ import { alignments, attributes, power } from '../stats';
 import { structureCards } from '../geometry';
 import { nwoColor } from '../nwo';
 import {
-  attackCancelled, destroyGroup, discardCard, drawPlot, giveToken, goalCount, goalNeeded, isCancelled,
+  attackCancelled, destroyGroup, discardCard, drawPlot, giveToken, goalAlignWeight, goalCount, goalNeeded, isCancelled,
   livePlayers, log, player, startInstantAttack, tokenBarred,
 } from '../game';
 
@@ -85,8 +85,8 @@ const COMBOS: [number, number][] = [[2, 6], [3, 5], [4, 4], [5, 3], [6, 1]];
 /** "Destroy N [A] groups and control M [B] groups" Goals. Destroyed Groups are judged by their printed alignments. */
 function destroyAndControl(destroyed: Alignment, controlled: Alignment) {
   return (s: GameState, pl: string) => {
-    const d = player(s, pl).destroyedCredit.filter((iid) => (def(s, iid).alignments ?? []).includes(destroyed)).length;
-    const c = countedGroups(s, pl).filter((iid) => isGroup(s, iid) && hasAlign(s, iid, controlled)).length;
+    const d = player(s, pl).destroyedCredit.filter((iid) => (def(s, iid).alignments ?? []).includes(destroyed)).reduce((n, iid) => n + goalAlignWeight(s, iid, destroyed), 0);
+    const c = countedGroups(s, pl).filter((iid) => isGroup(s, iid) && hasAlign(s, iid, controlled)).reduce((n, iid) => n + goalAlignWeight(s, iid, controlled), 0);
     const hit = COMBOS.find(([nd, nc]) => d >= nd && c >= nc);
     return hit ? `destroyed ${d} ${destroyed} Groups and controls ${c} ${controlled} Groups` : null;
   };

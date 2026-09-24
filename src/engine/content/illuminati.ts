@@ -1,11 +1,14 @@
+import type { GameState } from '../types';
 import { registerAbilities } from '../abilities';
+import { registerHooks } from '../hooks';
+import { def, cardName } from '../cards';
+import { controllerOf2, log, player, resourcesOf } from '../game';
 
-// The nine Illuminati. Parts that are not encoded yet are listed as 'pending'.
+// The nine Illuminati. Parts that need a script are in registerHooks below.
 registerAbilities({
   'adepts-of-hermes': [
     { kind: 'attackBonus', on: 'both', target: { attributes: ['Magic'] }, value: 6, scope: 'any' },
     { kind: 'failedHandReturns' },
-    { kind: 'pending', note: 'Magic Resources count as controlled Groups for victory (no Resources in this version)' },
   ],
   'bavarian-illuminati': [
     { kind: 'freePrivilegedAttack' },
@@ -13,7 +16,6 @@ registerAbilities({
   ],
   'bermuda-triangle': [
     { kind: 'specialGoal', goal: 'bermuda', value: 35 },
-    { kind: 'pending', note: 'May reorganize its Power Structure freely at the end of its turn' },
   ],
   'discordian-society': [
     { kind: 'attackBonus', on: 'control', target: { alignments: ['Weird'] }, value: 4, scope: 'any' },
@@ -42,6 +44,34 @@ registerAbilities({
   ],
   'ufos': [
     { kind: 'extraIlluminatiToken', value: 1 },
-    { kind: 'pending', note: 'May hold up to three Goal cards (no Goal cards in this version)' },
+    // Up to three Goal cards, winning with any one of them: goalLimit and meetsGoal in game.ts.
   ],
+});
+
+const isMagicResource = (s: GameState, iid: string) => /\bMagic\b/.test(def(s, iid).uniqueness ?? '');
+
+registerHooks({
+  'adepts-of-hermes': {
+    // Each Magic Resource (a "Magic Artifact") in play counts as one more controlled Group.
+    goalBonus: (s, self) => {
+      const pl = controllerOf2(s, self);
+      return pl ? resourcesOf(s, pl).filter((r) => isMagicResource(s, r)).length : 0;
+    },
+  },
+
+  'bermuda-triangle': {
+    // Free reorganization at the end of the turn: once it starts, no more attacks this turn.
+    actions: [{
+      id: 'reorganize', label: 'Start the end-of-turn reorganization (free moves, no more attacks this turn)', timing: ['main'], usesToken: false, oncePerTurn: true, ai: 'never',
+      check: (s, pl) => (s.turnFlags.freeMoves === pl ? 'You can already move your Groups freely.' : null),
+      apply(s, pl, self) {
+        s.turnFlags.freeMoves = pl;
+        s.cards[self].data = { ...s.cards[self].data, reorgTurn: s.turn };
+        log(s, `${cardName(s, self)}: ${player(s, pl).name} reorganizes the Power Structure for free and makes no more attacks this turn.`, pl);
+      },
+    }],
+    forbidAttack: (s, self, _attacker, _target, type, attackerPlayer) =>
+      type !== 'takeover' && attackerPlayer === controllerOf2(s, self) && s.cards[self].data?.reorgTurn === s.turn
+        ? 'You have started your end-of-turn reorganization: no more attacks this turn.' : null,
+  },
 });
