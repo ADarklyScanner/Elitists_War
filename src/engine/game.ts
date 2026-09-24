@@ -171,6 +171,7 @@ function drawFrom(s: GameState, p: PlayerState, deck: 'plot' | 'group', n: numbe
   const pile = deck === 'plot' ? p.plotDeck : p.groupDeck;
   for (let i = 0; i < n; i++) {
     if (deck === 'plot' && s.turnFlags?.noPlotDraws?.includes(p.id)) break;
+    if (s.turnFlags?.extraTurn && s.players[s.active]?.id === p.id) break; // no draws during an extra turn (Seize the Time)
     let how: 'skip' | 'bottom' | undefined;
     for (const self of activeHookCards(s)) { how = HOOKS[s.cards[self].cardId].beforeDraw?.(s, self, p.id, deck) ?? how; if (how) break; }
     if (how === 'skip') { log(s, `${p.name}'s draw is cancelled.`, p.id); continue; }
@@ -670,7 +671,7 @@ function immuneTo(s: GameState, target: string, attackerGroups: string[], ctx?: 
   return false;
 }
 
-export function validateAttack(s: GameState, playerId: string, a: Extract<Action, { type: 'attack' }>, opts: { outOfTurn?: boolean } = {}): string | null {
+export function validateAttack(s: GameState, playerId: string, a: Extract<Action, { type: 'attack' }>, opts: { outOfTurn?: boolean; anyHand?: boolean } = {}): string | null {
   if (!opts.outOfTurn) {
     if (s.phase !== 'main' || activePlayer(s).id !== playerId) return 'You can only attack during the main phase of your own turn.';
     if (s.attack || s.window || s.prompt) return 'Finish the current action first.';
@@ -686,8 +687,9 @@ export function validateAttack(s: GameState, playerId: string, a: Extract<Action
   if (td.type !== 'Group') return 'Only Groups can be attacked.';
   const fromHand = tgt.zone === 'hand';
   if (fromHand) {
-    if (a.attackType !== 'control') return 'Groups in your hand can only be attacked to control.';
-    if (!player(s, playerId).hand.includes(a.target)) return 'You can only attack Groups from your own hand.';
+    // opts.anyHand: a card lets you attack a Group in another player's hand, to control or destroy it (Opportunity Knocks).
+    if (a.attackType !== 'control' && !opts.anyHand) return 'Groups in your hand can only be attacked to control.';
+    if (!opts.anyHand && !player(s, playerId).hand.includes(a.target)) return 'You can only attack Groups from your own hand.';
     if (!canEnterPlay(s, a.target)) return 'That Group is already in play or was destroyed.';
   } else if (tgt.zone !== 'structure') return 'The target must be in play or in your hand.';
   if (a.attackType === 'control') {
@@ -714,7 +716,7 @@ export function validateAttack(s: GameState, playerId: string, a: Extract<Action
 }
 
 /** Start an attack. Plots such as Opportunity Knocks may start one outside the attacker's turn. */
-export function startAttack(s: GameState, playerId: string, a: Extract<Action, { type: 'attack' }>, opts: { outOfTurn?: boolean } = {}) {
+export function startAttack(s: GameState, playerId: string, a: Extract<Action, { type: 'attack' }>, opts: { outOfTurn?: boolean; anyHand?: boolean } = {}) {
   const err = validateAttack(s, playerId, a, opts);
   if (err) throw new RuleError(err);
   const tgt = s.cards[a.target];
@@ -982,7 +984,10 @@ function finishAttack(s: GameState) {
     log(s, 'The attack fails.');
     if (ctx.fromHand && s.cards[tgt].zone === 'hand') {
       const keeps = abilitiesOf(s, illuminatiOf(s, ctx.attackerPlayer)).some((a) => a.kind === 'failedHandReturns');
-      if (!keeps) s.cards[tgt].failedTakeoverTurn = s.turn;
+      if (!keeps) {
+        s.cards[tgt].failedTakeoverTurn = s.turn;
+        raiseEvent(s, { type: 'failedTakeover', card: tgt, player: ctx.attackerPlayer });
+      }
     }
   }
   // Discard the Plots used in this attack (linked ones stay).
@@ -1080,6 +1085,9 @@ function subtreeFromLayout(layout: Record<string, { child: string }[]>, iid: str
 export function destroyGroup(s: GameState, iid: string, by: string) {
   const c = s.cards[iid];
   const prev = c.controller ?? c.owner;
+  // Where the Group and its puppets were, for cards that bring it back (Head in a Jar).
+  const layout = c.zone === 'structure' ? subtree(s, iid).map((g) => ({ iid: g, master: s.cards[g].master, x: s.cards[g].x, y: s.cards[g].y })) : [];
+  removeFromHand(s, iid); // a Group attacked in someone's hand (Opportunity Knocks)
   // "Draw a Plot whenever you destroy …" abilities (checked before the card loses its changes).
   let draws = 0;
   for (const g of structureCards(s, by)) {
@@ -1094,7 +1102,7 @@ export function destroyGroup(s: GameState, iid: string, by: string) {
     }
   }
   fireHooks(s, (h, self) => h.onDestroy?.(s, self, iid, by));
-  raiseEvent(s, { type: 'destroyed', card: iid, by, player: prev });
+  raiseEvent(s, { type: 'destroyed', card: iid, by, player: prev, data: { layout } });
   // Linked Plots are discarded; linked Resources are destroyed with the Group (R041).
   for (const other of Object.values(s.cards)) {
     if (other.linkedTo !== iid) continue;
@@ -1216,7 +1224,12 @@ function resolvePendingPlot(s: GameState) {
   for (const q of w.plays!) if (q !== pp && s.cards[q.iid]?.zone === 'table') discardCard(s, q.iid);
   if (!isCancelled(w.plays!, pp.iid)) raiseEvent(s, { type: 'plotResolved', card: pp.iid, player: pp.player });
   // A Plot played in response to an event: the event's window reopens so others may respond too.
-  if (w.event) { s.window = { kind: 'event', event: w.event, passed: [], deadline: Date.now() + s.settings.responseHours * 3600_000 }; return; }
+  if (w.event) {
+    // If resolving started an attack (Opportunity Knocks), the event window reopens once it is over.
+    if (s.attack || s.window) { (s.events ??= []).unshift(w.event); return; }
+    s.window = { kind: 'event', event: w.event, passed: [], deadline: Date.now() + s.settings.responseHours * 3600_000 };
+    return;
+  }
   if (s.phase === 'endOfTurn') openWindow(s, 'endOfTurn');
 }
 
@@ -1297,6 +1310,7 @@ export function applyAction(state: GameState, playerId: string, action: Action):
     case 'playResource': {
       // Once per turn, an Illuminati action puts a Resource from hand into play (R041).
       if (s.phase !== 'main' || activePlayer(s).id !== playerId || s.window || s.attack) throw new RuleError('Only in your own main phase.');
+      if (s.turnFlags.restricted) throw new RuleError('This turn you may only draw cards and place Action tokens.');
       if (s.turnFlags.resourcePlayed) throw new RuleError('You can only play one Resource this way per turn.');
       if (!p.hand.includes(action.card) || def(s, action.card).type !== 'Resource') throw new RuleError('Choose a Resource in your hand.');
       if (!canEnterPlay(s, action.card, playerId)) throw new RuleError('That Resource is Unique and already in play or destroyed.');
@@ -1314,6 +1328,7 @@ export function applyAction(state: GameState, playerId: string, action: Action):
       if (r.zone !== 'resources' || r.controller !== playerId) throw new RuleError('Choose one of your Resources.');
       const to = inst(s, action.to);
       if (to.zone !== 'structure' || to.controller !== playerId) throw new RuleError('Link it to a Group in your Power Structure.');
+      if (s.turnFlags.restricted) throw new RuleError('This turn you may only draw cards and place Action tokens.');
       if (r.linkMovedTurn === s.turn) throw new RuleError('A link can be moved only once per turn.');
       if (r.linkedTo && anyHook(s, (h, self) => self === r.linkedTo && !!h.lockLinks?.(s, self, action.resource))) throw new RuleError(`${cardName(s, action.resource)} is locked to ${cardName(s, r.linkedTo)} and cannot be moved.`);
       const rule = HOOKS[r.cardId]?.linkTo;
@@ -1452,6 +1467,8 @@ export function applyAction(state: GameState, playerId: string, action: Action):
         if (c.controller !== playerId || c.zone !== 'structure' || c.tokens < 1) throw new RuleError('Those Groups cannot pay.');
       }
       if (!p.plotDeck.length) throw new RuleError('Your Plot deck is empty.');
+      if (s.turnFlags.noPlotDraws?.includes(playerId)) throw new RuleError('You cannot draw Plot cards this turn.');
+      if (s.turnFlags.extraTurn && activePlayer(s).id === playerId) throw new RuleError('No cards may be drawn during an extra turn.');
       for (const g of action.payWith) s.cards[g].tokens--;
       drawPlot(s, p);
       log(s, `${p.name} buys a Plot card.`, playerId);
@@ -1461,6 +1478,7 @@ export function applyAction(state: GameState, playerId: string, action: Action):
     case 'drawGroup': {
       if (s.phase !== 'main' || activePlayer(s).id !== playerId || s.window || s.attack) throw new RuleError('Only in your own main phase.');
       if (s.turnFlags.illumGroupDraw) throw new RuleError('You can only do this once per turn.');
+      if (s.turnFlags.extraTurn) throw new RuleError('No cards may be drawn during an extra turn.');
       if (s.cards[p.illuminati].tokens < 1) throw new RuleError('Your Illuminati needs an Action token.');
       if (!p.groupDeck.length) throw new RuleError('Your Group deck is empty.');
       s.cards[p.illuminati].tokens--;

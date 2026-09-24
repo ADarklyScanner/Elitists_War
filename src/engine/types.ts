@@ -185,7 +185,8 @@ export interface Choice {
 
 /** Something that just happened that some cards may respond to (R010 response window). */
 export interface GameEvent {
-  type: 'turnStart' | 'drawn' | 'takeover' | 'destroyed' | 'devastated' | 'discarded' | 'plotResolved' | 'relief';
+  type: 'turnStart' | 'drawn' | 'takeover' | 'destroyed' | 'devastated' | 'discarded' | 'plotResolved' | 'relief'
+    | 'failedTakeover'; // a Group played from hand failed to be taken over (Opportunity Knocks)
   player?: string;         // whose turn / who did it
   card?: string;           // card involved
   cards?: string[];
