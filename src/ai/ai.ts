@@ -4,7 +4,7 @@ import {
   type Action, type AttackCtx, type GameState, type PlotPlay, type Side,
   applyAction, attackStrength, canAid, canOppose, checkPlot, currentOutcome, def, openArrows, player,
   plotsInHand, handLimit, power, resistance, structureCards, takeoverOptions, validateAttack, waitingFor,
-  alignments, abilitiesOf, PLOTS, subtree, goalCount, goalNeeded, depth,
+  alignments, abilitiesOf, PLOTS, subtree, goalCount, goalNeeded, depth, bestLead, plotOptions,
 } from '../engine';
 
 /** Chance that 2d6 rolls `strength` or less (11 and 12 always fail). */
@@ -105,10 +105,10 @@ function mainPhase(s: GameState, pl: string): Action {
     const id = s.cards[c].cardId;
     const h = PLOTS[id];
     if (!h) continue;
-    if (h.timing.includes('anytime') && ['reload', 'red-scare', 'pledge-drive', 'tax-breaks', 'gang-war', 'flower-power', 'freaking-the-mundanes', 'dollars-for-decency', 'new-federal-budget'].includes(id)) {
-      const al = { reload: 'Violent', 'red-scare': 'Conservative', 'pledge-drive': 'Liberal', 'tax-breaks': 'Corporate', 'gang-war': 'Criminal', 'flower-power': 'Peaceful', 'freaking-the-mundanes': 'Weird', 'dollars-for-decency': 'Straight', 'new-federal-budget': 'Government' }[id];
-      const n = structureCards(s, pl).filter((g) => s.cards[g].tokens === 0 && alignments(s, g).includes(al as never)).length;
-      if (n >= 2) { const a: Action = { type: 'playPlot', play: { card: c } }; if (tryAction(s, pl, a)) return a; }
+    if (h.needs?.targets) {
+      // Reload cards cost the Illuminati's action: worth it when they refresh 2+ Groups.
+      const best = plotOptions(s, pl, c).sort((a, b) => ((b.action as { play: PlotPlay }).play.targets?.length ?? 0) - ((a.action as { play: PlotPlay }).play.targets?.length ?? 0))[0];
+      if (best && ((best.action as { play: PlotPlay }).play.targets?.length ?? 0) >= 2 && tryAction(s, pl, best.action)) return best.action;
     }
     if (h.timing.includes('nwo') && s.turn >= 3) {
       const a: Action = { type: 'playPlot', play: { card: c } };
@@ -212,6 +212,7 @@ function respondToRoll(s: GameState, pl: string): Action {
 
 export function chooseAction(s: GameState, pl: string): Action {
   if (s.prompt?.player === pl) {
+    if (s.prompt.kind === 'chooseLead') return { type: 'chooseLead', card: bestLead(s, pl) };
     if (s.prompt.kind === 'takeover') {
       const opts = takeoverOptions(s, pl);
       opts.sort((a, b) => groupValue(s, b.card) - groupValue(s, a.card) || depth(s, a.onto) - depth(s, b.onto));

@@ -1,4 +1,4 @@
-import { createGame, type GameState, type DeckList, CARDS } from '../src/engine';
+import { createGame, placeGroup, type GameState, type DeckList, type Side, CARDS } from '../src/engine';
 import { randomDeck } from '../src/engine/decks';
 
 export function newGame(seed = 1, a?: Partial<DeckList>, b?: Partial<DeckList>): GameState {
@@ -29,7 +29,7 @@ export function checkInvariants(s: GameState) {
     if (c.tokens < 0) throw new Error(`${c.iid} has negative tokens`);
     if (c.zone === 'hand' && !s.players.some((p) => p.hand.includes(c.iid))) throw new Error(`${c.iid} zone hand but not in a hand`);
     if (c.zone === 'discard' && !seen.has(c.iid)) throw new Error(`${c.iid} zone discard but not in a pile`);
-    if (c.zone === 'removed') throw new Error(`${c.iid} left in limbo`);
+    if (c.zone === 'removed' && !s.players.find((p) => p.id === c.owner)?.eliminated) throw new Error(`${c.iid} left in limbo`);
     if (c.zone === 'structure') {
       if (seen.has(c.iid)) throw new Error(`${c.iid} in structure and ${seen.get(c.iid)}`);
       const key = `${c.controller}:${c.x},${c.y}`;
@@ -43,3 +43,33 @@ export function checkInvariants(s: GameState) {
     }
   }
 }
+
+let n = 0;
+/** Put a fresh copy of a card somewhere, bypassing the normal flow (test setup only). */
+export function give(s: GameState, pl: string, cardId: string, where: { hand?: true; under?: string; side?: Side }) {
+  if (!CARDS[cardId]) throw new Error(cardId);
+  const iid = `t${++n}`;
+  s.cards[iid] = { iid, cardId, owner: pl, zone: 'hand', tokens: 0, mods: [] };
+  if (where.hand) s.players.find((p) => p.id === pl)!.hand.push(iid);
+  else { placeGroup(s, iid, pl, where.under!, where.side!); s.cards[iid].tokens = 1; }
+  return iid;
+}
+
+/** A game in p1's main phase, with both players past their first turn and no Groups in play. */
+export function scenario(): GameState {
+  const s = newGame(3);
+  for (const c of Object.values(s.cards)) {
+    if (c.zone === 'structure' && CARDS[c.cardId].type === 'Group') {
+      c.zone = 'removed'; c.controller = undefined; c.master = undefined; c.x = undefined; c.y = undefined;
+    }
+  }
+  for (const [k, c] of Object.entries(s.cards)) if (c.zone === 'removed') delete s.cards[k];
+  for (const p of s.players) { p.turnsTaken = 1; p.hand = []; }
+  for (const c of Object.values(s.cards)) if (c.zone === 'hand') { c.zone = 'removed'; delete s.cards[c.iid]; }
+  s.active = 0; s.phase = 'main'; s.prompt = undefined; s.window = undefined; s.round = 3;
+  s.cards[s.players[0].illuminati].tokens = 1;
+  s.cards[s.players[1].illuminati].tokens = 1;
+  s.nwo = {};
+  return s;
+}
+

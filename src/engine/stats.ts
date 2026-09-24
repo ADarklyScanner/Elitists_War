@@ -6,7 +6,7 @@ import { def, OPPOSITE } from './cards';
 import { abilitiesOf, matches, setAlignmentResolver } from './abilities';
 import { NWO_EFFECTS } from './nwo';
 
-function activeMods(s: GameState, iid: string, opts: { defense?: boolean; goals?: boolean }): Modifier[] {
+function activeMods(s: GameState, iid: string, opts: ValueOpts): Modifier[] {
   return s.cards[iid].mods.filter((m) => (!m.defenseOnly || opts.defense) && (!opts.goals || m.countsForGoals !== false));
 }
 
@@ -36,27 +36,40 @@ export function activeNwos(s: GameState): string[] {
   return Object.values(s.nwo).filter((x): x is string => !!x);
 }
 
-function combine(base: number, mods: Modifier[], setKind: Modifier['kind'], mulKind: Modifier['kind'], addKind: Modifier['kind']): number {
+export interface ValueOpts {
+  defense?: boolean;        // include defense-only modifiers (Good Polls, defensive +10)
+  goals?: boolean;          // only changes that count toward Goals
+  selfDefense?: boolean;    // a Group spending its own token to defend itself (R006c)
+  noDefenseAdds?: boolean;  // leave out defense-only additions already counted elsewhere (R028: a +10 counts once)
+  halve?: boolean;          // Devastated Place defending against an Attack to Destroy (R037)
+}
+
+/**
+ * R047: set-to-value effects first, then the single largest multiplier (self-defense raises it one
+ * step: none -> x2, x2 -> x3 ...), then additions and subtractions.
+ */
+function combine(base: number, mods: Modifier[], kinds: { set: Modifier['kind']; mul: Modifier['kind']; add: Modifier['kind'] },
+  extra: { muls?: number[]; adds?: number[] }, opts: ValueOpts): number {
   let v = base;
-  for (const m of mods) if (m.kind === setKind && m.value !== undefined) v = Math.max(v, m.value); // "raised to" cards
-  const mul = Math.max(1, ...mods.filter((m) => m.kind === mulKind).map((m) => m.value ?? 1));
+  for (const m of mods) if (m.kind === kinds.set && m.value !== undefined) v = Math.max(v, m.value); // "raised to" cards
+  let mul = Math.max(1, ...mods.filter((m) => m.kind === kinds.mul).map((m) => m.value ?? 1), ...(extra.muls ?? []));
+  if (opts.selfDefense) mul = mul > 1 ? mul + 1 : 2;
   v *= mul;
-  for (const m of mods) if (m.kind === addKind) v += m.value ?? 0;
+  if (opts.halve) v = Math.floor(v / 2);
+  for (const m of mods) if (m.kind === kinds.add && !(opts.noDefenseAdds && m.defenseOnly)) v += m.value ?? 0;
+  for (const a of extra.adds ?? []) v += a;
   return v;
 }
 
-export function power(s: GameState, iid: string, opts: { defense?: boolean; goals?: boolean } = {}): number {
+export function power(s: GameState, iid: string, opts: ValueOpts = {}): number {
   const d = def(s, iid);
   const c = s.cards[iid];
-  let base = d.power ?? 0;
-  const mods = activeMods(s, iid, opts);
-  let v = combine(base, mods, 'setPower', 'mulPower', 'power');
+  const adds: number[] = [];
   for (const a of abilitiesOf(s, iid)) {
-    if (a.kind === 'powerPer' && c.controller) {
-      v += a.value * countControlled(s, c.controller, (g) => g !== iid && matches(s, g, a.per));
-    }
+    if (a.kind === 'powerPer' && c.controller) adds.push(a.value * countControlled(s, c.controller, (g) => g !== iid && matches(s, g, a.per)));
   }
-  if (d.type === 'Group') for (const nwo of activeNwos(s)) v += NWO_EFFECTS[s.cards[nwo].cardId]?.power?.(s, iid) ?? 0;
+  if (d.type === 'Group') for (const nwo of activeNwos(s)) adds.push(NWO_EFFECTS[s.cards[nwo].cardId]?.power?.(s, iid) ?? 0);
+  const v = combine(d.power ?? 0, activeMods(s, iid, opts), { set: 'setPower', mul: 'mulPower', add: 'power' }, { adds }, opts);
   return Math.max(0, v);
 }
 
@@ -72,17 +85,17 @@ export function globalPower(s: GameState, iid: string): number {
   return Math.max(0, Math.min(v, power(s, iid)));
 }
 
-export function resistance(s: GameState, iid: string, opts: { defense?: boolean } = { defense: true }): number {
+export function resistance(s: GameState, iid: string, opts: ValueOpts = { defense: true }): number {
   const d = def(s, iid);
-  const mods = activeMods(s, iid, opts);
-  let v = combine(d.resistance ?? 0, mods, 'setResistance', 'mulResistance', 'resistance');
+  const muls: number[] = [], adds: number[] = [];
   if (d.type === 'Group') {
     for (const nwo of activeNwos(s)) {
       const e = NWO_EFFECTS[s.cards[nwo].cardId];
-      if (e?.resistanceMul) v *= e.resistanceMul(s, iid);
-      v += e?.resistance?.(s, iid) ?? 0;
+      if (e?.resistanceMul) muls.push(e.resistanceMul(s, iid));
+      adds.push(e?.resistance?.(s, iid) ?? 0);
     }
   }
+  const v = combine(d.resistance ?? 0, activeMods(s, iid, opts), { set: 'setResistance', mul: 'mulResistance', add: 'resistance' }, { muls, adds }, opts);
   return Math.max(0, v);
 }
 

@@ -26,7 +26,7 @@ export interface PlotHandler {
   /** Card stays on the table linked to a Group after resolving. */
   linked?: boolean;
   /** Short hint for the UI about what the play needs (target, mode, payWith). */
-  needs?: { target?: 'ownGroup' | 'anyGroup' | 'rivalGroup' | 'place' | 'personality' | 'plot'; mode?: string[]; pay?: 'tokens' | 'illuminati'; alignment?: boolean; helper?: boolean };
+  needs?: { target?: 'ownGroup' | 'anyGroup' | 'rivalGroup' | 'place' | 'personality' | 'plot'; mode?: string[]; pay?: 'tokens' | 'illuminati'; alignment?: boolean; helper?: boolean; targets?: boolean };
 }
 
 export const PLOTS: Record<string, PlotHandler> = {};

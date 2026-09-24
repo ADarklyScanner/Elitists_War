@@ -6,7 +6,7 @@ import {
   goalCount, goalNeeded, hasResponse, ILLUMINATI, isImplemented, GROUP_ABILITIES, openArrows, outSides,
   plotOptions, plotsInHand, handLimit, power, resistance, globalPower, alignments, randomDeck,
   responseOptions, structureCards, subtree, takeoverOptions, waitingFor, DELTA, PLOTS, NWO_EFFECTS,
-  describePlay, player,
+  describePlay, player, leadOptions, abilitiesOf,
 } from '../engine';
 import { chooseAction, successChance } from '../ai/ai';
 
@@ -16,7 +16,7 @@ type Sel =
   | { kind: 'none' }
   | { kind: 'group'; iid: string }
   | { kind: 'attack'; attacker: string; type: 'control' | 'destroy' }
-  | { kind: 'confirm'; attacker: string; target: string; type: 'control' | 'destroy'; side?: Side; plots: PlotPlay[] }
+  | { kind: 'confirm'; attacker: string; target: string; type: 'control' | 'destroy'; side?: Side; plots: PlotPlay[]; privileged?: boolean }
   | { kind: 'move'; group: string }
   | { kind: 'plot'; card: string }
   | { kind: 'takeover'; card: string }
@@ -127,6 +127,7 @@ function newGame(illuminati: string, quick: boolean) {
       { id: 'p2', name: 'Computer', isAI: true, deck: randomDeck(seed + 1, rivalIll) },
     ],
     settings: { houseRules: quick ? ['quickGame'] : [] },
+    chooseLeads: true,
   });
   ui.sel = { kind: 'none' };
   ui.inspect = undefined;
@@ -317,9 +318,13 @@ function renderConsole(s: GameState): string {
   let body = '';
   if (s.phase === 'gameOver') {
     const won = s.winners?.includes(ui.me);
-    body = `<h2 class="${won ? 'ok' : 'bad'}">${won ? 'You win.' : 'The Computer wins.'}</h2>
+    body = `<h2 class="${won ? 'ok' : 'bad'}">${won ? (s.winners!.length > 1 ? 'Shared victory.' : 'You win.') : s.winners?.length ? 'The Computer wins.' : 'Nobody wins.'}</h2>
       <p>${esc(s.log.filter((l) => / wins/.test(l.text)).map((l) => l.text).join(' '))}</p>
       <div class="btns"><button class="primary" data-act="home">New game</button></div>`;
+  } else if (s.prompt?.player === ui.me && s.prompt.kind === 'chooseLead') {
+    const opts = leadOptions(s, ui.me).sort((a, b) => (def(s, b).arrowsOut?.length ?? 0) - (def(s, a).arrowsOut?.length ?? 0) || (def(s, b).power ?? 0) - (def(s, a).power ?? 0));
+    body = `<h2>Choose your lead Group</h2><p>Pick a Group from your deck to start under your Illuminati. Your rival picks at the same time; if you both pick the same Group, you both pick again.</p>
+      <div class="opts">${opts.map((iid) => { const d = def(s, iid); return `<button data-lead="${iid}"><b>${esc(d.name)}</b> · ${d.power}${d.globalPower ? `/${d.globalPower}` : ''} Power, ${d.resistance} Resistance, ${d.arrowsOut?.length ?? 0} arrow${(d.arrowsOut?.length ?? 0) === 1 ? '' : 's'} out${(d.alignments ?? []).length ? ' · ' + (d.alignments ?? []).join(', ') : ''}</button>`; }).join('')}</div>`;
   } else if (s.prompt?.player === ui.me && s.prompt.kind === 'takeover') {
     body = `<h2>Automatic takeover</h2><p>Pick a Group from your hand, then tap a + to place it. No roll needed.${s.players.length === 2 ? ' In a two-player game your Illuminati gets no Action token this turn if you do.' : ''}</p>
       <div class="btns"><button data-act="skipTakeover">Skip takeover</button></div>`;
@@ -327,7 +332,7 @@ function renderConsole(s: GameState): string {
     const sel = ui.sel.kind === 'discard' ? ui.sel.cards : [];
     const excess = plotsInHand(s, ui.me).length - handLimit(s, ui.me);
     body = `<h2>Too many Plots</h2><p>Pick ${excess} Plot${excess > 1 ? 's' : ''} in your hand to discard.</p>
-      <div class="btns"><button class="primary" data-act="discard" ${sel.length === excess ? '' : 'disabled'}>Discard ${sel.length}/${excess}</button></div>`;
+      <div class="btns"><button class="primary" data-act="discard" ${sel.length === excess ? '' : 'disabled'}>Discard ${sel.length}/${excess}</button><button data-act="return" ${sel.length === excess ? '' : 'disabled'}>Put back in my Plot deck</button></div>`;
   } else if (s.window && waiting.includes(ui.me)) {
     const opts = responseOptions(s, ui.me);
     const head = s.window.kind === 'plot' ? `<p><b>${esc(cardName(s, s.window.plot!.iid))}</b> was played. You can counter it.</p>`
@@ -335,7 +340,7 @@ function renderConsole(s: GameState): string {
       : s.window.kind === 'roll' ? '<p>The dice are down. Cards that change rolls can be played now.</p>' : '';
     body = `${s.attack ? attackPanel(s) : ''}${head}
       <div class="opts">${opts.map((o, i) => `<button data-opt="${i}">${esc(o.label)}</button>`).join('')}</div>
-      <div class="btns"><button class="primary" data-act="pass">${s.window.kind === 'attack' && s.attack?.attackerPlayer === ui.me ? 'Roll the dice' : 'Pass'}</button></div>`;
+      <div class="btns"><button class="primary" data-act="pass">${s.window.kind === 'attack' && s.attack?.attackerPlayer === ui.me ? 'Roll the dice' : 'Pass'}</button>${s.window.kind === 'attack' && s.attack?.attackerPlayer === ui.me && !s.attack.instant && !s.attack.plays.some((pp) => pp.player === ui.me) ? '<button data-act="callOff">Call off the attack</button>' : ''}</div>`;
     (window as unknown as { __opts: typeof opts }).__opts = opts;
   } else if (idle(s)) {
     body = renderMainConsole(s);
@@ -380,6 +385,7 @@ function renderMainConsole(s: GameState): string {
         const on = sel.plots.some((p) => p.card === c);
         return `<button class="${on ? 'on' : ''}" data-decl="${i}">${on ? '✓ ' : ''}${esc(cardName(s, c))}: ${esc(o.label)}</button>`;
       }).join('')}</div>` : ''}
+      ${abilitiesOf(s, player(s, ui.me).illuminati).some((a) => a.kind === 'freePrivilegedAttack') && !s.turnFlags.bavarianPrivilege ? `<label class="toggle"><input type="checkbox" id="priv" ${sel.privileged ? 'checked' : ''}> Make it Privileged (your Illuminati's free Privileged attack this turn: only you and the defender can take part)</label>` : ''}
       <div class="btns"><button class="primary" data-act="declare">Declare attack</button><button class="linkish" data-act="clear">Cancel</button></div>`;
   }
   if (sel.kind === 'move') {
@@ -396,13 +402,23 @@ function renderMainConsole(s: GameState): string {
   }
   const ill = me.illuminati;
   const payers = structureCards(s, ui.me).filter((g) => g !== ill && s.cards[g].tokens > 0).sort((a, b) => power(s, a) - power(s, b));
+  const reliefs = Object.values(s.cards).filter((c) => c.zone === 'structure' && c.devastated).map((c) => {
+    const need = 3 * (def(s, c.iid).power ?? 0);
+    const pool = structureCards(s, ui.me).filter((g) => s.cards[g].tokens > 0).sort((a, b) => power(s, b) - power(s, a));
+    const pay: string[] = []; let tot = 0;
+    for (const g of pool) { if (tot >= need) break; pay.push(g); tot += power(s, g); }
+    return { place: c.iid, need, pay, ok: tot >= need };
+  });
+  (window as unknown as { __relief: typeof reliefs }).__relief = reliefs;
   return `<h2>Your turn</h2>
     <p>Tap one of your Groups with a <span class="token-inline"></span> token to attack or move it. Tap a Plot in your hand to play it.</p>
     <div class="btns">
       <button data-act="buy-ill" ${s.cards[ill].tokens && me.plotDeck.length ? '' : 'disabled'}>Buy a Plot (Illuminati token)</button>
       <button data-act="buy-two" ${payers.length >= 2 && me.plotDeck.length ? '' : 'disabled'}>Buy a Plot (2 Group tokens)</button>
+      <button data-act="drawGroup" ${s.cards[ill].tokens && !s.turnFlags.illumGroupDraw && me.groupDeck.length ? '' : 'disabled'}>Draw a Group card (Illuminati token, once per turn)</button>
       <button class="primary" data-act="endTurn">End turn</button>
     </div>
+    ${reliefs.length ? `<div class="label">Relief for Devastated Places (needs 3× printed Power)</div><div class="opts">${reliefs.map((r, i) => `<button data-relief="${i}" ${r.ok ? '' : 'disabled'}>Relieve ${esc(cardName(s, r.place))} (needs ${r.need})${r.ok ? ` with ${r.pay.map((g) => esc(cardName(s, g))).join(', ')}` : ' — not enough Power with tokens'}</button>`).join('')}</div>` : ''}
     <label class="toggle"><input type="checkbox" id="autopass" ${ui.autoPass ? 'checked' : ''}> Pass for me when I have no possible response</label>`;
 }
 
@@ -539,6 +555,13 @@ function bind() {
     ui.sel = { ...sel, plots: sel.plots.some((p) => p.card === pick.c) ? sel.plots.filter((p) => p.card !== pick.c) : [...sel.plots.filter((p) => p.card !== pick.c), play] };
     render();
   });
+  app.querySelectorAll<HTMLElement>('[data-lead]').forEach((b) => b.onclick = () => act({ type: 'chooseLead', card: b.dataset.lead! }));
+  app.querySelectorAll<HTMLElement>('[data-relief]').forEach((b) => b.onclick = () => {
+    const r = (window as unknown as { __relief: { place: string; pay: string[] }[] }).__relief[Number(b.dataset.relief)];
+    act({ type: 'relief', place: r.place, payWith: r.pay });
+  });
+  const priv = app.querySelector<HTMLInputElement>('#priv');
+  if (priv) priv.onchange = () => { if (ui.sel.kind === 'confirm') { ui.sel = { ...ui.sel, privileged: priv.checked }; render(); } };
   const auto = app.querySelector<HTMLInputElement>('#autopass');
   if (auto) auto.onchange = () => { ui.autoPass = auto.checked; };
   app.querySelectorAll<HTMLElement>('[data-act]').forEach((b) => b.onclick = () => {
@@ -550,6 +573,9 @@ function bind() {
       case 'pass': act({ type: 'pass' }); break;
       case 'endTurn': act({ type: 'endTurn' }); break;
       case 'discard': if (sel.kind === 'discard') act({ type: 'discard', cards: sel.cards }); break;
+      case 'return': if (sel.kind === 'discard') act({ type: 'discard', cards: sel.cards, toDeck: true }); break;
+      case 'callOff': act({ type: 'callOff' }); break;
+      case 'drawGroup': act({ type: 'drawGroup' }); break;
       case 'buy-ill': act({ type: 'buyPlot', payWith: [player(s, ui.me).illuminati] }); break;
       case 'buy-two': {
         const ill = player(s, ui.me).illuminati;
@@ -561,7 +587,7 @@ function bind() {
       case 'atk-destroy': if (sel.kind === 'group') { ui.sel = { kind: 'attack', attacker: sel.iid, type: 'destroy' }; render(); } break;
       case 'move': if (sel.kind === 'group') { ui.sel = { kind: 'move', group: sel.iid }; render(); } break;
       case 'declare':
-        if (sel.kind === 'confirm') act({ type: 'attack', attackType: sel.type, attacker: sel.attacker, target: sel.target, side: sel.side, plots: sel.plots });
+        if (sel.kind === 'confirm') act({ type: 'attack', attackType: sel.type, attacker: sel.attacker, target: sel.target, side: sel.side, plots: sel.plots, privileged: sel.privileged || undefined });
         break;
     }
   });

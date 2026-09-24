@@ -22,7 +22,7 @@ export interface NewPlayer { id: string; name: string; isAI: boolean; deck: Deck
 
 export const DEFAULT_SETTINGS: GameSettings = { basicGoal: 12, responseHours: 24, houseRules: [] };
 
-export function createGame(opts: { id?: string; seed?: number; players: NewPlayer[]; settings?: Partial<GameSettings> }): GameState {
+export function createGame(opts: { id?: string; seed?: number; players: NewPlayer[]; settings?: Partial<GameSettings>; chooseLeads?: boolean }): GameState {
   const s: GameState = {
     id: opts.id ?? `g${Date.now().toString(36)}`,
     version: 0,
@@ -67,15 +67,55 @@ export function createGame(opts: { id?: string; seed?: number; players: NewPlaye
     s.players.push(player);
     for (let i = 0; i < 3; i++) drawPlot(s, player);
   }
-  // Lead Group: each player picks the Group with the best spread of arrows (then Power).
-  // Duplicate picks are resolved by re-picking (R025/R043).
-  const taken = new Set<string>();
+  // Lead Group (R025): each player secretly picks one Group from his deck.
+  s.setup = { picks: {}, banned: [], setAside: [] };
+  if (opts.chooseLeads) s.phase = 'setup';
+  else for (const p of s.players) s.setup.picks[p.id] = bestLead(s, p.id);
+  promptNextLead(s);
+  return s;
+}
+
+export function leadOptions(s: GameState, playerId: string): string[] {
+  const banned = new Set(s.setup?.banned ?? []);
+  return player(s, playerId).groupDeck.filter((iid) => def(s, iid).type === 'Group' && !banned.has(s.cards[iid].cardId));
+}
+export const bestLead = (s: GameState, playerId: string) => leadOptions(s, playerId).sort((a, b) => leadScore(s, b) - leadScore(s, a))[0];
+
+function promptNextLead(s: GameState) {
+  const st = s.setup!;
+  const next = s.players.find((p) => !st.picks[p.id] && leadOptions(s, p.id).length);
+  if (next) {
+    if (s.phase !== 'setup') { st.picks[next.id] = bestLead(s, next.id); promptNextLead(s); return; }
+    s.prompt = { player: next.id, kind: 'chooseLead' };
+    return;
+  }
+  s.prompt = undefined;
+  // Players who picked the same Group set them aside and pick again (R025/R043).
+  const ids = Object.values(st.picks).filter((x): x is string => !!x).map((iid) => s.cards[iid].cardId);
+  const dup = [...new Set(ids.filter((id, i) => ids.indexOf(id) !== i))];
+  if (dup.length) {
+    for (const p of s.players) {
+      const pick = st.picks[p.id];
+      if (pick && dup.includes(s.cards[pick].cardId)) {
+        p.groupDeck = p.groupDeck.filter((x) => x !== pick);
+        st.setAside.push(pick);
+        st.picks[p.id] = undefined;
+        log(s, `${p.name} picked the same lead Group as a rival (${cardName(s, pick)}): both set it aside and pick again.`, p.id);
+      }
+    }
+    st.banned.push(...dup);
+    promptNextLead(s);
+    return;
+  }
+  completeSetup(s);
+}
+
+function completeSetup(s: GameState) {
+  const st = s.setup!;
+  s.phase = 'beginning';
   for (const p of s.players) {
-    const options = p.groupDeck.filter((iid) => def(s, iid).type === 'Group' && !taken.has(s.cards[iid].cardId));
-    options.sort((a, b) => leadScore(s, b) - leadScore(s, a));
-    const lead = options[0];
+    const lead = st.picks[p.id];
     if (lead) {
-      taken.add(s.cards[lead].cardId);
       p.groupDeck = p.groupDeck.filter((x) => x !== lead);
       placeGroup(s, lead, p.id, p.illuminati, 'BOTTOM');
       log(s, `${p.name} leads with ${cardName(s, lead)}.`, p.id);
@@ -83,14 +123,25 @@ export function createGame(opts: { id?: string; seed?: number; players: NewPlaye
     shuffle(s, p.groupDeck);
     for (let i = 0; i < 6; i++) drawGroup(s, p);
   }
-  // Highest 2d6 goes first.
-  const rolls = s.players.map((p) => ({ p, r: roll2d6(s).reduce((a, b) => a + b) }));
-  rolls.sort((a, b) => b.r - a.r);
+  // Set-aside duplicates go back into their owners' decks after the draw.
+  for (const iid of st.setAside) {
+    const p = player(s, s.cards[iid].owner);
+    p.groupDeck.push(iid);
+    shuffle(s, p.groupDeck);
+  }
+  s.setup = undefined;
+  // Highest 2d6 goes first; tied highest rollers roll again.
+  let rolls = s.players.map((p) => ({ p, r: roll2d6(s).reduce((a, b) => a + b) }));
+  for (;;) {
+    rolls.sort((a, b) => b.r - a.r);
+    const tied = rolls.filter((x) => x.r === rolls[0].r);
+    if (tied.length === 1) break;
+    rolls = tied.map((x) => ({ p: x.p, r: roll2d6(s).reduce((a, b) => a + b) }));
+  }
   s.active = s.players.indexOf(rolls[0].p);
   s.firstPlayer = s.active;
   log(s, `${rolls[0].p.name} wins the roll to go first.`);
   beginTurn(s);
-  return s;
 }
 
 function leadScore(s: GameState, iid: string) {
@@ -245,11 +296,18 @@ function endTurnCleanup(s: GameState) {
       log(s, `${cardName(s, iid)} was not taken over and is discarded.`, p.id);
     }
   }
-  for (const c of Object.values(s.cards)) c.mods = c.mods.filter((m) => m.until !== 'endOfTurn');
-  // Hand limits (5 Plots outside your own turn) are enforced for everyone now.
+  // The turn is over, so the 5-Plot limit now applies to the active player too (R027).
   const over = livePlayers(s).find((x) => plotsInHand(s, x.id).length > handLimit(s, x.id));
-  if (over) { s.prompt = { player: over.id, kind: 'discardToLimit' }; return; }
+  if (over) { s.prompt = { player: over.id, kind: 'discardToLimit', data: { resume: 'endTurn' } }; return; }
   finishTurn(s);
+}
+
+/** Outside his own turn a player may never hold more Plots than his limit: excess goes at once (R027). */
+function enforceHandLimits(s: GameState) {
+  if (s.prompt || s.phase === 'gameOver') return;
+  const active = activePlayer(s).id;
+  const over = livePlayers(s).find((x) => x.id !== active && plotsInHand(s, x.id).length > handLimit(s, x.id));
+  if (over) s.prompt = { player: over.id, kind: 'discardToLimit', data: { resume: 'continue' } };
 }
 
 export function plotsInHand(s: GameState, playerId: string) {
@@ -265,16 +323,24 @@ function finishTurn(s: GameState) {
   s.prompt = undefined;
   const p = activePlayer(s);
   p.turnsTaken++;
+  // Victory is checked before "until end of turn" changes expire: temporary changes count for
+  // a declaration made at the end of that turn (R016).
   checkVictory(s);
+  for (const c of Object.values(s.cards)) c.mods = c.mods.filter((m) => m.until !== 'endOfTurn');
   if (isOver(s)) return;
   checkElimination(s);
   if (isOver(s)) return;
+  advanceTurn(s);
+}
+
+function advanceTurn(s: GameState) {
   // Next live player in seat order; a new round starts when play returns to the first player.
   let next = s.active;
-  do {
+  for (let i = 0; i < s.players.length; i++) {
     next = (next + 1) % s.players.length;
     if (next === s.firstPlayer) s.round++;
-  } while (s.players[next].eliminated);
+    if (!s.players[next].eliminated) break;
+  }
   s.active = next;
   beginTurn(s);
 }
@@ -300,7 +366,8 @@ export function goalCount(s: GameState, playerId: string): number {
 
 function tokenBarredForGoals(s: GameState, iid: string) {
   let c: CardInstance | undefined = s.cards[iid];
-  while (c) { if (c.devastated && c.iid !== iid) return true; c = c.master ? s.cards[c.master] : undefined; }
+  // A Devastated Place and everything below it do not count toward victory (R037).
+  while (c) { if (c.devastated) return true; c = c.master ? s.cards[c.master] : undefined; }
   return false;
 }
 
@@ -314,7 +381,7 @@ export function goalNeeded(s: GameState, playerId: string): number {
 export function meetsGoal(s: GameState, playerId: string): string | null {
   if (goalCount(s, playerId) >= goalNeeded(s, playerId)) return 'controls enough Groups';
   const ill = illuminatiOf(s, playerId);
-  const mine = structureCards(s, playerId);
+  const mine = structureCards(s, playerId).filter((iid) => !tokenBarredForGoals(s, iid));
   for (const a of abilitiesOf(s, ill)) {
     if (a.kind !== 'specialGoal') continue;
     const total = mine.reduce((n, iid) => n + power(s, iid, { goals: true }), 0);
@@ -334,7 +401,11 @@ export function meetsGoal(s: GameState, playerId: string): string | null {
 
 function checkVictory(s: GameState) {
   if (s.round === 1) return; // no one can win in the first round (R017)
-  const winners = livePlayers(s).filter((p) => meetsGoal(s, p.id));
+  let winners = livePlayers(s).filter((p) => meetsGoal(s, p.id));
+  // Two factions of the same Illuminati can never share a win (R044): both are knocked out of the claim.
+  const ill = (pl: PlayerState) => s.cards[pl.illuminati].cardId;
+  const shangri = winners.every((w) => ill(w) === 'shangri-la' && meetsGoal(s, w.id)?.includes('Peaceful'));
+  if (!shangri) winners = winners.filter((w) => winners.filter((x) => ill(x) === ill(w)).length === 1);
   const alive = livePlayers(s);
   if (alive.length === 1) winners.splice(0, winners.length, alive[0]);
   if (winners.length) {
@@ -344,22 +415,54 @@ function checkVictory(s: GameState) {
   }
 }
 
+/** R049: after his third complete turn, a player whose Illuminati has no puppets is out at once. */
 function checkElimination(s: GameState) {
+  const activeId = activePlayer(s).id;
   for (const p of livePlayers(s)) {
     if (p.turnsTaken >= 3 && puppets(s, p.illuminati).length === 0) {
       p.eliminated = true;
+      // His hand and decks leave the game.
+      for (const iid of [...p.hand, ...p.plotDeck, ...p.groupDeck]) s.cards[iid].zone = 'removed';
+      p.hand = []; p.plotDeck = []; p.groupDeck = [];
       log(s, `${p.name} has no Groups left and is eliminated.`, p.id);
     }
   }
   const alive = livePlayers(s);
-  if (alive.length === 1) {
+  if (alive.length <= 1) {
     s.phase = 'gameOver';
-    s.winners = [alive[0].id];
-    log(s, `${alive[0].name} wins as the last player standing!`, alive[0].id);
+    s.winners = alive.map((a) => a.id);
+    s.attack = undefined; s.window = undefined; s.prompt = undefined;
+    if (alive.length) log(s, `${alive[0].name} wins as the last player standing!`, alive[0].id);
+    else log(s, 'Every player has been eliminated: nobody wins.');
+    return;
+  }
+  if (player(s, activeId).eliminated) {
+    // The active player went out during his own turn: play passes on.
+    s.attack = undefined; s.window = undefined; s.prompt = undefined;
+    advanceTurn(s);
   }
 }
 
 // ---------------------------------------------------------------- attacks
+
+export const isSecret = (s: GameState, iid: string) => (def(s, iid).attributes ?? []).includes('Secret');
+
+/**
+ * R014: non-Secret Groups may not attack a Secret Group, aid or oppose attacks on it, or aid its
+ * attacks. Illuminati and other Secret Groups are exempt, and a Secret Group's own master and
+ * puppets may defend it and aid its attacks.
+ */
+function secretBlocks(s: GameState, helper: string, secret: string): boolean {
+  if (!isSecret(s, secret) || isSecret(s, helper) || def(s, helper).type === 'Illuminati') return false;
+  const h = s.cards[helper], t = s.cards[secret];
+  return !(t.master === helper || h.master === secret);
+}
+
+/** First-turn protection (R001): nobody may act against a player who has not finished his first turn. */
+export function protectedPlayer(s: GameState, actor: string, other: string | undefined): boolean {
+  if (!other || other === actor) return false;
+  return player(s, other).turnsTaken < 1;
+}
 
 export function canAttackPlayer(s: GameState, attacker: string, defender: string | undefined): string | null {
   if (!defender || defender === attacker) return null;
@@ -406,6 +509,7 @@ export function validateAttack(s: GameState, playerId: string, a: Extract<Action
   }
   const err = canAttackPlayer(s, playerId, fromHand ? undefined : tgt.controller);
   if (err) return err;
+  if (isSecret(s, a.target) && !isSecret(s, a.attacker) && def(s, a.attacker).type !== 'Illuminati') return `${cardName(s, a.target)} is Secret: only Illuminati and Secret Groups can attack it.`;
   if (immuneTo(s, a.target, [a.attacker])) return `${cardName(s, a.target)} is immune to attacks from ${cardName(s, a.attacker)}.`;
   if (a.attackType === 'destroy' && abilitiesOf(s, a.target).some((x) => x.kind === 'cannotBeDestroyed')) return `${cardName(s, a.target)} cannot be destroyed.`;
   const ill = illuminatiOf(s, playerId);
@@ -470,8 +574,10 @@ function openWindow(s: GameState, kind: 'attack' | 'roll' | 'plot' | 'endOfTurn'
 
 function contributionPower(s: GameState, c: Contribution & { useGlobal?: boolean; selfDefense?: boolean }): number {
   if (!c.iid) return c.amount;
-  let v = c.useGlobal ? globalPower(s, c.iid) : power(s, c.iid, { defense: c.selfDefense });
-  if (c.selfDefense) v *= 2;
+  // Self-defense raises the multiplier one step (R006c). Defensive +10s are already part of the
+  // target's defense value, so they are not counted again here (R028).
+  const v = c.useGlobal ? globalPower(s, c.iid)
+    : power(s, c.iid, c.selfDefense ? { defense: true, selfDefense: true, noDefenseAdds: true } : {});
   return v + c.amount;
 }
 
@@ -488,8 +594,11 @@ export function attackStrength(s: GameState, ctx: AttackCtx): StrengthBreakdown 
   const tgt = ctx.target;
   const td = def(s, tgt);
   const ownTarget = ctx.targetPlayer === ctx.attackerPlayer;
-  const liveBonus = (list: Contribution[]) => list.filter((b) => !b.plot || !isCancelled(ctx.plays, b.plot));
   const gone = cancelledGroups(ctx);
+  // A Plot bonus stops counting if the Plot is cancelled or the Group it helped has its action cancelled (R009).
+  const liveBonus = (list: Contribution[]) => list.filter((b) => (!b.plot || !isCancelled(ctx.plays, b.plot)) && !(b.forGroup && gone.has(b.forGroup)));
+  // R014: in an attack by or against a Secret Group, special-ability bonuses and penalties are ignored.
+  const noAbilities = isSecret(s, tgt) || (!!ctx.attacker && isSecret(s, ctx.attacker));
   const aid = ctx.aid.filter((c) => !gone.has(c.iid!));
   const oppose = ctx.oppose.filter((c) => !gone.has(c.iid!));
 
@@ -497,13 +606,14 @@ export function attackStrength(s: GameState, ctx: AttackCtx): StrengthBreakdown 
     add('a', ctx.instantPower ?? 0, 'card Power');
     for (const c of aid) add('a', contributionPower(s, c), `${cardName(s, c.iid!)} joins`);
     // Only abilities that mention Instant attacks apply.
-    for (const g of structureCards(s, ctx.attackerPlayer)) {
+    for (const g of noAbilities ? [] : structureCards(s, ctx.attackerPlayer)) {
       for (const a of abilitiesOf(s, g)) {
         if (a.kind === 'attackBonus' && a.instant && a.scope === 'any' && (a.on === 'destroy' || a.on === 'both') && matches(s, tgt, a.target)) add('a', a.value, cardName(s, g));
       }
     }
     for (const b of liveBonus(ctx.attackBonus)) add('a', b.amount, b.label);
-    add('d', power(s, tgt, { defense: true }), `${td.name} Power`);
+    const p = ctx.instantDefense ?? power(s, tgt, { defense: true, halve: !!s.cards[tgt].devastated });
+    add('d', p, `${td.name} Power when it was struck${s.cards[tgt].devastated ? ' (Devastated, halved)' : ''}`);
   } else {
     const att = ctx.attacker!;
     add('a', power(s, att), `${cardName(s, att)} Power`);
@@ -520,7 +630,9 @@ export function attackStrength(s: GameState, ctx: AttackCtx): StrengthBreakdown 
     else add('a', pairs.opposite * perOpp - (replaces ? 0 : pairs.same * perSame), 'alignments');
     // Abilities: "any attempt" bonuses from all your Groups; the leader's "direct" bonuses do not
     // stack with its own "any attempt" bonus for the same attack — the larger applies (R029).
-    for (const g of structureCards(s, ctx.attackerPlayer)) {
+    // R044: +5 against another faction of your own Illuminati.
+    if (ctx.targetPlayer && ctx.targetPlayer !== ctx.attackerPlayer && s.cards[illuminatiOf(s, ctx.targetPlayer)].cardId === s.cards[illuminatiOf(s, ctx.attackerPlayer)].cardId) add('a', 5, 'rival faction of your Illuminati');
+    for (const g of noAbilities ? [] : structureCards(s, ctx.attackerPlayer)) {
       let direct = 0, any = 0;
       for (const a of abilitiesOf(s, g)) {
         if (a.kind !== 'attackBonus' || !(a.on === 'both' || a.on === ctx.type) || !matches(s, tgt, a.target, g)) continue;
@@ -528,7 +640,7 @@ export function attackStrength(s: GameState, ctx: AttackCtx): StrengthBreakdown 
       }
       add('a', g === att ? Math.max(direct, any) : any, cardName(s, g));
     }
-    for (const c of aid) {
+    for (const c of noAbilities ? [] : aid) {
       for (const a of abilitiesOf(s, c.iid!)) {
         if (a.kind === 'aidBonus' && (a.on === 'both' || a.on === ctx.type) && matches(s, tgt, a.target)) add('a', a.value, `${cardName(s, c.iid!)} ability`);
       }
@@ -543,8 +655,7 @@ export function attackStrength(s: GameState, ctx: AttackCtx): StrengthBreakdown 
         add('d', shared * 4, `shares alignments with its master`);
       }
     } else {
-      let p = power(s, tgt, { defense: true });
-      if (s.cards[tgt].devastated) p = Math.floor(p / 2);
+      const p = power(s, tgt, { defense: true, halve: !!s.cards[tgt].devastated });
       add('d', p, `${td.name} Power${s.cards[tgt].devastated ? ' (Devastated, halved)' : ''}`);
     }
   }
@@ -555,7 +666,7 @@ export function attackStrength(s: GameState, ctx: AttackCtx): StrengthBreakdown 
   }
   for (const c of oppose) add('d', contributionPower(s, c), `${cardName(s, c.iid!)} opposes${(c as { selfDefense?: boolean }).selfDefense ? ' (defending itself, x2)' : ''}`);
   // Defensive abilities of the target's Power Structure.
-  if (ctx.targetPlayer) {
+  if (ctx.targetPlayer && !noAbilities) {
     const attackers = ctx.instant ? [] : attackingGroups(ctx);
     for (const g of structureCards(s, ctx.targetPlayer)) {
       for (const a of abilitiesOf(s, g)) {
@@ -612,9 +723,20 @@ function finishAttack(s: GameState) {
   const tgt = ctx.target;
   if (attackCancelled(ctx)) {
     log(s, 'The attack was cancelled.');
-    // R009: helpers get their tokens back; a Disaster's target gets its token back.
-    for (const c of [...ctx.aid, ...ctx.oppose]) if (c.iid && s.cards[c.iid].zone === 'structure') s.cards[c.iid].tokens++;
-    if (ctx.disaster && ctx.instantCard && isCancelled(ctx.plays, ctx.instantCard)) giveToken(s, tgt);
+    // R009: if the attacking action is cancelled, Groups that aided or opposed get their tokens back
+    // and Plots other players used for them return to their owners' hands, exposed. Costs spent on a
+    // cancelled Instant attack (e.g. a helping Group's token) stay spent.
+    if (!ctx.instant) {
+      for (const c of [...ctx.aid, ...ctx.oppose]) if (c.iid && s.cards[c.iid].zone === 'structure') s.cards[c.iid].tokens++;
+      for (const pp of ctx.plays) {
+        const card = s.cards[pp.iid];
+        if (pp.player === ctx.attackerPlayer || card.zone !== 'table' || pp.effect.t === 'cancelGroup' || card.linkedTo) continue;
+        card.zone = 'hand'; card.controller = undefined; card.exposed = true;
+        player(s, card.owner).hand.push(pp.iid);
+      }
+    }
+    // A cancelled Disaster gives back the token it took from its target (R036).
+    if (ctx.disaster && ctx.tokenTaken && s.cards[tgt].zone === 'structure') s.cards[tgt].tokens++;
   }
   else if (ctx.result === 'success') {
     const margin = attackStrength(s, ctx).strength - finalRoll(ctx);
@@ -666,10 +788,9 @@ function capture(s: GameState, ctx: AttackCtx) {
   let side = ctx.arrow && openArrows(s, attacker).includes(ctx.arrow) ? ctx.arrow : openArrows(s, attacker)[0];
   let master = attacker;
   if (!side) {
-    // The attacker's arrows filled up during the attack: use any open arrow in the structure.
-    const spot = structureCards(s, ctx.attackerPlayer).flatMap((m) => openArrows(s, m).map((sd) => ({ m, sd })))[0];
-    if (!spot) { log(s, 'No open control arrow is left, so the capture fails.'); return; }
-    master = spot.m; side = spot.sd;
+    // The captured Group must go on the attacking Group's own arrow (R003).
+    log(s, `${cardName(s, attacker)} has no open control arrow left, so the capture fails.`);
+    return;
   }
   log(s, `${player(s, ctx.attackerPlayer).name} takes control of ${cardName(s, tgt)}.`, ctx.attackerPlayer);
   moveSubtree(s, tgt, ctx.attackerPlayer, master, side, 'discard');
@@ -776,9 +897,15 @@ export function checkPlot(s: GameState, playerId: string, play: PlotPlay, declar
     if (t.includes('counter') && (ctxKind === 'plot' || (ctxKind === 'attack' && !!ctx?.plays.length))) ok = true;
     if (t.includes('instant') && !ctx && (isActiveMain || ctxKind === 'endOfTurn')) ok = true;
     // NWOs may not be played during an Instant or Privileged attack (R045).
-    if (t.includes('nwo') && (isActiveMain || ctxKind === 'endOfTurn' || (ctxKind === 'attack' && !ctx?.instant && !ctx?.privileged))) ok = true;
+    if (t.includes('nwo') && (isActiveMain || ctxKind === 'endOfTurn' || (ctxKind === 'attack' && !!ctx && !ctx.instant && !isPrivileged(ctx)))) ok = true;
   }
   if (!ok) return `${d.name} cannot be played right now.`;
+  // First-turn protection (R001): no cards against a player who has not finished his first turn.
+  const tgtOwner = play.target && s.cards[play.target] ? (s.cards[play.target].controller ?? s.cards[play.target].owner) : undefined;
+  if (protectedPlayer(s, playerId, tgtOwner)) return 'That player has not finished a first turn yet.';
+  if (ctx && protectedPlayer(s, playerId, ctx.attackerPlayer) && ctx.targetPlayer !== playerId) return 'You cannot interfere with the first turn of a player.';
+  // No player may use two copies of the same Plot in one attack (R030); a cancelled copy never happened.
+  if (ctx && ctx.plays.some((p) => p.player === playerId && s.cards[p.iid].cardId === d.id && !isCancelled(ctx.plays, p.iid))) return `You already used ${d.name} in this attack.`;
   if (ctx && isPrivileged(ctx) && !participants(s).includes(playerId) && !t.includes('roll') && d.id !== 'interference' && d.id !== 'deep-agent') return 'Only the two players involved may act in a Privileged attack.';
   return h.check(s, playerId, play, ctx);
 }
@@ -813,7 +940,8 @@ export function playPlot(s: GameState, playerId: string, play: PlotPlay, declari
     s.attack?.plays.push(pp);
     return;
   }
-  // Non-attack Plot: give others a chance to counter it, then resolve.
+  // Non-attack Plot: pay its costs now, give others a chance to counter it, then resolve.
+  h.apply(s, playerId, play);
   s.window = { kind: 'plot', passed: [playerId], plot: pp, plays: [pp], deadline: Date.now() + s.settings.responseHours * 3600_000 };
 }
 
@@ -848,9 +976,13 @@ export function canAid(s: GameState, playerId: string, group: string): { ok: boo
   if (group === ctx.attacker || group === ctx.target) return { ok: false, global: false, why: 'Already part of this attack.' };
   if ([...ctx.aid, ...ctx.oppose].some((x) => x.iid === group)) return { ok: false, global: false, why: 'Already used in this attack.' };
   if (!participants(s).includes(playerId)) return { ok: false, global: false, why: 'This attack is Privileged.' };
+  if (protectedPlayer(s, playerId, ctx.attackerPlayer) || protectedPlayer(s, playerId, ctx.targetPlayer)) return { ok: false, global: false, why: 'That player has not finished a first turn yet.' };
+  if (secretBlocks(s, group, ctx.target) || (ctx.attacker && secretBlocks(s, group, ctx.attacker))) return { ok: false, global: false, why: 'Secret Groups can only be helped by Illuminati, Secret Groups, or their own master and puppets.' };
   if (immuneTo(s, ctx.target, [group])) return { ok: false, global: false, why: 'The target is immune to this Group.' };
   const al = alignments(s, group), ta = alignments(s, ctx.target);
   const qualifies = ctx.type === 'control' ? al.some((a) => a !== 'Fanatic' && ta.includes(a)) : al.some((a) => ta.some((b) => (a === 'Fanatic' && b === 'Fanatic') || (a !== b && ({ Government: 'Corporate', Corporate: 'Government', Liberal: 'Conservative', Conservative: 'Liberal', Peaceful: 'Violent', Violent: 'Peaceful', Straight: 'Weird', Weird: 'Straight' } as Record<string, string>)[a] === b)));
+  // Without a qualifying alignment a Group can only help with its Global Power (R029).
+  if (!qualifies && globalPower(s, group) === 0) return { ok: false, global: true, why: 'No matching alignment and no Global Power.' };
   return { ok: true, global: !qualifies };
 }
 
@@ -866,9 +998,12 @@ export function canOppose(s: GameState, playerId: string, group: string): { ok: 
   if (!participants(s).includes(playerId)) return { ok: false, global: false, self: false, why: 'This attack is Privileged.' };
   const self = group === ctx.target;
   if (!self && ctx.oppose.some((x) => x.iid === group)) return { ok: false, global: false, self: false, why: 'Already used in this attack.' };
+  if (protectedPlayer(s, playerId, ctx.attackerPlayer) && ctx.targetPlayer !== playerId) return { ok: false, global: false, self: false, why: 'That player has not finished a first turn yet.' };
+  if (!self && secretBlocks(s, group, ctx.target)) return { ok: false, global: false, self: false, why: 'Only Illuminati, Secret Groups, or its own master and puppets can defend a Secret Group.' };
   const tc = s.cards[ctx.target];
   const related = self || tc.master === group || c.master === ctx.target;
   const shares = alignments(s, group).some((a) => a !== 'Fanatic' && alignments(s, ctx.target).includes(a));
+  if (!(related || shares) && globalPower(s, group) === 0) return { ok: false, global: true, self, why: 'No matching alignment and no Global Power.' };
   return { ok: true, global: !(related || shares), self };
 }
 
@@ -897,6 +1032,34 @@ export function applyAction(state: GameState, playerId: string, action: Action):
   if (p.eliminated) throw new RuleError('You have been eliminated.');
 
   switch (action.type) {
+    case 'chooseLead': {
+      if (s.prompt?.kind !== 'chooseLead' || s.prompt.player !== playerId) throw new RuleError('Not choosing a lead Group now.');
+      if (!leadOptions(s, playerId).includes(action.card)) throw new RuleError('Pick a Group from your deck.');
+      s.setup!.picks[playerId] = action.card;
+      s.prompt = undefined;
+      promptNextLead(s);
+      break;
+    }
+
+    case 'callOff': {
+      // R009: the attacker may call an attack off until he commits a Plot to it. Everyone else gets
+      // back the tokens and cards they put in; the attacker's own token stays spent.
+      const ctx = s.attack;
+      if (!ctx || ctx.attackerPlayer !== playerId || ctx.instant || s.window?.kind !== 'attack') throw new RuleError('You can only call off your own attack before the roll.');
+      if (ctx.plays.some((pp) => pp.player === playerId)) throw new RuleError('You have committed a Plot to this attack, so it can no longer be called off.');
+      for (const c of [...ctx.aid, ...ctx.oppose]) if (c.iid && s.cards[c.iid].zone === 'structure') s.cards[c.iid].tokens++;
+      for (const pp of ctx.plays) {
+        const card = s.cards[pp.iid];
+        if (card.zone !== 'table') continue;
+        card.zone = 'hand'; card.controller = undefined; card.linkedTo = undefined;
+        player(s, card.owner).hand.push(pp.iid);
+      }
+      for (const c of Object.values(s.cards)) c.mods = c.mods.filter((m) => m.until !== 'attack');
+      log(s, `${p.name} calls off the attack.`, playerId);
+      s.attack = undefined; s.window = undefined;
+      break;
+    }
+
     case 'setAutoPass':
       p.autoPass = action.value;
       break;
@@ -931,6 +1094,8 @@ export function applyAction(state: GameState, playerId: string, action: Action):
       if (!payers.includes(action.payWith) || s.cards[action.payWith].tokens < 1) throw new RuleError('Pay with a token from the Group, its old or new master, or your Illuminati.');
       s.cards[action.payWith].tokens--;
       moveSubtree(s, action.group, playerId, action.onto, action.side, 'hand');
+      // Moving under a Devastated Place costs the moved Groups their tokens (R037).
+      for (const g2 of subtree(s, action.group)) if (tokenBarred(s, g2)) s.cards[g2].tokens = 0;
       log(s, `${p.name} moves ${cardName(s, action.group)}.`, playerId);
       break;
     }
@@ -942,7 +1107,7 @@ export function applyAction(state: GameState, playerId: string, action: Action):
     case 'buyPlot': {
       const ill = action.payWith.length === 1 && action.payWith[0] === p.illuminati;
       const two = action.payWith.length === 2 && action.payWith.every((g) => g !== p.illuminati);
-      if (!ill && !two) throw new RuleError('Buying a Plot costs 1 Illuminati token or 2 tokens from other Groups.');
+      if (!ill && !(two && action.payWith[0] !== action.payWith[1])) throw new RuleError('Buying a Plot costs 1 Illuminati token or tokens from 2 different other Groups.');
       for (const g of action.payWith) {
         const c = inst(s, g);
         if (c.controller !== playerId || c.zone !== 'structure' || c.tokens < 1) throw new RuleError('Those Groups cannot pay.');
@@ -951,6 +1116,38 @@ export function applyAction(state: GameState, playerId: string, action: Action):
       for (const g of action.payWith) s.cards[g].tokens--;
       drawPlot(s, p);
       log(s, `${p.name} buys a Plot card.`, playerId);
+      break;
+    }
+
+    case 'drawGroup': {
+      if (s.phase !== 'main' || activePlayer(s).id !== playerId || s.window || s.attack) throw new RuleError('Only in your own main phase.');
+      if (s.turnFlags.illumGroupDraw) throw new RuleError('You can only do this once per turn.');
+      if (s.cards[p.illuminati].tokens < 1) throw new RuleError('Your Illuminati needs an Action token.');
+      if (!p.groupDeck.length) throw new RuleError('Your Group deck is empty.');
+      s.cards[p.illuminati].tokens--;
+      s.turnFlags.illumGroupDraw = true;
+      drawGroup(s, p);
+      log(s, `${p.name} uses the Illuminati's action to draw a Group card.`, playerId);
+      break;
+    }
+
+    case 'relief': {
+      // R037: actions whose Power totals at least 3x the Place's printed Power remove Devastation.
+      const place = inst(s, action.place);
+      if (place.zone !== 'structure' || !place.devastated) throw new RuleError('Choose a Devastated Place.');
+      if (s.attack && s.window?.kind !== 'attack') throw new RuleError('Not during an attack roll.');
+      if (!s.window && !(s.phase === 'main' && activePlayer(s).id === playerId)) throw new RuleError('Relief can be sent during your turn or while you are able to respond.');
+      if (new Set(action.payWith).size !== action.payWith.length || !action.payWith.length) throw new RuleError('Choose the Groups that send Relief.');
+      for (const g of action.payWith) {
+        const c = inst(s, g);
+        if (c.zone !== 'structure' || c.controller !== playerId || c.tokens < 1) throw new RuleError('Each Group sending Relief must be yours and have an Action token.');
+      }
+      const need = 3 * (def(s, action.place).power ?? 0);
+      const total = action.payWith.reduce((n, g) => n + power(s, g), 0);
+      if (total < need) throw new RuleError(`Relief needs ${need} Power in total (three times its printed Power); you have ${total}.`);
+      for (const g of action.payWith) s.cards[g].tokens--;
+      place.devastated = false;
+      log(s, `${p.name} sends Relief: ${cardName(s, action.place)} is no longer Devastated.`, playerId);
       break;
     }
 
@@ -992,15 +1189,33 @@ export function applyAction(state: GameState, playerId: string, action: Action):
       const plots = plotsInHand(s, playerId);
       if (!action.cards.every((c) => plots.includes(c))) throw new RuleError('Discard Plot cards from your hand.');
       if (plots.length - action.cards.length > handLimit(s, playerId)) throw new RuleError(`Discard down to ${handLimit(s, playerId)} Plots.`);
-      for (const c of action.cards) discardCard(s, c);
+      for (const c of action.cards) {
+        if (action.toDeck) {
+          // Excess Plots may be put back into your Plot deck instead of discarded (R027).
+          p.hand = p.hand.filter((x) => x !== c);
+          s.cards[c].zone = 'plotDeck'; s.cards[c].exposed = false;
+          p.plotDeck.push(c);
+        } else discardCard(s, c);
+      }
+      const resume = s.prompt.data?.resume;
       s.prompt = undefined;
-      endTurnCleanup(s);
+      if (resume === 'endTurn') endTurnCleanup(s);
       break;
     }
   }
   settleWindows(s);
+  zeroPowerLosesTokens(s);
+  if (!isOver(s)) checkElimination(s);
+  enforceHandLimits(s);
   s.version++;
   return s;
+}
+
+/** A Group whose Power has been reduced to 0 loses its tokens at once (R026). */
+function zeroPowerLosesTokens(s: GameState) {
+  for (const c of Object.values(s.cards)) {
+    if (c.zone === 'structure' && c.tokens > 0 && def(s, c.iid).type === 'Group' && (def(s, c.iid).power ?? 0) > 0 && power(s, c.iid) === 0) c.tokens = 0;
+  }
 }
 
 /** Close any window everyone has passed on, and advance the game. */
@@ -1030,7 +1245,8 @@ export function startInstantAttack(s: GameState, playerId: string, opts: {
     s.cards[opts.helper].tokens--;
     ctx.aid.push({ player: playerId, iid: opts.helper, amount: 0, label: cardName(s, opts.helper) });
   }
-  if (opts.disaster && s.cards[opts.target].tokens > 0) s.cards[opts.target].tokens--; // R036
+  ctx.instantDefense = power(s, opts.target, { defense: true, halve: !!s.cards[opts.target].devastated }); // Power when played (R034)
+  if (opts.disaster && s.cards[opts.target].tokens > 0) { s.cards[opts.target].tokens--; ctx.tokenTaken = true; } // R036
   s.attack = ctx;
   openWindow(s, 'attack');
 }

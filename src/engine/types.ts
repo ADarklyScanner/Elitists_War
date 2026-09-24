@@ -88,6 +88,7 @@ export interface Contribution {
   player: string;
   iid?: string;            // group spending a token
   plot?: string;           // plot instance providing it
+  forGroup?: string;       // the Group a Plot bonus was played on
   amount: number;
   label: string;
 }
@@ -118,6 +119,8 @@ export interface AttackCtx {
   instant: boolean;        // Instant Attack launched by a card (Disaster / Assassination)
   instantCard?: string;    // plot iid launching it
   instantPower?: number;
+  instantDefense?: number;
+  tokenTaken?: boolean;          // a Disaster removed a token from its target (given back if cancelled)       // target's Power at the moment an Instant attack was played (R034)
   disaster?: { destroyMargin: number | null; devastateOnly?: boolean };
   assassination?: boolean;
   attacker?: string;       // iid of leading group (undefined for instant attacks without a group)
@@ -149,11 +152,11 @@ export interface ResponseWindow {
 /** A decision only one player can make (blocks the game until made). */
 export interface Prompt {
   player: string;
-  kind: 'takeover' | 'discardToLimit' | 'placeCaptured';
+  kind: 'takeover' | 'discardToLimit' | 'placeCaptured' | 'chooseLead';
   data?: Record<string, unknown>;
 }
 
-export type Phase = 'beginning' | 'main' | 'endOfTurn' | 'gameOver';
+export type Phase = 'setup' | 'beginning' | 'main' | 'endOfTurn' | 'gameOver';
 
 export interface LogEntry { turn: number; player?: string; text: string; }
 
@@ -183,6 +186,7 @@ export interface GameState {
   firstPlayer: number;      // index of the player who went first (rounds start with them)
   log: LogEntry[];
   winners?: string[];
+  setup?: { picks: Record<string, string | undefined>; banned: string[]; setAside: string[] };
 }
 
 // ---------------- Actions a player can submit ----------------
@@ -194,6 +198,7 @@ export interface PlotPlay {
   payWith?: string[];            // group iids spending tokens as the plot's cost
   alignment?: Alignment;
   helper?: string;               // optional group joining an Instant Attack
+  targets?: string[];            // several Groups (reload cards)
 }
 
 export type Action =
@@ -203,11 +208,15 @@ export type Action =
   | { type: 'move'; group: string; onto: string; side: Side; payWith: string }
   | { type: 'playPlot'; play: PlotPlay }
   | { type: 'buyPlot'; payWith: string[] }
+  | { type: 'drawGroup' }
+  | { type: 'relief'; place: string; payWith: string[] }
   | { type: 'aid'; group: string; useGlobal?: boolean }
   | { type: 'oppose'; group: string; useGlobal?: boolean }
   | { type: 'pass' }
   | { type: 'endTurn' }
-  | { type: 'discard'; cards: string[] }
+  | { type: 'discard'; cards: string[]; toDeck?: boolean }
+  | { type: 'chooseLead'; card: string }
+  | { type: 'callOff' }
   | { type: 'setAutoPass'; value: boolean };
 
 export class RuleError extends Error {}

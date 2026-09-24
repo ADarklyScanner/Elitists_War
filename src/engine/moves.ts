@@ -43,14 +43,22 @@ export function plotOptions(s: GameState, pl: string, card: string, declaring?: 
   const modes: (string | undefined)[] = needs.mode ?? (d.id === 'secrets-man-was-not-meant-to-know' ? ['illuminati', 'deck'] : [undefined]);
   const aligns: (Alignment | undefined)[] = needs.alignment ? ALIGNMENTS : [undefined];
   const helpers: (string | undefined)[] = needs.helper ? [undefined, ...structureCards(s, pl).filter((g) => s.cards[g].tokens > 0)] : [undefined];
+  // Reload cards: offer each single Group and the largest sets within 5 Power.
+  let targetSets: (string[] | undefined)[] = [undefined];
+  if (needs.targets) {
+    const el = structureCards(s, pl).filter((g) => def(s, g).type === 'Group' && s.cards[g].tokens === 0);
+    const asc = [...el].sort((a, b) => power(s, a) - power(s, b));
+    const fit = (list: string[]) => { const out: string[] = []; let n = 0; for (const g of list) if (n + power(s, g) <= 5) { out.push(g); n += power(s, g); } return out; };
+    targetSets = [...el.map((g) => [g]), fit(asc), fit([...asc].reverse())].filter((x) => x.length);
+  }
   const out: MoveOption[] = [];
-  for (const target of targets) {
+  for (const targetList of targetSets) for (const target of targets) {
     const pays: (string[] | undefined)[] = needs.pay === 'tokens' ? payCandidates(s, pl, target) : [undefined];
     for (const mode of modes) for (const alignment of aligns) for (const helper of helpers) {
       let found = false;
       for (const payWith of pays) {
         if (found) break;
-        const play: PlotPlay = { card, target, mode, alignment, helper, payWith };
+        const play: PlotPlay = { card, target, mode, alignment, helper, payWith, targets: targetList };
         if (declaring) {
           const probe = structuredClone(s);
           probe.attack = { id: -1, type: declaring.attackType, instant: false, attacker: declaring.attacker, attackerPlayer: pl, target: declaring.target, targetPlayer: probe.cards[declaring.target].controller, fromHand: probe.cards[declaring.target].zone === 'hand', privileged: false, aid: [], oppose: [], attackBonus: [], defenseBonus: [], plays: [] };
@@ -78,6 +86,7 @@ export function describePlay(s: GameState, p: PlotPlay): string {
   if (p.mode === 'deck') parts.push('pay: top 2 Plots of your deck');
   if (p.alignment) parts.push(`${p.alignment} Groups`);
   if (p.helper) parts.push(`with ${cardName(s, p.helper)}`);
+  if (p.targets?.length) parts.push(`tokens for ${p.targets.map((g) => cardName(s, g)).join(', ')}`);
   if (p.payWith?.length) parts.push(`paid by ${p.payWith.map((g) => cardName(s, g)).join(', ')}`);
   return parts.filter(Boolean).join(' · ') || 'Play';
 }

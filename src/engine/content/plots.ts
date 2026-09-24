@@ -62,7 +62,7 @@ function plusTen(match: Match): PlotHandler {
     },
     apply(s, pl, play, ctx) {
       if (!ctx) return;
-      const entry = { player: pl, plot: play.card, amount: 10, label: def(s, play.card).name };
+      const entry = { player: pl, plot: play.card, forGroup: play.target, amount: 10, label: def(s, play.card).name };
       ((play.mode ?? 'power') === 'power' ? ctx.attackBonus : ctx.defenseBonus).push(entry);
     },
     resolve(s, _pl, play) {
@@ -74,19 +74,36 @@ function plusTen(match: Match): PlotHandler {
   };
 }
 
-/** Each of your [alignment] Groups without a token gets one. */
+/**
+ * Reload cards (official correction, R019): cost an Illuminati action and give a token to your
+ * [X] Groups without one, up to 5 Power of Groups in total or any single Group. A Group captured
+ * this turn cannot be reloaded.
+ */
 function tokenGiver(match: Match): PlotHandler {
+  const eligible = (s: GameState, pl: string, g: string) =>
+    own(s, pl, g) && isGroup(s, g) && matches(s, g, match) && s.cards[g].tokens === 0 && s.cards[g].capturedTurn !== s.turn;
   return {
     timing: ['anytime'],
-    check: () => null,
-    ...effectNow((s, pl) => {
-      let n = 0;
-      for (const g of structureCards(s, pl)) {
-        if (isGroup(s, g) && matches(s, g, match) && s.cards[g].tokens === 0) { giveToken(s, g); if (s.cards[g].tokens) n++; }
-      }
-      log(s, `${n} ${describe(match)} Group${n === 1 ? '' : 's'} get an Action token.`, pl);
-    }),
+    needs: { targets: true },
+    check(s, pl, play) {
+      if (s.cards[player(s, pl).illuminati].tokens < 1) return 'This costs an action from your Illuminati.';
+      const t = play.targets ?? [];
+      if (!t.length || new Set(t).size !== t.length) return `Choose which ${describe(match)} Groups get a token.`;
+      if (!t.every((g) => eligible(s, pl, g))) return `Only your ${describe(match)} Groups without a token (not captured this turn) can be reloaded.`;
+      if (t.length > 1 && totalPower(s, t) > 5) return 'Reload up to 5 Power of Groups in total, or any one Group.';
+      return null;
+    },
+    apply(s, pl, play, ctx) {
+      s.cards[player(s, pl).illuminati].tokens--;
+      if (ctx) reload(s, pl, play);
+    },
+    resolve: (s, pl, play) => reload(s, pl, play),
   };
+  function reload(s: GameState, pl: string, play: PlotPlay) {
+    let n = 0;
+    for (const g of play.targets ?? []) if (s.cards[g].zone === 'structure' && s.cards[g].tokens === 0) { giveToken(s, g); if (s.cards[g].tokens) n++; }
+    log(s, `${n} Group${n === 1 ? ' gets' : 's get'} an Action token.`, pl);
+  }
 }
 
 /** Uses the target's action; its Power is raised to 6 and the card stays linked. One per player. */
@@ -203,11 +220,12 @@ function rollPlot(fn: (s: GameState, pl: string, play: PlotPlay, ctx: AttackCtx)
   };
 }
 
+/** Privilege must be announced by the attacker when the attack is first declared (R032). */
 function privilegedPlot(bonus: number, check: (s: GameState, pl: string, ctx: AttackCtx) => string | null): PlotHandler {
   return {
-    timing: ['declare', 'attack'],
+    timing: ['declare'],
     check(s, pl, play, ctx) {
-      if (!ctx || ctx.instant) return 'Play this with an attack.';
+      if (!ctx || ctx.instant || ctx.attackerPlayer !== pl) return 'Play this when you declare your attack.';
       if (sameCardInAttack(s, pl, play, ctx)) return 'Already played in this attack.';
       return check(s, pl, ctx);
     },
