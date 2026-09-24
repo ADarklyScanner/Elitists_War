@@ -5,13 +5,13 @@ import type { Alignment, GameState, Modifier } from './types';
 import { def, OPPOSITE } from './cards';
 import { abilitiesOf, matches, setAlignmentResolver } from './abilities';
 import { NWO_EFFECTS } from './nwo';
-import { sumHooks } from './hooks';
+import { sumHooks, activeHookCards, HOOKS } from './hooks';
 
 function activeMods(s: GameState, iid: string, opts: ValueOpts): Modifier[] {
   return s.cards[iid].mods.filter((m) => (!m.defenseOnly || opts.defense) && (!opts.goals || m.countsForGoals !== false));
 }
 
-export function alignments(s: GameState, iid: string): Alignment[] {
+export function alignments(s: GameState, iid: string, opts: { goals?: boolean } = {}): Alignment[] {
   const d = def(s, iid);
   let al = [...(d.alignments ?? [])] as Alignment[];
   for (const m of s.cards[iid].mods) {
@@ -22,14 +22,27 @@ export function alignments(s: GameState, iid: string): Alignment[] {
     }
     if (m.kind === 'removeAlign' && m.align) al = al.filter((a) => a !== m.align);
   }
+  // Cards in play that change alignments (e.g. an NWO making Corporate count as Government).
+  for (const self of activeHookCards(s)) {
+    const h = HOOKS[s.cards[self].cardId];
+    if (h.alignmentMod) al = h.alignmentMod(s, self, iid, al, !!opts.goals);
+  }
   return al;
 }
-setAlignmentResolver(alignments);
+setAlignmentResolver(alignments, attributes);
 
 export function attributes(s: GameState, iid: string): string[] {
   const d = def(s, iid);
-  const attrs = [...(d.attributes ?? [])];
+  let attrs = [...(d.attributes ?? [])];
+  for (const m of s.cards[iid]?.mods ?? []) {
+    if (m.kind === 'addAttr' && m.attr && !attrs.includes(m.attr)) attrs.push(m.attr);
+    if (m.kind === 'removeAttr' && m.attr) attrs = attrs.filter((a) => a !== m.attr);
+  }
   for (const nwo of activeNwos(s)) NWO_EFFECTS[s.cards[nwo].cardId]?.attributes?.(s, iid, attrs);
+  for (const self of activeHookCards(s)) {
+    const h = HOOKS[s.cards[self].cardId];
+    if (h.attributeMod) attrs = h.attributeMod(s, self, iid, attrs);
+  }
   return attrs;
 }
 

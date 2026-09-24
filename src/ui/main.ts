@@ -26,6 +26,7 @@ type Sel =
 
 interface Ui {
   slotChoice?: string[];
+  picked?: string[];
   game: GameState | null;
   me: string;
   sel: Sel;
@@ -343,6 +344,13 @@ function renderConsole(s: GameState): string {
     body = `<h2 class="${won ? 'ok' : 'bad'}">${won ? (s.winners!.length > 1 ? 'Shared victory.' : 'You win.') : s.winners?.length ? 'The Computer wins.' : 'Nobody wins.'}</h2>
       <p>${esc(s.log.filter((l) => / wins/.test(l.text)).map((l) => l.text).join(' '))}</p>
       <div class="btns"><button class="primary" data-act="home">New game</button></div>`;
+  } else if (s.prompt?.player === ui.me && s.prompt.kind === 'choose' && s.prompt.choice) {
+    const ch = s.prompt.choice;
+    const picked = ui.picked ?? [];
+    const single = ch.max === 1 && ch.min === 1;
+    body = `<h2>${esc(ch.source && s.cards[ch.source] ? cardName(s, ch.source) : 'Your choice')}</h2><p>${esc(ch.question)}</p>
+      <div class="opts">${ch.options.map((o) => `<button class="${picked.includes(o.id) ? 'on' : ''}" data-pick-opt="${esc(o.id)}">${picked.includes(o.id) ? '✓ ' : ''}${esc(o.label)}</button>`).join('')}</div>
+      ${single ? '' : `<div class="btns"><button class="primary" data-act="choose" ${picked.length >= ch.min && picked.length <= ch.max ? '' : 'disabled'}>Confirm (${picked.length})</button></div>`}`;
   } else if (s.prompt?.player === ui.me && s.prompt.kind === 'chooseLead') {
     const opts = leadOptions(s, ui.me).sort((a, b) => (def(s, b).arrowsOut?.length ?? 0) - (def(s, a).arrowsOut?.length ?? 0) || (def(s, b).power ?? 0) - (def(s, a).power ?? 0));
     body = `<h2>Choose your lead Group</h2><p>Pick a Group from your deck to start under your Illuminati. Your rival picks at the same time; if you both pick the same Group, you both pick again.</p>
@@ -368,7 +376,19 @@ function renderConsole(s: GameState): string {
       <div class="btns"><button class="primary" data-act="discard" ${ok && sel.length ? '' : 'disabled'}>Discard ${sel.length} card${sel.length === 1 ? '' : 's'}</button><button data-act="return" ${ok && sel.length ? '' : 'disabled'}>Put back in my Plot deck</button></div>`;
   } else if (s.window && waiting.includes(ui.me)) {
     const opts = responseOptions(s, ui.me);
-    const head = s.window.kind === 'plot' ? `<p><b>${esc(cardName(s, s.window.plot!.iid))}</b> was played. You can counter it.</p>`
+    const ev = s.window.event;
+    const evText = ev ? ({
+      turnStart: `${esc(player(s, ev.player!).name)}'s turn is starting.`,
+      drawn: `${esc(player(s, ev.player!).name)} has drawn cards.`,
+      takeover: `${esc(player(s, ev.player!).name)} took over ${esc(cardName(s, ev.card!))} automatically.`,
+      destroyed: `${esc(cardName(s, ev.card!))} was destroyed.`,
+      devastated: `${esc(cardName(s, ev.card!))} was Devastated.`,
+      discarded: `${esc(cardName(s, ev.card!))} was discarded.`,
+      plotResolved: `${esc(cardName(s, ev.card!))} took effect.`,
+      relief: `Relief was sent to ${esc(cardName(s, ev.card!))}.`,
+    } as Record<string, string>)[ev.type] : '';
+    const head = s.window.kind === 'event' ? `<p>${evText} You have a card that can respond.</p>`
+      : s.window.kind === 'plot' ? `<p><b>${esc(cardName(s, s.window.plot!.iid))}</b> was played. You can counter it.</p>`
       : s.window.kind === 'endOfTurn' ? '<p>The turn is ending. Last chance to play a card.</p>'
       : s.window.kind === 'roll' ? '<p>The dice are down. Cards that change rolls can be played now.</p>' : '';
     body = `${s.attack ? attackPanel(s) : ''}${head}
@@ -497,7 +517,8 @@ function renderInspect(s: GameState): string {
 }
 
 function renderLog(s: GameState): string {
-  const lines = s.log.slice(-40).reverse();
+  // Private lines (what a player saw with a card) are shown only to that player.
+  const lines = s.log.filter((l) => !l.to || l.to === ui.me).slice(-40).reverse();
   // The human player is called "You", so fix the verb: "You leads" -> "You lead".
   const you = (t: string) => t.replace(/(^|\s)You (has|\w+?)s\b/g, (_m, pre, v) => `${pre}You ${v === 'has' ? 'have' : v}`);
   return `<div class="panel log"><div class="label">Log</div><ol>${lines.map((l) => `<li class="${l.player === ui.me ? 'me' : l.player ? 'them' : ''} ${l.text.startsWith('—') ? 'turnline' : ''}">${esc(you(l.text))}</li>`).join('')}</ol></div>`;
@@ -633,6 +654,15 @@ function bind() {
     const o = (window as unknown as { __abil: { action: Action }[] }).__abil[Number(b.dataset.abil)];
     act(o.action);
   });
+  app.querySelectorAll<HTMLElement>('[data-pick-opt]').forEach((b) => b.onclick = () => {
+    const ch = s.prompt?.choice;
+    if (!ch) return;
+    const id = b.dataset.pickOpt!;
+    if (ch.max === 1 && ch.min === 1) { ui.picked = undefined; act({ type: 'choose', ids: [id] }); return; }
+    const cur = ui.picked ?? [];
+    ui.picked = cur.includes(id) ? cur.filter((x) => x !== id) : cur.length < ch.max ? [...cur, id] : cur;
+    render();
+  });
   app.querySelectorAll<HTMLElement>('[data-lead]').forEach((b) => b.onclick = () => act({ type: 'chooseLead', card: b.dataset.lead! }));
   app.querySelectorAll<HTMLElement>('[data-relief]').forEach((b) => b.onclick = () => {
     const r = (window as unknown as { __relief: { place: string; pay: string[] }[] }).__relief[Number(b.dataset.relief)];
@@ -655,6 +685,7 @@ function bind() {
       case 'discard': if (sel.kind === 'discard') act({ type: 'discard', cards: sel.cards }); break;
       case 'return': if (sel.kind === 'discard') act({ type: 'discard', cards: sel.cards, toDeck: true }); break;
       case 'callOff': act({ type: 'callOff' }); break;
+      case 'choose': { const ids = ui.picked ?? []; ui.picked = undefined; act({ type: 'choose', ids }); break; }
       case 'drawGroup': act({ type: 'drawGroup' }); break;
       case 'playResource': if (sel.kind === 'resource') act({ type: 'playResource', card: sel.iid }); break;
       case 'linkStart': if (sel.kind === 'resource') { ui.sel = { kind: 'link', resource: sel.iid }; render(); } break;

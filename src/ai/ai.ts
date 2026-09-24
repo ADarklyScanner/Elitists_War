@@ -5,7 +5,7 @@ import {
   applyAction, attackStrength, canAid, canOppose, checkPlot, currentOutcome, def, openArrows, player,
   plotsInHand, handLimit, power, resistance, structureCards, takeoverOptions, validateAttack, waitingFor,
   alignments, abilitiesOf, PLOTS, subtree, goalCount, goalNeeded, depth, bestLead, plotOptions,
-  HOOKS, checkAbility, resourcesOf, canEnterPlay, goalsInHand, goalLimit, type AbilityParams,
+  HOOKS, CHOICES, checkAbility, resourcesOf, canEnterPlay, goalsInHand, goalLimit, type AbilityParams,
 } from '../engine';
 
 /** Activated abilities of our cards with a given AI hint, tried against a few likely targets. */
@@ -252,6 +252,11 @@ function respondToRoll(s: GameState, pl: string): Action {
 export function chooseAction(s: GameState, pl: string): Action {
   if (s.prompt?.player === pl) {
     if (s.prompt.kind === 'chooseLead') return { type: 'chooseLead', card: bestLead(s, pl) };
+    if (s.prompt.kind === 'choose' && s.prompt.choice) {
+      const ch = s.prompt.choice;
+      const pick = CHOICES[ch.key]?.ai?.(s, pl, ch.options, { ...ch.data, source: ch.source }) ?? ch.options.slice(0, ch.min).map((o) => o.id);
+      return { type: 'choose', ids: pick };
+    }
     if (s.prompt.kind === 'takeover') {
       const opts = takeoverOptions(s, pl);
       opts.sort((a, b) => groupValue(s, b.card) - groupValue(s, a.card) || depth(s, a.onto) - depth(s, b.onto));

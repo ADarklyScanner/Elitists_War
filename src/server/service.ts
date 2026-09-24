@@ -213,10 +213,20 @@ export function viewFor(s: GameState, viewer: string): GameState {
     const kind = def(s, iid).type === 'Plot' ? 'hidden-plot' : 'hidden-group';
     v.cards[iid] = { iid, cardId: kind, owner: c.owner, zone: c.zone, tokens: 0, mods: [] };
   };
+  const known = new Set(s.players.find((p) => p.id === viewer)?.known ?? []);
   for (const p of v.players) {
-    for (const iid of [...p.plotDeck, ...p.groupDeck]) hide(iid);
-    if (p.id !== viewer) for (const iid of p.hand) if (!v.cards[iid].exposed) hide(iid);
+    for (const iid of [...p.plotDeck, ...p.groupDeck]) if (!known.has(iid)) hide(iid);
+    if (p.id !== viewer) for (const iid of p.hand) if (!v.cards[iid].exposed && !known.has(iid)) hide(iid);
+    if (p.id !== viewer) p.known = [];
   }
+  // Private log lines (what a player saw with a card) go only to that player.
+  v.log = v.log.filter((l) => !l.to || l.to === viewer);
+  // Someone else's decision may show their hidden cards as options: others only see that they are choosing.
+  const hideChoice = (pr?: GameState['prompt']) => {
+    if (pr?.choice && pr.player !== viewer) pr.choice = { ...pr.choice, options: [], question: 'Another player is making a choice.' };
+  };
+  hideChoice(v.prompt);
+  for (const q of v.promptQueue ?? []) hideChoice(q);
   // A Goal or note written under a card stays secret.
   for (const c of Object.values(v.cards)) if (c.note && c.controller !== viewer) c.note = '(secret)';
   if (v.setup) for (const k of Object.keys(v.setup.picks)) if (k !== viewer && v.setup.picks[k]) v.setup.picks[k] = 'chosen';

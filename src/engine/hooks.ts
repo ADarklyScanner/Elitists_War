@@ -1,7 +1,7 @@
 // Card scripting: behaviour that is too specific for the declarative Ability list.
 // A card's hooks are active while the card is in play: a Group in a Power Structure, a Resource
 // beside it, or a Plot that stays on the table linked to something.
-import type { AttackCtx, GameState, PlotEffect } from './types';
+import type { Alignment, AttackCtx, GameState, GameEvent, PlotEffect } from './types';
 
 export type Side2 = 'attack' | 'defense';
 
@@ -23,7 +23,7 @@ export interface ActivatedAbility {
   /** At most once per turn. */
   oncePerTurn?: boolean;
   /** What the UI needs to ask for. */
-  needs?: { target?: 'group' | 'ownGroup' | 'rivalGroup' | 'place' | 'personality' | 'resource' | 'plot' | 'actingGroup'; modes?: string[]; alignment?: boolean };
+  needs?: { target?: 'group' | 'ownGroup' | 'rivalGroup' | 'place' | 'personality' | 'resource' | 'plot' | 'actingGroup' | 'handCard' | 'handGroup' | 'handPlot' | 'destroyed' | 'discardPile' | 'rival' | 'rivalHand' | 'nwo'; modes?: string[]; alignment?: boolean };
   check: (s: GameState, pl: string, self: string, p: AbilityParams, ctx?: AttackCtx) => string | null;
   /** Do it. During an attack, return a live effect or push onto ctx.attackBonus / ctx.defenseBonus. */
   apply: (s: GameState, pl: string, self: string, p: AbilityParams, ctx?: AttackCtx) => PlotEffect | void;
@@ -61,6 +61,30 @@ export interface CardHooks {
   /** Counts this many extra Groups toward the controller's Basic Goal. */
   goalBonus?: (s: GameState, self: string) => number;
 
+  // ---- rule changers
+  /** Change a Group's alignments while this card is in play (`goals`: evaluating a Goal). */
+  alignmentMod?: (s: GameState, self: string, iid: string, current: Alignment[], goals: boolean) => Alignment[];
+  /** Change a Group's attributes while this card is in play. */
+  attributeMod?: (s: GameState, self: string, iid: string, current: string[]) => string[];
+  /** Forbid an attack (return a reason). Also consulted for automatic takeovers (type 'takeover'). */
+  forbidAttack?: (s: GameState, self: string, attacker: string | undefined, target: string, type: 'control' | 'destroy' | 'takeover', attackerPlayer: string) => string | null;
+  /** Forbid a Group from aiding or opposing this attack. */
+  forbidJoin?: (s: GameState, self: string, ctx: AttackCtx, group: string, as: 'aid' | 'oppose') => boolean;
+  /** Let `attacker` ignore `target`'s immunities (e.g. Deprogrammers vs Discordian protection). */
+  ignoreImmunity?: (s: GameState, self: string, attacker: string, target: string) => boolean;
+  /** Let `group` attack, aid or oppose despite the Secret-Group rule (R014). */
+  secretOverride?: (s: GameState, self: string, group: string, secret: string) => boolean;
+  /** `iid` cannot receive Action tokens. */
+  noTokens?: (s: GameState, self: string, iid: string) => boolean;
+  /** Plots and NWOs on the table only: switch off `iid`'s special abilities. */
+  disablesAbilities?: (s: GameState, self: string, iid: string) => boolean;
+  /** Called before a player draws from a deck: 'skip' cancels the draw, 'bottom' takes the bottom card. */
+  beforeDraw?: (s: GameState, self: string, player: string, deck: 'plot' | 'group') => 'skip' | 'bottom' | undefined;
+  /** Called after a card is drawn. */
+  onDraw?: (s: GameState, self: string, player: string, deck: 'plot' | 'group', card: string) => void;
+  /** Called for every game event (after it happens, before its response window). */
+  onEvent?: (s: GameState, self: string, e: GameEvent) => void;
+
   // ---- triggers
   onTurnStart?: (s: GameState, self: string) => void;
   onDestroy?: (s: GameState, self: string, victim: string, by: string) => void;
@@ -74,6 +98,14 @@ export interface CardHooks {
 
 export const HOOKS: Record<string, CardHooks> = {};
 
+/** Resolvers for player choices asked with askChoice (key -> what to do with the picked ids). */
+export const CHOICES: Record<string, {
+  resolve: (s: GameState, player: string, picked: string[], data: Record<string, unknown>) => void;
+  /** How the computer picks (defaults to the first `min` options). */
+  ai?: (s: GameState, player: string, options: { id: string; label: string }[], data: Record<string, unknown>) => string[];
+}> = {};
+export function registerChoice(key: string, c: (typeof CHOICES)[string]) { CHOICES[key] = c; }
+
 export function registerHooks(table: Record<string, CardHooks>) {
   for (const [id, h] of Object.entries(table)) HOOKS[id] = { ...HOOKS[id], ...h };
 }
@@ -81,11 +113,26 @@ export function registerHooks(table: Record<string, CardHooks>) {
 /** Cards whose hooks are active: Groups in structures, Resources in play, linked Plots on the table. */
 export function activeHookCards(s: GameState): string[] {
   const out: string[] = [];
+  const table: string[] = [];
   for (const c of Object.values(s.cards)) {
     if (!HOOKS[c.cardId]) continue;
-    if (c.zone === 'structure' || c.zone === 'resources' || (c.zone === 'table' && c.linkedTo)) out.push(c.iid);
+    if (c.zone === 'table' && c.linkedTo) table.push(c.iid);
+    else if (c.zone === 'structure' || c.zone === 'resources') out.push(c.iid);
   }
-  return out;
+  // Table cards (Plots, NWOs) may switch off Groups' abilities (World Hunger); they are never switched off themselves.
+  const off = table.filter((t) => HOOKS[s.cards[t].cardId].disablesAbilities);
+  const live = off.length ? out.filter((g) => !off.some((t) => HOOKS[s.cards[t].cardId].disablesAbilities!(s, t, g))) : out;
+  return [...live, ...table];
+}
+
+/** Is `iid`'s special ability switched off by a card on the table? */
+export function abilitiesDisabled(s: GameState, iid: string): boolean {
+  for (const c of Object.values(s.cards)) {
+    if (c.zone !== 'table' || !c.linkedTo) continue;
+    const h = HOOKS[c.cardId];
+    if (h?.disablesAbilities?.(s, c.iid, iid)) return true;
+  }
+  return false;
 }
 
 export function hooksOf(s: GameState, iid: string): CardHooks | undefined {

@@ -4,6 +4,7 @@
 // `custom` hooks, and anything not yet encoded is marked `pending`.
 import type { Alignment, AttackCtx, GameState } from './types';
 import { def } from './cards';
+import { abilitiesDisabled } from './hooks';
 
 /** Describes which Groups something applies to. All listed conditions must hold. */
 export interface Match {
@@ -56,7 +57,9 @@ export function registerAbilities(table: Record<string, Ability[]>) {
 }
 
 export function abilitiesOf(s: GameState, iid: string): Ability[] {
-  return GROUP_ABILITIES[s.cards[iid].cardId] ?? [];
+  const list = GROUP_ABILITIES[s.cards[iid].cardId] ?? [];
+  if (list.length && s.cards[iid].zone === 'structure' && abilitiesDisabled(s, iid)) return [];
+  return list;
 }
 
 export function isImplemented(cardId: string): boolean {
@@ -67,7 +70,8 @@ export function isImplemented(cardId: string): boolean {
 // ---------- matching helpers (injected by stats.ts to avoid a cycle) ----------
 type AlignFn = (s: GameState, iid: string) => Alignment[];
 let alignFn: AlignFn = () => [];
-export function setAlignmentResolver(fn: AlignFn) { alignFn = fn; }
+let attrFn: (s: GameState, iid: string) => string[] = (s, iid) => def(s, iid).attributes ?? [];
+export function setAlignmentResolver(fn: AlignFn, attrs?: (s: GameState, iid: string) => string[]) { alignFn = fn; if (attrs) attrFn = attrs; }
 
 export function matches(s: GameState, iid: string, m: Match | undefined, self?: string): boolean {
   if (!m) return true;
@@ -75,7 +79,7 @@ export function matches(s: GameState, iid: string, m: Match | undefined, self?: 
   if (m.notSelf && iid === self) return false;
   if (m.names && !m.names.includes(d.id)) return false;
   if (m.subtypes && !m.subtypes.includes(d.subtype)) return false;
-  if (m.attributes && !m.attributes.some((a) => (d.attributes ?? []).includes(a))) return false;
+  if (m.attributes && !m.attributes.some((a) => attrFn(s, iid).includes(a))) return false;
   const al = alignFn(s, iid);
   if (m.alignments && !m.alignments.some((a) => al.includes(a))) return false;
   if (m.allAlignments && !m.allAlignments.every((a) => al.includes(a))) return false;

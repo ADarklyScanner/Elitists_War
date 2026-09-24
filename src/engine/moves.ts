@@ -38,16 +38,18 @@ export function plotOptions(s: GameState, pl: string, card: string, declaring?: 
   const h = PLOTS[d.id];
   if (!h) return [];
   const needs = h.needs ?? {};
-  const groupsInPlay = Object.values(s.cards).filter((c) => c.zone === 'structure' && def(s, c.iid).type === 'Group').map((c) => c.iid);
   let targets: (string | undefined)[] = [undefined];
-  if (needs.target === 'plot') targets = (s.window?.kind === 'plot' ? s.window.plays ?? [] : s.attack?.plays ?? []).map((p) => p.iid).filter((x) => x !== card);
-  else if (needs.target) targets = groupsInPlay;
+  if (needs.target === 'plot') targets = (s.window?.kind === 'plot' ? s.window.plays ?? [] : s.attack?.plays ?? []).map((p) => p.iid).filter((x) => x !== card && s.cards[x]);
+  else if (needs.target) targets = targetPool(s, pl, needs.target, card);
   const modes: (string | undefined)[] = needs.mode ?? (d.id === 'secrets-man-was-not-meant-to-know' ? ['illuminati', 'deck'] : [undefined]);
   const aligns: (Alignment | undefined)[] = needs.alignment ? ALIGNMENTS : [undefined];
   const helpers: (string | undefined)[] = needs.helper ? [undefined, ...structureCards(s, pl).filter((g) => s.cards[g].tokens > 0)] : [undefined];
   // Reload cards: offer each single Group and the largest sets within 5 Power.
   let targetSets: (string[] | undefined)[] = [undefined];
-  if (needs.targets) {
+  if (needs.targetsOf && needs.targetsOf !== 'ownTokenless') {
+    const pool = targetPool(s, pl, needs.targetsOf, card);
+    targetSets = [...pool.map((c) => [c]), pool.slice(0, 2), pool].filter((x) => x.length);
+  } else if (needs.targets) {
     const el = structureCards(s, pl).filter((g) => def(s, g).type === 'Group' && s.cards[g].tokens === 0);
     const asc = [...el].sort((a, b) => power(s, a) - power(s, b));
     const fit = (list: string[]) => { const out: string[] = []; let n = 0; for (const g of list) if (n + power(s, g) <= 5) { out.push(g); n += power(s, g); } return out; };
@@ -77,9 +79,36 @@ export function plotOptions(s: GameState, pl: string, card: string, declaring?: 
   return out;
 }
 
+/** Candidate targets of a given kind for a Plot or ability. */
+export function targetPool(s: GameState, pl: string, kind: string, exclude?: string): string[] {
+  const cards = Object.values(s.cards);
+  const me = player(s, pl);
+  const rivals = s.players.filter((p) => p.id !== pl && !p.eliminated);
+  let out: string[];
+  switch (kind) {
+    case 'resource': out = cards.filter((c) => c.zone === 'resources').map((c) => c.iid); break;
+    case 'handCard': out = [...me.hand]; break;
+    case 'handGroup': out = me.hand.filter((i) => def(s, i).type === 'Group'); break;
+    case 'handPlot': out = me.hand.filter((i) => def(s, i).type === 'Plot'); break;
+    case 'destroyed': out = cards.filter((c) => c.zone === 'destroyed').map((c) => c.iid); break;
+    case 'discardPile': out = s.players.flatMap((p) => p.discard); break;
+    case 'nwo': out = Object.values(s.nwo).filter((x): x is string => !!x); break;
+    case 'rival': out = rivals.map((p) => p.illuminati); break;
+    case 'rivalHand': out = rivals.flatMap((p) => p.hand); break;
+    default: out = cards.filter((c) => c.zone === 'structure' && def(s, c.iid).type === 'Group').map((c) => c.iid);
+  }
+  return out.filter((x) => x !== exclude);
+}
+
 export function describePlay(s: GameState, p: PlotPlay): string {
   const parts: string[] = [];
-  if (p.target) parts.push(s.cards[p.target] ? (def(s, p.target).type === 'Plot' ? `cancel ${cardName(s, p.target)}` : `on ${cardName(s, p.target)}`) : '');
+  if (p.target && s.cards[p.target]) {
+    const c = s.cards[p.target];
+    const d = def(s, p.target);
+    parts.push(d.type === 'Illuminati' ? `against ${player(s, c.controller ?? c.owner).name}`
+      : c.zone === 'hand' ? `${d.name} (in hand)` : c.zone === 'destroyed' ? `${d.name} (destroyed)` : c.zone === 'discard' ? `${d.name} (discarded)`
+      : d.type === 'Plot' && c.zone === 'table' && !c.linkedTo ? `cancel ${d.name}` : `on ${d.name}`);
+  }
   if (p.mode === 'power') parts.push('+10 Power');
   if (p.mode === 'resistance') parts.push('+10 defense');
   if (p.mode === 'up') parts.push('roll +2');
@@ -148,6 +177,7 @@ export function abilityOptions(s: GameState, pl: string, card: string): MoveOpti
     if (n.target === 'plot') targets = plays;
     else if (n.target === 'actingGroup') targets = s.attack ? [s.attack.attacker, ...s.attack.aid.map((a) => a.iid), ...s.attack.oppose.map((o) => o.iid)].filter((x): x is string => !!x) : [];
     else if (n.target === 'resource') targets = inPlay.filter((i) => s.cards[i].zone === 'resources');
+    else if (n.target && ['handCard', 'handGroup', 'handPlot', 'destroyed', 'discardPile', 'rival', 'rivalHand', 'nwo'].includes(n.target)) targets = targetPool(s, pl, n.target, card);
     else if (n.target) targets = inPlay.filter((i) => s.cards[i].zone === 'structure');
     const modes = n.modes ?? [undefined];
     const aligns = n.alignment ? ALIGNMENTS : [undefined];

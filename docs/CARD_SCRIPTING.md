@@ -38,6 +38,58 @@ Card ids are lowercase slugs of names: `"Gun Lobby"` → `gun-lobby`, `"I.R.S."`
 - Use `RuleError` messages (returned strings from `check`) written for players: say what is wrong
   and how to fix it.
 
+## Engine features for unusual cards
+
+**Targets.** `needs.target` on a Plot (or on an ability) sets what `play.target` may be. Besides Groups
+(`ownGroup`, `anyGroup`, `rivalGroup`, `place`, `personality`) and Plots on the table (`plot`), you can use:
+`resource`; `handCard`, `handGroup`, `handPlot` (your own hand); `destroyed` (the destroyed pile);
+`discardPile` (any discard pile); `nwo` (an NWO on the table); `rival` (the target is that rival's
+Illuminati card); and `rivalHand` (a card in a rival's hand). For a set of cards use
+`needs.targetsOf: 'handPlot' | 'handGroup' | 'handCard'`; the result goes in `play.targets`.
+
+**Events.** Timing `'event'` plus `events: ['takeover', 'destroyed', …]` makes a Plot playable only
+in the response window that follows that event. The window shows the event in `s.window.event`. Engine code
+announces events with `raiseEvent(s, {type, player, card, cards, by, data}, then?)`. The events are
+`turnStart`, `drawn`, `takeover`, `destroyed`, `devastated`, `discarded`, `plotResolved` and `relief`.
+The `onEvent` hook runs at once for every event.
+
+**Choices.** When a card has to ask someone to choose, call
+`askChoice(s, player, {key, question, options:[{id,label}], min, max, data})` and register
+`registerChoice(key, {resolve(s, player, picked, data), ai?})`. The answer arrives as the action
+`{type:'choose', ids}`. Choices queue up behind any prompt that is already open. `viewFor` hides the options from other players.
+
+**Private information.** `revealTo(s, player, cards, why)` lets one player see cards, such as a rival's hand.
+Those cards stay visible to that player in their online view, and the log line goes only to them.
+
+**Attacks started by cards.**
+- `startCardAttack(s, player, {plot, target, power, disaster?, aidRule?})` is an attack that has no attacking Group; its strength is `power`.
+- `aidRule: 'defenderOnly'` means only the target's side may add Power.
+- `startAttack(s, player, action, {outOfTurn: true})` makes an attack outside the attacker's turn.
+
+**Turn flags** (`s.turnFlags`, cleared every turn):
+- `noPlotDraws` (a list of player ids);
+- `noTakeover`;
+- `restricted` (the player may only draw and place tokens);
+- `extraTurn`;
+- `freeMoves` (a player id);
+- `noDraws`.
+
+To give a player an extra turn next, set `s.extraTurnFor = playerId`.
+
+**More hooks.**
+- `alignmentMod` and `attributeMod` edit a card's alignments and attributes.
+- `forbidAttack` returns a reason to refuse an attack or takeover.
+- `forbidJoin` bars a Group from aiding or opposing.
+- `ignoreImmunity` lets an attack ignore the target's immunity.
+- `secretOverride` makes a Group count as Secret, or not.
+- `noTokens` stops a card from receiving tokens.
+- `disablesAbilities` works on table cards only. It switches off a Group's own abilities and hooks.
+- `beforeDraw` returns `'skip'` or `'bottom'` to change a draw.
+- `onDraw` runs after a card is drawn.
+
+Modifiers `{kind:'addAttr'|'removeAttr', attr}` and `{kind:'addArrow', side}` change attributes and arrows
+while the card is in play.
+
 ## Tests
 
 Put tests in `tests/content/<file>.test.ts`. Use `scenario()` (p1's main phase, both players past

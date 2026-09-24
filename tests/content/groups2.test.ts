@@ -558,11 +558,9 @@ describe('Moonbase', () => {
   it('is immune to Disasters other than Nuclear Accident and Meteor Strike', () => {
     const s0 = scenario();
     const mb = put(s0, 'p2', 'moonbase');
-    let s = disaster(s0, 'tornado', mb);
-    expect(line(s, s.attack!, 'Defense', 'Moonbase')).toBe(999);
-    s = resolve(s, [1, 1]);
-    expect(s.cards[mb].devastated).toBeFalsy();
-    expect(s.cards[mb].tokens).toBe(1);
+    // Immune: the Disaster cannot even be aimed at Moonbase.
+    expect(() => disaster(s0, 'tornado', mb)).toThrow(/immune/);
+    expect(s0.cards[mb].tokens).toBe(1);
     const t = disaster(s0, 'meteor-strike', mb);
     expect(line(t, t.attack!, 'Defense', 'Moonbase')).toBe(0);
   });
@@ -597,8 +595,7 @@ describe('Orbit One and the Pentagon', () => {
   it('Orbit One: only Nuclear Accident and Meteor Strike affect it', () => {
     const s0 = scenario();
     const o = put(s0, 'p2', 'orbit-one');
-    const s = disaster(s0, 'earthquake', o);
-    expect(line(s, s.attack!, 'Defense', 'Orbit One')).toBe(999);
+    expect(() => disaster(s0, 'earthquake', o)).toThrow(/immune/);
     const t = disaster(s0, 'nuclear-accident', o);
     expect(line(t, t.attack!, 'Defense', 'Orbit One')).toBe(0);
   });

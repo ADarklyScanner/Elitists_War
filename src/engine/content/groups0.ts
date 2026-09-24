@@ -519,7 +519,7 @@ registerHooks({
     actions: [{
       id: 'draw', label: 'Draw a Group card', timing: ['anytime'], usesToken: true, ai: 'draw',
       check: (s, pl) => (player(s, pl).groupDeck.length ? null : 'Your Group deck is empty.'),
-      apply: (s, pl) => drawGroup(s, player(s, pl)),
+      apply: (s, pl) => { drawGroup(s, player(s, pl)); },
     }],
   },
 

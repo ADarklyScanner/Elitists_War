@@ -40,8 +40,10 @@ export type Zone = 'plotDeck' | 'groupDeck' | 'hand' | 'structure' | 'resources'
 export interface Modifier {
   source: string;          // card instance id or rule name that created it
   kind: 'power' | 'resistance' | 'global' | 'setPower' | 'setResistance' | 'mulPower' | 'mulResistance'
-      | 'addAlign' | 'removeAlign' | 'noTokens';
+      | 'addAlign' | 'removeAlign' | 'noTokens' | 'addAttr' | 'removeAttr' | 'addArrow';
   value?: number;
+  attr?: string;           // addAttr / removeAttr
+  side?: Side; // addArrow: a new outgoing arrow on this (printed, unrotated) side
   align?: Alignment;
   defenseOnly?: boolean;   // +10 Plots used defensively, Good Polls
   until: 'permanent' | 'endOfTurn' | 'startOfOwnerTurn' | 'attack'; // 'attack' = current attack only
@@ -85,6 +87,9 @@ export interface PlayerState {
   turnsTaken: number;
   eliminated: boolean;
   autoPass: boolean;       // standing order: pass when not directly involved
+  known?: string[];        // cards this player has privately looked at (still secret from others)
+  lastPuppetTakenBy?: string; // who removed this player's last Group (credit for knocking out an Illuminati)
+  eliminatedBy?: string;
 }
 
 export type AttackType = 'control' | 'destroy';
@@ -126,10 +131,12 @@ export interface AttackCtx {
   instantCard?: string;    // plot iid launching it
   instantPower?: number;
   instantDefense?: number;
+  cardPower?: number;            // a card's own non-Instant attack with no attacking Group (Epidemic, Giant Kudzu)
+  aidRule?: 'defenderOnly';      // only the defender may be helped (Giant Kudzu)
   tokenTaken?: boolean;          // a Disaster removed a token from its target (given back if cancelled)       // target's Power at the moment an Instant attack was played (R034)
   disaster?: { destroyMargin: number | null; devastateOnly?: boolean };
   assassination?: boolean;
-  attacker?: string;       // iid of leading group (undefined for instant attacks without a group)
+  attacker?: string;       // iid of leading group (undefined for attacks launched by a card)
   attackerPlayer: string;
   target: string;          // iid
   targetPlayer?: string;   // controller of target (undefined if from hand)
@@ -148,7 +155,8 @@ export interface AttackCtx {
 
 /** An open response window: everyone may act; closes when all players have passed in a row. */
 export interface ResponseWindow {
-  kind: 'attack' | 'roll' | 'plot' | 'endOfTurn';
+  kind: 'attack' | 'roll' | 'plot' | 'endOfTurn' | 'event';
+  event?: GameEvent;       // for kind 'event': what just happened
   passed: string[];        // players who passed since the last change
   deadline?: number;       // epoch ms, for asynchronous games (server enforces)
   plot?: PlayedPlot;       // for kind 'plot': the plot that may be countered
@@ -158,13 +166,35 @@ export interface ResponseWindow {
 /** A decision only one player can make (blocks the game until made). */
 export interface Prompt {
   player: string;
-  kind: 'takeover' | 'discardToLimit' | 'placeCaptured' | 'chooseLead';
+  kind: 'takeover' | 'discardToLimit' | 'placeCaptured' | 'chooseLead' | 'choose';
+  data?: Record<string, unknown>;
+  choice?: Choice;         // for kind 'choose'
+}
+
+/** A decision a card asks one player to make (pick a Group to lose, a Plot to show, …). */
+export interface Choice {
+  key: string;             // registered resolver (registerChoice)
+  question: string;
+  options: { id: string; label: string }[];
+  min: number;
+  max: number;
+  source?: string;         // card instance that asked
+  data?: Record<string, unknown>;
+}
+
+/** Something that just happened that some cards may respond to (R010 response window). */
+export interface GameEvent {
+  type: 'turnStart' | 'drawn' | 'takeover' | 'destroyed' | 'devastated' | 'discarded' | 'plotResolved' | 'relief';
+  player?: string;         // whose turn / who did it
+  card?: string;           // card involved
+  cards?: string[];
+  by?: string;             // who caused it
   data?: Record<string, unknown>;
 }
 
 export type Phase = 'setup' | 'beginning' | 'main' | 'endOfTurn' | 'gameOver';
 
-export interface LogEntry { turn: number; player?: string; text: string; }
+export interface LogEntry { turn: number; player?: string; text: string; to?: string /* private: only this player sees it */; }
 
 export interface GameSettings {
   basicGoal: number;       // groups to control (incl. Illuminati)
@@ -183,7 +213,20 @@ export interface GameState {
   round: number;
   active: number;          // index into players
   phase: Phase;
-  turnFlags: { takeoverDone: boolean; resourcePlayed: boolean; illumGroupDraw: boolean; bavarianPrivilege: boolean };
+  turnFlags: {
+    takeoverDone: boolean; resourcePlayed: boolean; illumGroupDraw: boolean; bavarianPrivilege: boolean;
+    noPlotDraws?: string[];     // players who may draw no Plots this turn (Unlucky 13)
+    noTakeover?: boolean;       // automatic takeovers are barred this turn (Sabotage)
+    restricted?: boolean;       // active player may only draw and place tokens (Senate Investigating Committee)
+    extraTurn?: boolean;        // an extra turn: no draws, no Plots, no new Illuminati token (Seize the Time)
+    freeMoves?: string;         // this player may move Groups without paying (Reorganization)
+    noDraws?: boolean;          // skip this turn's normal draws (An Offer You Can't Refuse)
+  };
+  events?: GameEvent[];       // queued events waiting for their response window
+  continuation?: string;      // what to do when the current event window closes
+  promptQueue?: Prompt[];     // choices waiting behind the current prompt
+  resumeSeat?: number;        // after an extra turn, whose turn begins
+  extraTurnFor?: string;      // a player who will take an extra turn next
   nwo: Record<string, string | undefined>; // colour -> plot iid
   attack?: AttackCtx;
   window?: ResponseWindow;
@@ -226,6 +269,7 @@ export type Action =
   | { type: 'endTurn' }
   | { type: 'discard'; cards: string[]; toDeck?: boolean }
   | { type: 'chooseLead'; card: string }
+  | { type: 'choose'; ids: string[] }
   | { type: 'callOff' }
   | { type: 'setAutoPass'; value: boolean };
 

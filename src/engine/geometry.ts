@@ -16,7 +16,8 @@ export function rotate(side: Side, rot: number): Side {
 export function outSides(s: GameState, iid: string): Side[] {
   const c = s.cards[iid];
   const d = def(s, iid);
-  return (d.arrowsOut ?? []).map((side) => rotate(side, c.rot ?? 0));
+  const extra = c.mods.filter((m) => m.kind === 'addArrow' && m.side).map((m) => m.side!);
+  return [...new Set([...(d.arrowsOut ?? []), ...extra])].filter((sd) => sd !== d.arrowIn).map((side) => rotate(side, c.rot ?? 0));
 }
 
 export function structureCards(s: GameState, player: string): string[] {
