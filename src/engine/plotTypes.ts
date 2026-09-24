@@ -34,3 +34,9 @@ export const PLOTS: Record<string, PlotHandler> = {};
 export function registerPlots(table: Record<string, PlotHandler>) {
   Object.assign(PLOTS, table);
 }
+
+/** Goal cards: return a short reason when the holder meets the Goal, else null. */
+export const GOALS: Record<string, (s: GameState, player: string) => string | null> = {};
+export function registerGoals(table: Record<string, (s: GameState, player: string) => string | null>) {
+  Object.assign(GOALS, table);
+}

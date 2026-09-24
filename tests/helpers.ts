@@ -46,10 +46,11 @@ export function checkInvariants(s: GameState) {
 
 let n = 0;
 /** Put a fresh copy of a card somewhere, bypassing the normal flow (test setup only). */
-export function give(s: GameState, pl: string, cardId: string, where: { hand?: true; under?: string; side?: Side }) {
+export function give(s: GameState, pl: string, cardId: string, where: { hand?: true; under?: string; side?: Side; resource?: true }) {
   if (!CARDS[cardId]) throw new Error(cardId);
   const iid = `t${++n}`;
   s.cards[iid] = { iid, cardId, owner: pl, zone: 'hand', tokens: 0, mods: [] };
+  if (where.resource) { Object.assign(s.cards[iid], { zone: 'resources', controller: pl, linkedTo: s.players.find((p) => p.id === pl)!.illuminati }); return iid; }
   if (where.hand) s.players.find((p) => p.id === pl)!.hand.push(iid);
   else { placeGroup(s, iid, pl, where.under!, where.side!); s.cards[iid].tokens = 1; }
   return iid;

@@ -20,6 +20,7 @@ export interface CardDef {
   cost?: string | null;
   modifier?: string | null;
   playRequirement?: string | null;
+  uniqueness?: string | null;
   notes?: string | null;
   power?: number;
   globalPower?: number;
@@ -33,7 +34,7 @@ export interface CardDef {
   variableStats?: boolean;
 }
 
-export type Zone = 'plotDeck' | 'groupDeck' | 'hand' | 'structure' | 'discard' | 'destroyed' | 'table' | 'removed';
+export type Zone = 'plotDeck' | 'groupDeck' | 'hand' | 'structure' | 'resources' | 'discard' | 'destroyed' | 'table' | 'removed';
 
 /** A temporary or permanent change to a card. */
 export interface Modifier {
@@ -65,6 +66,10 @@ export interface CardInstance {
   linkedTo?: string;       // Plots that stay linked to a Group
   failedTakeoverTurn?: number; // group in hand that failed an attack from hand this turn
   killed?: boolean;        // assassinated Personality
+  linkMovedTurn?: number;  // Resources: turn the link was last moved
+  abilityTurns?: Record<string, number>; // activated abilities: turn last used
+  note?: string;           // secret note written under a card (Ark of the Covenant, Holy Grail)
+  data?: Record<string, unknown>; // card-specific memory for scripted cards
 }
 
 export interface PlayerState {
@@ -111,6 +116,7 @@ export interface PlayedPlot {
   player: string;
   play: PlotPlay;
   effect: PlotEffect;
+  ability?: string;        // set when this entry is an activated ability of a card, not a Plot
 }
 
 export interface AttackCtx {
@@ -209,6 +215,10 @@ export type Action =
   | { type: 'playPlot'; play: PlotPlay }
   | { type: 'buyPlot'; payWith: string[] }
   | { type: 'drawGroup' }
+  | { type: 'playResource'; card: string }
+  | { type: 'link'; resource: string; to: string }
+  | { type: 'useAbility'; card: string; ability: string; params?: import('./hooks').AbilityParams }
+  | { type: 'agent'; card: string; as: 'aid' | 'oppose' }
   | { type: 'relief'; place: string; payWith: string[] }
   | { type: 'aid'; group: string; useGlobal?: boolean }
   | { type: 'oppose'; group: string; useGlobal?: boolean }

@@ -13,7 +13,8 @@ import {
 import { abilitiesOf, attackingGroups, matches } from './abilities';
 import { alignmentPairs, alignments, globalPower, power, resistance } from './stats';
 import { NWO_EFFECTS } from './nwo';
-import { PLOTS } from './plotTypes';
+import { PLOTS, GOALS } from './plotTypes';
+import { HOOKS, activeHookCards, anyHook, fireHooks, hooksOf, sumHooks, type AbilityParams } from './hooks';
 
 // ---------------------------------------------------------------- setup
 
@@ -200,8 +201,15 @@ export function inPlayIds(s: GameState): Set<string> {
 }
 
 /** Can this Group card be put into play (not a duplicate of one in play or destroyed)? */
-export function canEnterPlay(s: GameState, iid: string): boolean {
+export function canEnterPlay(s: GameState, iid: string, playerId?: string): boolean {
   const cardId = s.cards[iid].cardId;
+  if (def(s, iid).type === 'Resource') {
+    // Unique Resources: one in play, never again once destroyed. "One per player" limits (errata).
+    const u = def(s, iid).uniqueness ?? '';
+    if (/one per player/i.test(u)) return !Object.values(s.cards).some((c) => c.cardId === cardId && c.zone === 'resources' && c.controller === playerId);
+    if (!isUnique(s, iid)) return true;
+    return !Object.values(s.cards).some((c) => c.cardId === cardId && c.iid !== iid && (c.zone === 'resources' || c.zone === 'destroyed'));
+  }
   return !Object.values(s.cards).some((c) => c.cardId === cardId && c.iid !== iid && (c.zone === 'structure' || c.zone === 'destroyed'));
 }
 
@@ -253,9 +261,12 @@ function beginTurn(s: GameState) {
   // Expire "until the start of your next turn" effects of this player.
   for (const c of Object.values(s.cards)) c.mods = c.mods.filter((m) => !(m.until === 'startOfOwnerTurn' && c.controller === p.id));
   log(s, `— Turn ${s.turn} (round ${s.round}): ${p.name} —`, p.id);
-  const extra = abilitiesOf(s, p.illuminati).filter((a) => a.kind === 'extraPlotDraw').reduce((n, a) => n + (a as { value: number }).value, 0);
+  let extra = 0;
+  for (const iid of structureCards(s, p.id)) for (const a of abilitiesOf(s, iid)) if (a.kind === 'extraPlotDraw') extra += a.value;
+  extra += sumHooks(s, (h, self) => (controllerOf2(s, self) === p.id ? h.extraPlotDraws?.(s, self) : 0));
   drawPlot(s, p, 1 + extra);
   drawGroup(s, p);
+  fireHooks(s, (h, self) => { if (controllerOf2(s, self) === p.id) h.onTurnStart?.(s, self); });
   if (takeoverOptions(s, p.id).length) s.prompt = { player: p.id, kind: 'takeover' };
   else finishBeginning(s);
 }
@@ -272,7 +283,12 @@ function finishBeginning(s: GameState) {
     } else if (s.cards[iid].capturedTurn !== s.turn) {
       giveToken(s, iid);
     }
+    // Card-granted extra tokens are added at this step (R001 step 4).
+    const more = sumHooks(s, (h, self) => h.extraTokens?.(s, self, iid));
+    if (more > 0 && !tokenBarred(s, iid) && s.cards[iid].capturedTurn !== s.turn) s.cards[iid].tokens += more;
   }
+  // Resources that have their own action get a token too.
+  for (const r of resourcesOf(s, p.id)) if (HOOKS[s.cards[r].cardId]?.hasAction && s.cards[r].tokens === 0) s.cards[r].tokens = 1;
   s.phase = 'main';
 }
 
@@ -281,10 +297,32 @@ export function takeoverOptions(s: GameState, playerId: string): { card: string;
   const p = player(s, playerId);
   const spots = structureCards(s, playerId).flatMap((m) => openArrows(s, m).map((side) => ({ onto: m, side })));
   for (const card of p.hand) {
+    if (def(s, card).type === 'Resource' && canEnterPlay(s, card, playerId)) out.push({ card, onto: p.illuminati, side: 'TOP' });
     if (def(s, card).type !== 'Group' || !canEnterPlay(s, card)) continue;
     for (const spot of spots) out.push({ card, ...spot });
   }
   return out;
+}
+
+// ---------------------------------------------------------------- resources (R041)
+
+export function resourcesOf(s: GameState, playerId: string): string[] {
+  return Object.values(s.cards).filter((c) => c.zone === 'resources' && c.controller === playerId).map((c) => c.iid);
+}
+export const isUnique = (s: GameState, iid: string) => /\bUnique\b/.test(def(s, iid).uniqueness ?? '') || /one per player/i.test(def(s, iid).uniqueness ?? '');
+
+/** Controller of any in-play card (Group, Resource, or a linked Plot on the table). */
+export function controllerOf2(s: GameState, iid: string): string | undefined {
+  const c = s.cards[iid];
+  return c.zone === 'structure' || c.zone === 'resources' || c.zone === 'table' ? c.controller : undefined;
+}
+
+/** Put a Resource into play beside its owner's Power Structure, linked to his Illuminati. */
+export function playResourceCard(s: GameState, iid: string, controller: string) {
+  removeFromHand(s, iid);
+  Object.assign(s.cards[iid], { zone: 'resources', controller, linkedTo: player(s, controller).illuminati, tokens: 0 });
+  log(s, `${player(s, controller).name} brings ${cardName(s, iid)} into play.`, controller);
+  hooksOf(s, iid)?.onEnterPlay?.(s, iid);
 }
 
 function endTurnCleanup(s: GameState) {
@@ -297,7 +335,7 @@ function endTurnCleanup(s: GameState) {
     }
   }
   // The turn is over, so the 5-Plot limit now applies to the active player too (R027).
-  const over = livePlayers(s).find((x) => plotsInHand(s, x.id).length > handLimit(s, x.id));
+  const over = livePlayers(s).find((x) => overLimit(s, x.id));
   if (over) { s.prompt = { player: over.id, kind: 'discardToLimit', data: { resume: 'endTurn' } }; return; }
   finishTurn(s);
 }
@@ -306,8 +344,23 @@ function endTurnCleanup(s: GameState) {
 function enforceHandLimits(s: GameState) {
   if (s.prompt || s.phase === 'gameOver') return;
   const active = activePlayer(s).id;
-  const over = livePlayers(s).find((x) => x.id !== active && plotsInHand(s, x.id).length > handLimit(s, x.id));
+  // The Goal-card limit applies at all times, the Plot limit outside your own turn.
+  const over = livePlayers(s).find((x) => (x.id !== active && overLimit(s, x.id)) || goalsInHand(s, x.id).length > goalLimit(s, x.id));
   if (over) s.prompt = { player: over.id, kind: 'discardToLimit', data: { resume: 'continue' } };
+}
+
+export function goalsInHand(s: GameState, playerId: string) {
+  return player(s, playerId).hand.filter((iid) => def(s, iid).subtype === 'Goal');
+}
+/** Normally one Goal card in hand; UFOs may hold three; Alternate Goals held raises it to two. */
+export function goalLimit(s: GameState, playerId: string) {
+  const ill = s.cards[player(s, playerId).illuminati].cardId;
+  let n = ill === 'ufos' ? 3 : 1;
+  if (player(s, playerId).hand.some((i) => s.cards[i].cardId === 'alternate-goals')) n = Math.max(n, 2);
+  return n;
+}
+export function overLimit(s: GameState, playerId: string) {
+  return plotsInHand(s, playerId).length > handLimit(s, playerId) || goalsInHand(s, playerId).length > goalLimit(s, playerId);
 }
 
 export function plotsInHand(s: GameState, playerId: string) {
@@ -316,6 +369,7 @@ export function plotsInHand(s: GameState, playerId: string) {
 export function handLimit(s: GameState, playerId: string) {
   let n = 5;
   for (const iid of structureCards(s, playerId)) for (const a of abilitiesOf(s, iid)) if (a.kind === 'handLimit') n += a.value;
+  n += sumHooks(s, (h, self) => (controllerOf2(s, self) === playerId ? h.handLimit?.(s, self) : 0));
   return n;
 }
 
@@ -349,7 +403,11 @@ function advanceTurn(s: GameState) {
 
 export const isOver = (s: GameState) => s.phase === 'gameOver';
 
-export function goalCount(s: GameState, playerId: string): number {
+/**
+ * Groups counted toward the Basic Goal. `extraDouble` lets a Goal card add its own "counts double"
+ * rule. No Group counts more than double and at most 3 Groups count double (R016).
+ */
+export function goalCount(s: GameState, playerId: string, extraDouble?: (iid: string) => boolean): number {
   const ill = illuminatiOf(s, playerId);
   const doubles = abilitiesOf(s, ill).filter((a) => a.kind === 'doubleCount') as { kind: 'doubleCount'; match: never; minPower?: number }[];
   let count = 0;
@@ -357,10 +415,10 @@ export function goalCount(s: GameState, playerId: string): number {
   for (const iid of structureCards(s, playerId)) {
     if (tokenBarredForGoals(s, iid)) continue;
     count++;
-    if (doubled < 3 && def(s, iid).type === 'Group' && doubles.some((d) => matches(s, iid, d.match) && power(s, iid, { goals: true }) >= (d.minPower ?? 0))) {
-      count++; doubled++;
-    }
+    const twice = def(s, iid).type === 'Group' && (doubles.some((d) => matches(s, iid, d.match) && power(s, iid, { goals: true }) >= (d.minPower ?? 0)) || !!extraDouble?.(iid));
+    if (doubled < 3 && twice) { count++; doubled++; }
   }
+  count += sumHooks(s, (h, self) => (controllerOf2(s, self) === playerId ? h.goalBonus?.(s, self) : 0));
   return count;
 }
 
@@ -380,6 +438,11 @@ export function goalNeeded(s: GameState, playerId: string): number {
 
 export function meetsGoal(s: GameState, playerId: string): string | null {
   if (goalCount(s, playerId) >= goalNeeded(s, playerId)) return 'controls enough Groups';
+  // Goal cards held in hand (R016).
+  for (const g of goalsInHand(s, playerId)) {
+    const why = GOALS[s.cards[g].cardId]?.(s, playerId);
+    if (why) return `${cardName(s, g)}: ${why}`;
+  }
   const ill = illuminatiOf(s, playerId);
   const mine = structureCards(s, playerId).filter((iid) => !tokenBarredForGoals(s, iid));
   for (const a of abilitiesOf(s, ill)) {
@@ -471,7 +534,8 @@ export function canAttackPlayer(s: GameState, attacker: string, defender: string
   return null;
 }
 
-function immuneTo(s: GameState, target: string, attackerGroups: string[]): boolean {
+function immuneTo(s: GameState, target: string, attackerGroups: string[], ctx?: AttackCtx): boolean {
+  if (attackerGroups.some((g) => anyHook(s, (h, self) => h.immune?.(s, self, target, g, ctx)))) return true;
   const owner = controllerOf(s, target);
   if (!owner) return false;
   const protectors = [target, ...structureCards(s, owner)];
@@ -565,6 +629,7 @@ export function participants(s: GameState): string[] {
   const ctx = s.attack;
   if (!ctx || !isPrivileged(ctx)) return livePlayers(s).map((p) => p.id);
   const extra = liveEffects(ctx).flatMap((e) => (e.t === 'interfere' ? [e.player] : []));
+  for (const p of livePlayers(s)) if (anyHook(s, (h, self) => controllerOf2(s, self) === p.id && !!h.mayInterfere?.(s, self, p.id))) extra.push(p.id);
   return [...new Set([ctx.attackerPlayer, ctx.targetPlayer, ...extra].filter((x): x is string => !!x))];
 }
 
@@ -677,6 +742,15 @@ export function attackStrength(s: GameState, ctx: AttackCtx): StrengthBreakdown 
     }
   }
   for (const b of liveBonus(ctx.defenseBonus)) add('d', b.amount, b.label);
+  // Scripted card effects (Resources, linked Plots, special Groups).
+  if (!noAbilities || ctx.instant) {
+    for (const self of activeHookCards(s)) {
+      const h = HOOKS[s.cards[self].cardId];
+      if (!h.attackMod) continue;
+      add('a', h.attackMod(s, self, ctx, 'attack'), cardName(s, self));
+      add('d', h.attackMod(s, self, ctx, 'defense'), cardName(s, self));
+    }
+  }
   return { attack: atk, defense: dfn, strength: atk - dfn, lines };
 }
 
@@ -730,7 +804,7 @@ function finishAttack(s: GameState) {
       for (const c of [...ctx.aid, ...ctx.oppose]) if (c.iid && s.cards[c.iid].zone === 'structure') s.cards[c.iid].tokens++;
       for (const pp of ctx.plays) {
         const card = s.cards[pp.iid];
-        if (pp.player === ctx.attackerPlayer || card.zone !== 'table' || pp.effect.t === 'cancelGroup' || card.linkedTo) continue;
+        if (!card || pp.player === ctx.attackerPlayer || card.zone !== 'table' || pp.effect.t === 'cancelGroup' || card.linkedTo) continue;
         card.zone = 'hand'; card.controller = undefined; card.exposed = true;
         player(s, card.owner).hand.push(pp.iid);
       }
@@ -749,7 +823,7 @@ function finishAttack(s: GameState) {
       }
     } else if (ctx.type === 'control') {
       capture(s, ctx);
-    } else if (abilitiesOf(s, tgt).some((a) => a.kind === 'cannotBeDestroyed')) {
+    } else if (abilitiesOf(s, tgt).some((a) => a.kind === 'cannotBeDestroyed') || anyHook(s, (h, self) => !!h.preventDestroy?.(s, self, tgt, ctx))) {
       log(s, `${cardName(s, tgt)} cannot be destroyed.`);
     } else {
       log(s, `${cardName(s, tgt)} is destroyed!`);
@@ -766,8 +840,10 @@ function finishAttack(s: GameState) {
   // Discard the Plots used in this attack (linked ones stay).
   for (const p of ctx.plays) {
     const c = s.cards[p.iid];
+    if (!c) continue; // an activated ability, not a card
     if (c.zone === 'table' && (!c.linkedTo || isCancelled(ctx.plays, p.iid))) discardCard(s, p.iid);
   }
+  fireHooks(s, (h, self) => h.onAttackEnd?.(s, self, ctx));
   for (const c of Object.values(s.cards)) c.mods = c.mods.filter((m) => m.until !== 'attack');
   s.attack = undefined;
   // Instant attacks can be launched during the end-of-turn window: return to it.
@@ -793,9 +869,15 @@ function capture(s: GameState, ctx: AttackCtx) {
     return;
   }
   log(s, `${player(s, ctx.attackerPlayer).name} takes control of ${cardName(s, tgt)}.`, ctx.attackerPlayer);
+  const from = s.cards[tgt].controller;
   moveSubtree(s, tgt, ctx.attackerPlayer, master, side, 'discard');
-  for (const g of subtree(s, tgt)) { s.cards[g].tokens = 0; s.cards[g].capturedTurn = s.turn; }
+  const tree = subtree(s, tgt);
+  for (const g of tree) { s.cards[g].tokens = 0; s.cards[g].capturedTurn = s.turn; }
+  // Resources linked to captured Groups go with them (R041).
+  for (const r of Object.values(s.cards)) if (r.zone === 'resources' && r.linkedTo && tree.includes(r.linkedTo)) r.controller = ctx.attackerPlayer;
   s.cards[tgt].failedTakeoverTurn = undefined;
+  hooksOf(s, tgt)?.onEnterPlay?.(s, tgt);
+  fireHooks(s, (h, self) => h.onCapture?.(s, self, tgt, ctx.attackerPlayer, from));
 }
 
 /**
@@ -861,8 +943,13 @@ export function destroyGroup(s: GameState, iid: string, by: string) {
       player(s, prev).hand.push(g);
     }
   }
-  // Linked Plots are discarded.
-  for (const other of Object.values(s.cards)) if (other.linkedTo === iid) discardCard(s, other.iid);
+  fireHooks(s, (h, self) => h.onDestroy?.(s, self, iid, by));
+  // Linked Plots are discarded; linked Resources are destroyed with the Group (R041).
+  for (const other of Object.values(s.cards)) {
+    if (other.linkedTo !== iid) continue;
+    if (other.zone === 'resources') Object.assign(other, { zone: 'destroyed', controller: undefined, linkedTo: undefined, tokens: 0 });
+    else discardCard(s, other.iid);
+  }
   Object.assign(c, { zone: 'destroyed', controller: undefined, master: undefined, x: undefined, y: undefined, tokens: 0, mods: [], devastated: false });
   if (!player(s, by).destroyedCredit.includes(iid)) player(s, by).destroyedCredit.push(iid);
   if (draws) drawPlot(s, player(s, by), draws);
@@ -905,7 +992,7 @@ export function checkPlot(s: GameState, playerId: string, play: PlotPlay, declar
   if (protectedPlayer(s, playerId, tgtOwner)) return 'That player has not finished a first turn yet.';
   if (ctx && protectedPlayer(s, playerId, ctx.attackerPlayer) && ctx.targetPlayer !== playerId) return 'You cannot interfere with the first turn of a player.';
   // No player may use two copies of the same Plot in one attack (R030); a cancelled copy never happened.
-  if (ctx && ctx.plays.some((p) => p.player === playerId && s.cards[p.iid].cardId === d.id && !isCancelled(ctx.plays, p.iid))) return `You already used ${d.name} in this attack.`;
+  if (ctx && ctx.plays.some((p) => p.player === playerId && s.cards[p.iid]?.cardId === d.id && !isCancelled(ctx.plays, p.iid))) return `You already used ${d.name} in this attack.`;
   if (ctx && isPrivileged(ctx) && !participants(s).includes(playerId) && !t.includes('roll') && d.id !== 'interference' && d.id !== 'deep-agent') return 'Only the two players involved may act in a Privileged attack.';
   return h.check(s, playerId, play, ctx);
 }
@@ -960,7 +1047,7 @@ function resolvePendingPlot(s: GameState) {
     PLOTS[d.id].refund?.(s, pp.player, pp.play);
     if (s.cards[pp.iid].zone === 'table') discardCard(s, pp.iid);
   }
-  for (const q of w.plays!) if (q !== pp && s.cards[q.iid].zone === 'table') discardCard(s, q.iid);
+  for (const q of w.plays!) if (q !== pp && s.cards[q.iid]?.zone === 'table') discardCard(s, q.iid);
   if (s.phase === 'endOfTurn') openWindow(s, 'endOfTurn');
 }
 
@@ -981,6 +1068,8 @@ export function canAid(s: GameState, playerId: string, group: string): { ok: boo
   if (immuneTo(s, ctx.target, [group])) return { ok: false, global: false, why: 'The target is immune to this Group.' };
   const al = alignments(s, group), ta = alignments(s, ctx.target);
   const qualifies = ctx.type === 'control' ? al.some((a) => a !== 'Fanatic' && ta.includes(a)) : al.some((a) => ta.some((b) => (a === 'Fanatic' && b === 'Fanatic') || (a !== b && ({ Government: 'Corporate', Corporate: 'Government', Liberal: 'Conservative', Conservative: 'Liberal', Peaceful: 'Violent', Violent: 'Peaceful', Straight: 'Weird', Weird: 'Straight' } as Record<string, string>)[a] === b)));
+  // Cards that let a Group join regardless of alignment use its full Power.
+  if (anyHook(s, (h, self) => h.mayJoin?.(s, self, ctx, group, 'aid'))) return { ok: true, global: false };
   // Without a qualifying alignment a Group can only help with its Global Power (R029).
   if (!qualifies && globalPower(s, group) === 0) return { ok: false, global: true, why: 'No matching alignment and no Global Power.' };
   return { ok: true, global: !qualifies };
@@ -1003,6 +1092,7 @@ export function canOppose(s: GameState, playerId: string, group: string): { ok: 
   const tc = s.cards[ctx.target];
   const related = self || tc.master === group || c.master === ctx.target;
   const shares = alignments(s, group).some((a) => a !== 'Fanatic' && alignments(s, ctx.target).includes(a));
+  if (!(related || shares) && anyHook(s, (h, me) => h.mayJoin?.(s, me, ctx, group, 'oppose'))) return { ok: true, global: false, self };
   if (!(related || shares) && globalPower(s, group) === 0) return { ok: false, global: true, self, why: 'No matching alignment and no Global Power.' };
   return { ok: true, global: !(related || shares), self };
 }
@@ -1032,6 +1122,61 @@ export function applyAction(state: GameState, playerId: string, action: Action):
   if (p.eliminated) throw new RuleError('You have been eliminated.');
 
   switch (action.type) {
+    case 'playResource': {
+      // Once per turn, an Illuminati action puts a Resource from hand into play (R041).
+      if (s.phase !== 'main' || activePlayer(s).id !== playerId || s.window || s.attack) throw new RuleError('Only in your own main phase.');
+      if (s.turnFlags.resourcePlayed) throw new RuleError('You can only play one Resource this way per turn.');
+      if (!p.hand.includes(action.card) || def(s, action.card).type !== 'Resource') throw new RuleError('Choose a Resource in your hand.');
+      if (!canEnterPlay(s, action.card, playerId)) throw new RuleError('That Resource is Unique and already in play or destroyed.');
+      if (s.cards[p.illuminati].tokens < 1) throw new RuleError('Your Illuminati needs an Action token.');
+      s.cards[p.illuminati].tokens--;
+      s.turnFlags.resourcePlayed = true;
+      playResourceCard(s, action.card, playerId);
+      break;
+    }
+
+    case 'link': {
+      // Link a Resource to one of your Groups during your main phase (R042).
+      if (s.phase !== 'main' || activePlayer(s).id !== playerId || s.window || s.attack) throw new RuleError('Only in your own main phase.');
+      const r = inst(s, action.resource);
+      if (r.zone !== 'resources' || r.controller !== playerId) throw new RuleError('Choose one of your Resources.');
+      const to = inst(s, action.to);
+      if (to.zone !== 'structure' || to.controller !== playerId) throw new RuleError('Link it to a Group in your Power Structure.');
+      if (r.linkMovedTurn === s.turn) throw new RuleError('A link can be moved only once per turn.');
+      const rule = HOOKS[r.cardId]?.linkTo;
+      if (rule && def(s, action.to).type !== 'Illuminati' && !rule(s, action.resource, action.to)) throw new RuleError(`${cardName(s, action.resource)} cannot be linked to ${cardName(s, action.to)}.`);
+      r.linkedTo = action.to;
+      r.linkMovedTurn = s.turn;
+      log(s, `${p.name} links ${cardName(s, action.resource)} to ${cardName(s, action.to)}.`, playerId);
+      break;
+    }
+
+    case 'useAbility':
+      useAbility(s, playerId, action.card, action.ability, action.params ?? {});
+      break;
+
+    case 'agent': {
+      // R031: a card in hand duplicating a Group a rival controls can aid (+10) or oppose (-6)
+      // an attack on that Group. One agents card per attack; it is discarded afterwards.
+      const ctx = s.attack;
+      if (!ctx || s.window?.kind !== 'attack' || ctx.instant) throw new RuleError('Agents can only join an attack in progress.');
+      if (!participants(s).includes(playerId)) throw new RuleError('This attack is Privileged.');
+      if (ctx.usedAgents) throw new RuleError('Only one agents card may be used per attack.');
+      if (!p.hand.includes(action.card) || s.cards[action.card].cardId !== s.cards[ctx.target].cardId || action.card === ctx.target) throw new RuleError('You need a duplicate of the Group being attacked.');
+      if (ctx.targetPlayer === playerId) throw new RuleError('You cannot use agents against your own Group.');
+      if (action.as === 'aid' && ctx.fromHand) throw new RuleError('Agents can only oppose an attack on a Group played from hand.');
+      if (anyHook(s, (h, self) => controllerOf2(s, self) === ctx.targetPlayer && h.cancelAgents?.(s, self) === true)) throw new RuleError('Agents give no bonus against this Group.');
+      removeFromHand(s, action.card);
+      Object.assign(s.cards[action.card], { zone: 'table', controller: playerId });
+      const entry = { player: playerId, plot: action.card, amount: action.as === 'aid' ? 10 : 6, label: `Agents (${cardName(s, action.card)})` };
+      (action.as === 'aid' ? ctx.attackBonus : ctx.defenseBonus).push(entry);
+      ctx.plays.push({ iid: action.card, player: playerId, play: { card: action.card }, effect: { t: 'none' } });
+      ctx.usedAgents = true;
+      log(s, `${p.name} reveals agents in ${cardName(s, action.card)} (${action.as === 'aid' ? '+10 to the attack' : '−6 to the attack'}).`, playerId);
+      s.window!.passed = [];
+      break;
+    }
+
     case 'chooseLead': {
       if (s.prompt?.kind !== 'chooseLead' || s.prompt.player !== playerId) throw new RuleError('Not choosing a lead Group now.');
       if (!leadOptions(s, playerId).includes(action.card)) throw new RuleError('Pick a Group from your deck.');
@@ -1050,7 +1195,7 @@ export function applyAction(state: GameState, playerId: string, action: Action):
       for (const c of [...ctx.aid, ...ctx.oppose]) if (c.iid && s.cards[c.iid].zone === 'structure') s.cards[c.iid].tokens++;
       for (const pp of ctx.plays) {
         const card = s.cards[pp.iid];
-        if (card.zone !== 'table') continue;
+        if (!card || card.zone !== 'table') continue;
         card.zone = 'hand'; card.controller = undefined; card.linkedTo = undefined;
         player(s, card.owner).hand.push(pp.iid);
       }
@@ -1066,10 +1211,14 @@ export function applyAction(state: GameState, playerId: string, action: Action):
 
     case 'takeover': {
       if (s.prompt?.kind !== 'takeover' || s.prompt.player !== playerId) throw new RuleError('You cannot make an automatic takeover now.');
-      if (!takeoverOptions(s, playerId).some((o) => o.card === action.card && o.onto === action.onto && o.side === action.side)) throw new RuleError('That placement is not legal.');
-      placeGroup(s, action.card, playerId, action.onto, action.side);
+      if (!takeoverOptions(s, playerId).some((o) => o.card === action.card && (def(s, action.card).type === 'Resource' || (o.onto === action.onto && o.side === action.side)))) throw new RuleError('That placement is not legal.');
       s.turnFlags.takeoverDone = true;
-      log(s, `${p.name} takes over ${cardName(s, action.card)} automatically.`, playerId);
+      if (def(s, action.card).type === 'Resource') playResourceCard(s, action.card, playerId);
+      else {
+        placeGroup(s, action.card, playerId, action.onto, action.side);
+        log(s, `${p.name} takes over ${cardName(s, action.card)} automatically.`, playerId);
+        hooksOf(s, action.card)?.onEnterPlay?.(s, action.card);
+      }
       finishBeginning(s);
       break;
     }
@@ -1188,7 +1337,10 @@ export function applyAction(state: GameState, playerId: string, action: Action):
       if (s.prompt?.kind !== 'discardToLimit' || s.prompt.player !== playerId) throw new RuleError('You do not need to discard.');
       const plots = plotsInHand(s, playerId);
       if (!action.cards.every((c) => plots.includes(c))) throw new RuleError('Discard Plot cards from your hand.');
-      if (plots.length - action.cards.length > handLimit(s, playerId)) throw new RuleError(`Discard down to ${handLimit(s, playerId)} Plots.`);
+      const outside = s.prompt.data?.resume === 'endTurn' || activePlayer(s).id !== playerId;
+      if (outside && plots.length - action.cards.length > handLimit(s, playerId)) throw new RuleError(`Discard down to ${handLimit(s, playerId)} Plots.`);
+      const goals = goalsInHand(s, playerId);
+      if (goals.length - action.cards.filter((c) => goals.includes(c)).length > goalLimit(s, playerId)) throw new RuleError(`You may hold only ${goalLimit(s, playerId)} Goal card${goalLimit(s, playerId) > 1 ? 's' : ''}.`);
       for (const c of action.cards) {
         if (action.toDeck) {
           // Excess Plots may be put back into your Plot deck instead of discarded (R027).
@@ -1216,6 +1368,43 @@ function zeroPowerLosesTokens(s: GameState) {
   for (const c of Object.values(s.cards)) {
     if (c.zone === 'structure' && c.tokens > 0 && def(s, c.iid).type === 'Group' && (def(s, c.iid).power ?? 0) > 0 && power(s, c.iid) === 0) c.tokens = 0;
   }
+}
+
+/** Use an activated ability of a Group or Resource you control. */
+export function checkAbility(s: GameState, playerId: string, card: string, abilityId: string, params: AbilityParams): string | null {
+  const c = s.cards[card];
+  if (!c || (c.zone !== 'structure' && c.zone !== 'resources') || c.controller !== playerId) return 'You can only use your own cards in play.';
+  const ab = HOOKS[c.cardId]?.actions?.find((a) => a.id === abilityId);
+  if (!ab) return 'That card has no such ability.';
+  const ctxKind = plotContext(s);
+  const mine = activePlayer(s).id === playerId;
+  const ok = ab.timing.some((t) =>
+    (t === 'main' && ctxKind === 'main' && mine) ||
+    (t === 'attack' && ctxKind === 'attack') ||
+    (t === 'roll' && ctxKind === 'roll') ||
+    (t === 'anytime' && ((ctxKind === 'main' && mine) || ctxKind === 'attack' || ctxKind === 'endOfTurn')));
+  if (!ok) return `${ab.label} cannot be used right now.`;
+  if (s.attack && s.window && !participants(s).includes(playerId)) return 'This attack is Privileged.';
+  if (s.window && !waitingFor(s).includes(playerId)) return 'You have already passed.';
+  if (ab.usesToken && (c.tokens < 1 || tokenBarred(s, card))) return `${cardName(s, card)} has no Action token.`;
+  if (ab.oncePerTurn && c.abilityTurns?.[abilityId] === s.turn) return 'Already used this turn.';
+  return ab.check(s, playerId, card, params, s.attack);
+}
+
+function useAbility(s: GameState, playerId: string, card: string, abilityId: string, params: AbilityParams) {
+  const err = checkAbility(s, playerId, card, abilityId, params);
+  if (err) throw new RuleError(err);
+  const c = s.cards[card];
+  const ab = HOOKS[c.cardId]!.actions!.find((a) => a.id === abilityId)!;
+  if (ab.usesToken) c.tokens--;
+  c.abilityTurns = { ...c.abilityTurns, [abilityId]: s.turn };
+  log(s, `${cardName(s, card)}: ${ab.label}${params.target && s.cards[params.target] ? ` (${cardName(s, params.target)})` : ''}.`, playerId);
+  const effect = ab.apply(s, playerId, card, params, s.attack);
+  if (s.attack) {
+    // Recorded like a Plot so that it can be cancelled and undone live.
+    s.attack.plays.push({ iid: `ability:${card}:${abilityId}:${s.version}`, player: playerId, play: { card }, effect: effect ?? { t: 'none' }, ability: card });
+  }
+  if (s.window) s.window.passed = s.window.kind === 'plot' ? [playerId] : [];
 }
 
 /** Close any window everyone has passed on, and advance the game. */

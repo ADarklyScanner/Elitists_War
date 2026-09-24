@@ -5,6 +5,7 @@ import type { Alignment, GameState, Modifier } from './types';
 import { def, OPPOSITE } from './cards';
 import { abilitiesOf, matches, setAlignmentResolver } from './abilities';
 import { NWO_EFFECTS } from './nwo';
+import { sumHooks } from './hooks';
 
 function activeMods(s: GameState, iid: string, opts: ValueOpts): Modifier[] {
   return s.cards[iid].mods.filter((m) => (!m.defenseOnly || opts.defense) && (!opts.goals || m.countsForGoals !== false));
@@ -69,6 +70,7 @@ export function power(s: GameState, iid: string, opts: ValueOpts = {}): number {
     if (a.kind === 'powerPer' && c.controller) adds.push(a.value * countControlled(s, c.controller, (g) => g !== iid && matches(s, g, a.per)));
   }
   if (d.type === 'Group') for (const nwo of activeNwos(s)) adds.push(NWO_EFFECTS[s.cards[nwo].cardId]?.power?.(s, iid) ?? 0);
+  adds.push(sumHooks(s, (h, self) => h.powerMod?.(s, self, iid)));
   const v = combine(d.power ?? 0, activeMods(s, iid, opts), { set: 'setPower', mul: 'mulPower', add: 'power' }, { adds }, opts);
   return Math.max(0, v);
 }
@@ -81,6 +83,7 @@ export function globalPower(s: GameState, iid: string): number {
   for (const a of abilitiesOf(s, iid)) {
     if (a.kind === 'powerPer' && a.global && c.controller) v += a.value * countControlled(s, c.controller, (g) => g !== iid && matches(s, g, a.per));
   }
+  v += sumHooks(s, (h, self) => h.globalMod?.(s, self, iid));
   // Global Power is capped at current Power (R029).
   return Math.max(0, Math.min(v, power(s, iid)));
 }
@@ -95,6 +98,7 @@ export function resistance(s: GameState, iid: string, opts: ValueOpts = { defens
       adds.push(e?.resistance?.(s, iid) ?? 0);
     }
   }
+  adds.push(sumHooks(s, (h, self) => h.resistanceMod?.(s, self, iid)));
   const v = combine(d.resistance ?? 0, activeMods(s, iid, opts), { set: 'setResistance', mul: 'mulResistance', add: 'resistance' }, { muls, adds }, opts);
   return Math.max(0, v);
 }
