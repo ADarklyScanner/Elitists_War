@@ -19,7 +19,7 @@ const own = (s: GameState, pl: string, iid?: string) => !!iid && s.cards[iid]?.z
 const isGroup = (s: GameState, iid?: string) => !!iid && def(s, iid).type === 'Group';
 const inPlay = (s: GameState, iid?: string) => !!iid && s.cards[iid]?.zone === 'structure';
 const sameCardInAttack = (s: GameState, pl: string, play: PlotPlay, ctx?: AttackCtx) =>
-  !!ctx && ctx.plays.some((p) => p.player === pl && s.cards[p.iid].cardId === s.cards[play.card].cardId);
+  !!ctx && ctx.plays.some((p) => p.player === pl && s.cards[p.iid]?.cardId === s.cards[play.card].cardId);
 const describe = (m: Match) => [...(m.alignments ?? []), ...(m.attributes ?? []), ...(m.subtypes ?? [])].join('/');
 
 /** Spend one token from each listed Group of the player. */

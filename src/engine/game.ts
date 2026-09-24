@@ -1174,7 +1174,7 @@ function resolvePendingPlot(s: GameState) {
   } else {
     log(s, `${d.name} is cancelled.`, pp.player);
     PLOTS[d.id].refund?.(s, pp.player, pp.play);
-    if (s.cards[pp.iid].zone === 'table') discardCard(s, pp.iid);
+    if (s.cards[pp.iid]?.zone === 'table') discardCard(s, pp.iid);
   }
   for (const q of w.plays!) if (q !== pp && s.cards[q.iid]?.zone === 'table') discardCard(s, q.iid);
   if (!isCancelled(w.plays!, pp.iid)) raiseEvent(s, { type: 'plotResolved', card: pp.iid, player: pp.player });

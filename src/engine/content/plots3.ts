@@ -378,7 +378,7 @@ registerPlots({
       }
       const pool = counterPool(s, ctx);
       const target = play.target ?? pool.find((p) => s.cards[p.iid]?.cardId === 'exposed')?.iid;
-      if (!target || !pool.some((p) => p.iid === target && s.cards[p.iid].cardId === 'exposed')) return 'Play this after a Secret Group is attacked successfully, or right after Exposed! is played.';
+      if (!target || !pool.some((p) => p.iid === target && s.cards[p.iid]?.cardId === 'exposed')) return 'Play this after a Secret Group is attacked successfully, or right after Exposed! is played.';
       return null;
     },
     apply(s, pl, play, ctx): PlotEffect {
@@ -428,13 +428,13 @@ registerPlots({
     timing: ['anytime', 'counter'],
     check(s, pl, play, ctx) {
       const pool = counterPool(s, ctx);
-      if (play.target && pool.some((p) => p.iid === play.target && p.iid !== play.card && s.cards[p.iid].cardId === 'deasil-engine')) return null;
+      if (play.target && pool.some((p) => p.iid === play.target && p.iid !== play.card && s.cards[p.iid]?.cardId === 'deasil-engine')) return null;
       if (s.window?.kind === 'plot') return 'Only another Deasil Engine can be answered this way.';
       return pickResource(s, pl, play, (r) => resourceIs(s, r, 'Gadget')) ? null : 'Choose a Gadget Resource in play.';
     },
     apply(s, pl, play, ctx): PlotEffect | void {
       const pool = counterPool(s, ctx);
-      if (play.target && pool.some((p) => p.iid === play.target && s.cards[p.iid].cardId === 'deasil-engine')) return { t: 'cancelPlot', target: play.target };
+      if (play.target && pool.some((p) => p.iid === play.target && s.cards[p.iid]?.cardId === 'deasil-engine')) return { t: 'cancelPlot', target: play.target };
       const r = pickResource(s, pl, play, (x) => resourceIs(s, x, 'Gadget'))!;
       s.cards[play.card].data = { resource: r };
       if (ctx) { log(s, `${cardName(s, r)} destroys itself.`, pl); discardCard(s, r); }

@@ -7,6 +7,8 @@ import {
   alignments, abilitiesOf, PLOTS, subtree, goalCount, goalNeeded, depth, bestLead, plotOptions,
   HOOKS, CHOICES, checkAbility, resourcesOf, canEnterPlay, goalsInHand, goalLimit, type AbilityParams,
 } from '../engine';
+import { abilityOptions, responseOptions } from '../engine/moves';
+import { attackChance, attackOutcomeScore, bestBySimulation, evaluate, rollout, spread, standing, successChance } from './evaluate';
 
 /** Activated abilities of our cards with a given AI hint, tried against a few likely targets. */
 function abilityMoves(s: GameState, pl: string, hint: string, targets: (string | undefined)[]): Action[] {
@@ -27,12 +29,7 @@ function abilityMoves(s: GameState, pl: string, hint: string, targets: (string |
 }
 
 /** Chance that 2d6 rolls `strength` or less (11 and 12 always fail). */
-export function successChance(strength: number): number {
-  const ways = [0, 0, 1, 2, 3, 4, 5, 6, 5, 4, 3, 2, 1];
-  let n = 0;
-  for (let t = 2; t <= Math.min(10, strength); t++) n += ways[t];
-  return n / 36;
-}
+export { successChance };
 
 const tryAction = (s: GameState, pl: string, a: Action): boolean => {
   try { applyAction(s, pl, a); return true; } catch { return false; }
@@ -81,6 +78,10 @@ function planAttacks(s: GameState, pl: string): AttackPlan[] {
   }
   for (const h of me.hand) if (def(s, h).type === 'Group' && s.cards[h].failedTakeoverTurn !== s.turn) targets.push({ iid: h, type: 'control' });
   const behind = rivalsOf(s, pl).some((r) => goalCount(s, r.id) >= goalNeeded(s, r.id) - 2);
+  // Hit the leader hardest, and above all a rival about to win.
+  const scores = new Map(rivalsOf(s, pl).map((r) => [r.id, standing(s, r.id)]));
+  const leader = [...scores.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+  const threat = (owner?: string) => (!owner ? 1 : (owner === leader ? 1.3 : 1) * (goalCount(s, owner) >= goalNeeded(s, owner) - 1 ? 1.6 : 1));
   for (const att of mine) {
     for (const t of targets) {
       const side: Side | undefined = t.type === 'control' ? openArrows(s, att)[0] : undefined;
@@ -95,6 +96,9 @@ function planAttacks(s: GameState, pl: string): AttackPlan[] {
       let value = groupValue(s, t.iid);
       if (t.type === 'destroy') value = value * 0.7 + (behind ? 6 : 0);
       else value += s.cards[t.iid].zone === 'hand' ? 3 : 4;
+      value *= threat(s.cards[t.iid].controller);
+      // Taking a Group that completes our own Goal is worth a great deal.
+      if (t.type === 'control' && goalCount(s, pl) + 1 >= goalNeeded(s, pl)) value += 25;
       const score = chance * value - (s.cards[att].cardId === def(s, me.illuminati).id ? 1 : 0);
       plans.push({ action, score, chance });
     }
@@ -145,9 +149,20 @@ function mainPhase(s: GameState, pl: string): Action {
       }
     }
   }
-  // 2. Best attack.
-  const plans = planAttacks(s, pl);
-  const best = plans.find((p) => p.chance >= 0.42 && p.score > 1.5);
+  // 1b. Any other Plot or ability whose result looks better than doing nothing.
+  const generic = genericMainMoves(s, pl);
+  if (generic) return generic;
+  // 2. Best attack: the most promising few are played out both ways and weighed by their odds.
+  const plans = planAttacks(s, pl).filter((p) => p.chance >= 0.25).slice(0, 8);
+  const now = evaluate(s, pl);
+  let best: AttackPlan | undefined;
+  let bestGain = 0.5;
+  for (const p of plans) {
+    let after: GameState;
+    try { after = applyAction(s, pl, p.action); } catch { continue; }
+    const gain = p.chance * attackOutcomeScore(after, pl, true) + (1 - p.chance) * attackOutcomeScore(after, pl, false) - now;
+    if (gain > bestGain) { bestGain = gain; best = p; }
+  }
   if (best) {
     const withPlots = { ...best.action, plots: declarePlots(s, pl, best.action) };
     if (tryAction(s, pl, withPlots)) return withPlots;
@@ -173,6 +188,38 @@ function mainPhase(s: GameState, pl: string): Action {
   return { type: 'endTurn' };
 }
 
+function genericMainMoves(s: GameState, pl: string): Action | undefined {
+  const cands: Action[] = [];
+  for (const c of plotsInHand(s, pl)) {
+    const h = PLOTS[s.cards[c].cardId];
+    if (!h || !(h.timing.includes('anytime') || h.timing.includes('nwo'))) continue;
+    cands.push(...spread(plotOptions(s, pl, c).map((o) => o.action), 8));
+  }
+  for (const card of [...structureCards(s, pl), ...resourcesOf(s, pl)]) {
+    const abs = HOOKS[s.cards[card].cardId]?.actions ?? [];
+    const ok = new Set(abs.filter((ab) => ab.ai !== 'never' && (ab.usesToken || ab.oncePerTurn)).map((ab) => ab.id));
+    if (ok.size) cands.push(...spread(abilityOptions(s, pl, card).map((o) => o.action).filter((a) => a.type === 'useAbility' && ok.has(a.ability)), 8));
+  }
+  if (!cands.length) return undefined;
+  return bestBySimulation(s, pl, cands, evaluate(s, pl), 1.5, 40);
+}
+
+/** Plots and abilities that change the attack's odds, judged by how much they move them. */
+function oddsMove(s: GameState, pl: string, wantSuccess: boolean, worth: number): Action | undefined {
+  const base = attackChance(s);
+  let best: Action | undefined;
+  let bestGain = 1.5;
+  const opts = responseOptions(s, pl).map((o) => o.action).filter((a) => a.type === 'playPlot' || a.type === 'useAbility');
+  for (const a of spread(opts, 40)) {
+    let after: GameState;
+    try { after = applyAction(s, pl, a); } catch { continue; }
+    const chance = after.attack && after.attack.id === s.attack!.id ? attackChance(after) : 0;
+    const gain = (wantSuccess ? chance - base : base - chance) * worth - (a.type === 'playPlot' ? 1.2 : 0.4);
+    if (gain > bestGain) { bestGain = gain; best = a; }
+  }
+  return best;
+}
+
 function respondToAttack(s: GameState, pl: string): Action {
   const ctx = s.attack!;
   const chance = successChance(attackStrength(s, ctx).strength);
@@ -185,6 +232,8 @@ function respondToAttack(s: GameState, pl: string): Action {
         if (tryAction(s, pl, a)) return a;
       }
       for (const a of abilityMoves(s, pl, 'boostAttack', [ctx.target, ctx.attacker])) if (tryAction(s, pl, a)) return a;
+      const odds = oddsMove(s, pl, true, groupValue(s, ctx.target) + 4);
+      if (odds) return odds;
       const helpers = mine.map((g) => ({ g, r: canAid(s, pl, g) })).filter((x) => x.r.ok)
         .sort((a, b) => power(s, b.g) - power(s, a.g));
       for (const h of helpers) {
@@ -204,6 +253,8 @@ function respondToAttack(s: GameState, pl: string): Action {
     }
     for (const a of abilityMoves(s, pl, 'cancelAttacker', [ctx.attacker])) if (worth >= 6 && tryAction(s, pl, a)) return a;
     for (const a of abilityMoves(s, pl, 'boostDefense', [ctx.target, ctx.attacker])) if (tryAction(s, pl, a)) return a;
+    const odds = oddsMove(s, pl, false, worth + 4);
+    if (odds) return odds;
     const defenders = mine.map((g) => ({ g, r: canOppose(s, pl, g) })).filter((x) => x.r.ok)
       .sort((a, b) => Number(b.r.self) - Number(a.r.self) || power(s, b.g) - power(s, a.g));
     for (const d of defenders) {
@@ -245,6 +296,12 @@ function respondToRoll(s: GameState, pl: string): Action {
         if (id === 'fnord') return a;
       }
     }
+    // Anything else that turns the result around.
+    for (const o of spread(responseOptions(s, pl).map((x) => x.action).filter((a) => a.type === 'playPlot' || a.type === 'useAbility'), 30)) {
+      let after: GameState;
+      try { after = applyAction(s, pl, o); } catch { continue; }
+      if (after.attack ? currentOutcome(after, after.attack) !== outcome : wantFail) return o;
+    }
   }
   return { type: 'pass' };
 }
@@ -276,9 +333,19 @@ export function chooseAction(s: GameState, pl: string): Action {
   const w = s.window;
   if (w?.kind === 'attack' && s.attack) return respondToAttack(s, pl);
   if (w?.kind === 'roll' && s.attack) return respondToRoll(s, pl);
+  if (w && (w.kind === 'plot' || w.kind === 'event' || w.kind === 'endOfTurn')) return windowMove(s, pl);
   if (w) return { type: 'pass' };
   if (s.phase === 'main' && s.players[s.active].id === pl) return mainPhase(s, pl);
   return { type: 'pass' };
+}
+
+/** Counter a harmful Plot, or answer an event, when the look-ahead says it pays. */
+function windowMove(s: GameState, pl: string): Action {
+  const opts = responseOptions(s, pl).map((o) => o.action);
+  if (!opts.length) return { type: 'pass' };
+  let baseline: number;
+  try { baseline = evaluate(rollout(applyAction(s, pl, { type: 'pass' }), pl), pl); } catch { return { type: 'pass' }; }
+  return bestBySimulation(s, pl, spread(opts, 24), baseline, 1.5, 24) ?? { type: 'pass' };
 }
 
 /** Let every computer player act until a human is needed (or the game ends). */

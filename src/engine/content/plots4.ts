@@ -451,7 +451,7 @@ registerPlots({
       const pool = ctx?.plays ?? [];
       const pp = pool.find((p) => p.iid === play.target);
       if (!pp || !s.cards[pp.iid] || def(s, pp.iid).type !== 'Group' || pp.player === pl) return 'Play this when a rival plays a duplicate of one of your Groups.';
-      if (!Object.values(s.cards).some((c) => c.zone === 'structure' && c.controller === pl && c.cardId === s.cards[pp.iid].cardId)) return 'That card does not duplicate a Group you control.';
+      if (!Object.values(s.cards).some((c) => c.zone === 'structure' && c.controller === pl && c.cardId === s.cards[pp.iid]?.cardId)) return 'That card does not duplicate a Group you control.';
       return null;
     },
     apply: (_s, _pl, play): PlotEffect => ({ t: 'cancelPlot', target: play.target! }),
