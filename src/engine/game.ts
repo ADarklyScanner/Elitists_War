@@ -14,7 +14,7 @@ import { abilitiesOf, attackingGroups, matches } from './abilities';
 import { alignmentPairs, alignments, attributes, globalPower, power, resistance } from './stats';
 import { NWO_EFFECTS } from './nwo';
 import { PLOTS, GOALS } from './plotTypes';
-import { HOOKS, CHOICES, activeHookCards, anyHook, fireHooks, hooksOf, sumHooks, type AbilityParams } from './hooks';
+import { HOOKS, CHOICES, abilitiesDisabled, activeHookCards, anyHook, fireHooks, goalCheck, hooksOf, sumHooks, type AbilityParams } from './hooks';
 import type { Choice, GameEvent } from './types';
 
 // ---------------------------------------------------------------- setup
@@ -243,12 +243,15 @@ function removeFromHand(s: GameState, iid: string) {
 export function discardCard(s: GameState, iid: string) {
   const c = s.cards[iid];
   const wasPlot = def(s, iid).type === 'Plot' && (c.zone === 'hand' || c.zone === 'table');
+  // Groups and Resources discarded from hand or from play are announced too (And STAY Dead!, Cover of Darkness).
+  const wasCard = def(s, iid).type !== 'Plot' && def(s, iid).type !== 'Illuminati' && (c.zone === 'hand' || c.zone === 'structure' || c.zone === 'resources');
+  const from = c.zone, by = c.controller;
   removeFromHand(s, iid);
   c.zone = 'discard';
   c.controller = undefined; c.master = undefined; c.linkedTo = undefined;
   c.tokens = 0;
   player(s, c.owner).discard.push(iid);
-  if (wasPlot && s.turn > 0) raiseEvent(s, { type: 'discarded', card: iid, player: c.owner });
+  if ((wasPlot || wasCard) && s.turn > 0) raiseEvent(s, { type: 'discarded', card: iid, player: c.owner, by, data: { from } });
 }
 
 export function controllerOf(s: GameState, iid: string): string | undefined {
@@ -359,6 +362,8 @@ function takeoverStep(s: GameState) {
 }
 
 function finishBeginning(s: GameState) {
+  // A card undid the automatic takeover (Botched Contact): the player chooses again first.
+  if (s.turnFlags.redoTakeover) { s.turnFlags.redoTakeover = undefined; takeoverStep(s); return; }
   const p = activePlayer(s);
   s.prompt = undefined;
   for (const iid of structureCards(s, p.id)) {
@@ -534,6 +539,13 @@ export function goalNeeded(s: GameState, playerId: string): number {
 }
 
 export function meetsGoal(s: GameState, playerId: string): string | null {
+  // Cards that change alignments "except for Goals" (Military-Industrial Complex) read this flag.
+  const was = goalCheck.active;
+  goalCheck.active = true;
+  try { return meetsGoalNow(s, playerId); } finally { goalCheck.active = was; }
+}
+
+function meetsGoalNow(s: GameState, playerId: string): string | null {
   if (goalCount(s, playerId) >= goalNeeded(s, playerId)) return 'controls enough Groups';
   // Goal cards held in hand (R016).
   for (const g of goalsInHand(s, playerId)) {
@@ -1064,8 +1076,11 @@ export function destroyGroup(s: GameState, iid: string, by: string) {
   // Linked Plots are discarded; linked Resources are destroyed with the Group (R041).
   for (const other of Object.values(s.cards)) {
     if (other.linkedTo !== iid) continue;
-    if (other.zone === 'resources') Object.assign(other, { zone: 'destroyed', controller: undefined, linkedTo: undefined, tokens: 0 });
-    else discardCard(s, other.iid);
+    if (other.zone === 'resources') {
+      const owner = other.controller;
+      Object.assign(other, { zone: 'destroyed', controller: undefined, linkedTo: undefined, tokens: 0 });
+      raiseEvent(s, { type: 'destroyed', card: other.iid, by, player: owner });
+    } else discardCard(s, other.iid);
   }
   Object.assign(c, { zone: 'destroyed', controller: undefined, master: undefined, x: undefined, y: undefined, tokens: 0, mods: [], devastated: false });
   if (!player(s, by).destroyedCredit.includes(iid)) player(s, by).destroyedCredit.push(iid);
@@ -1076,7 +1091,13 @@ export function destroyGroup(s: GameState, iid: string, by: string) {
 /** Remember who took a player's last Group (Fratricide credit, R049). */
 function noteLastPuppet(s: GameState, victim: string | undefined, by: string) {
   const v = victim ? s.players.find((x) => x.id === victim) : undefined;
-  if (v && v.id !== by && puppets(s, v.illuminati).length === 0) v.lastPuppetTakenBy = by;
+  if (v && v.id !== by && puppets(s, v.illuminati).length === 0) {
+    v.lastPuppetTakenBy = by;
+    // Players who helped the attack (aid, or a bonus from a Plot or ability) share the credit (Fratricide).
+    const ctx = s.attack;
+    const helped = ctx ? [...ctx.aid, ...ctx.attackBonus].map((c) => c.player) : [];
+    v.lastPuppetHelpers = [...new Set(helped)].filter((x) => x !== v.id && x !== by);
+  }
 }
 
 // ---------------------------------------------------------------- plots
@@ -1532,6 +1553,7 @@ export function checkAbility(s: GameState, playerId: string, card: string, abili
   if (!c || (c.zone !== 'structure' && c.zone !== 'resources') || c.controller !== playerId) return 'You can only use your own cards in play.';
   const ab = HOOKS[c.cardId]?.actions?.find((a) => a.id === abilityId);
   if (!ab) return 'That card has no such ability.';
+  if (abilitiesDisabled(s, card)) return `${cardName(s, card)} cannot use its special abilities right now.`;
   const ctxKind = plotContext(s);
   const mine = activePlayer(s).id === playerId;
   const ok = ab.timing.some((t) =>
