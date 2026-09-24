@@ -86,6 +86,12 @@ To give a player an extra turn next, set `s.extraTurnFor = playerId`.
 - `disablesAbilities` works on table cards only. It switches off a Group's own abilities and hooks.
 - `beforeDraw` returns `'skip'` or `'bottom'` to change a draw.
 - `onDraw` runs after a card is drawn.
+- `beforeAttackResult` runs when everyone has passed after the roll, before the result is applied. It may
+  push a live effect such as a re-roll or a `fail`. Return true to open the roll window again, and never
+  do that twice in one attack.
+- `replaceableWhenDestroyed` lets another copy of a Unique Resource come into play once this one is destroyed.
+- A question asked during the start-of-turn draws (`askChoice` in `onDraw`) is answered before the
+  automatic takeover prompt.
 
 Modifiers `{kind:'addAttr'|'removeAttr', attr}` and `{kind:'addArrow', side}` change attributes and arrows
 while the card is in play.

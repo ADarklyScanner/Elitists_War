@@ -84,6 +84,14 @@ export interface CardHooks {
   onDraw?: (s: GameState, self: string, player: string, deck: 'plot' | 'group', card: string) => void;
   /** Called for every game event (after it happens, before its response window). */
   onEvent?: (s: GameState, self: string, e: GameEvent) => void;
+  /**
+   * Called when everyone has passed after an attack's roll, before the result is applied. May push a
+   * live effect onto ctx.plays (a re-roll, an automatic failure). Return true to open the roll window
+   * again so players can respond to the change; a card must not do so twice in one attack.
+   */
+  beforeAttackResult?: (s: GameState, self: string, ctx: AttackCtx) => boolean | void;
+  /** A Unique Resource that another copy may replace once this one is destroyed (Hidden City). */
+  replaceableWhenDestroyed?: boolean;
 
   // ---- triggers
   onTurnStart?: (s: GameState, self: string) => void;

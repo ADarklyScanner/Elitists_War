@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   applyAction, attackStrength, canEnterPlay, destroyGroup, globalPower, handLimit, participants, plotsInHand, power, resistance,
-  waitingFor, alignments, type Action, type GameState,
+  takeoverOptions, waitingFor, alignments, attributes, type Action, type GameState,
 } from '../../src/engine';
 import { rollDie } from '../../src/engine/rng';
 import { give, scenario } from '../helpers';
@@ -34,6 +34,7 @@ function nextTurnOf(s: GameState, pid: string): GameState {
     if (s.prompt) {
       const pl = s.prompt.player;
       if (s.prompt.kind === 'takeover') s = act(s, pl, { type: 'skipTakeover' });
+      else if (s.prompt.kind === 'choose') s = act(s, pl, { type: 'choose', ids: s.prompt.choice!.options.slice(0, s.prompt.choice!.min).map((o) => o.id) });
       else s = act(s, pl, { type: 'discard', cards: plotsInHand(s, pl).slice(handLimit(s, pl)) });
     } else if (s.window) s = act(s, waitingFor(s)[0], { type: 'pass' });
     else if (s.phase === 'main' && s.players[s.active].id === pid) return s;
@@ -51,6 +52,13 @@ function diff(s: GameState, card: string) {
 const attack = (s: GameState, pl: string, attacker: string, target: string, attackType: 'control' | 'destroy') =>
   act(s, pl, { type: 'attack', attackType, attacker, target });
 const boost = (s: GameState, pl: string, n = 30) => { s.attack!.attackBonus.push({ player: pl, amount: n, label: 'test' }); return s; };
+/** Everyone waiting in the current window passes once. */
+function passAll(s: GameState): GameState {
+  for (const pl of waitingFor(s)) if (s.window && !s.prompt && waitingFor(s).includes(pl)) s = act(s, pl, { type: 'pass' });
+  return s;
+}
+const choose = (s: GameState, pl: string, ids: string[]) => act(s, pl, { type: 'choose', ids });
+const rerolls = (s: GameState) => s.attack!.plays.filter((p) => p.effect.t === 'reroll').length;
 
 describe("Angel's Feather", () => {
   it('re-rolls a failed Attack to Control by the linked Peaceful Group, once', () => {
@@ -61,9 +69,23 @@ describe("Angel's Feather", () => {
     s = act(s, 'p1', { type: 'link', resource: r, to: ama });
     s = boost(attack(s, 'p1', ama, tgt, 'control'), 'p1', 5);
     s = toRoll(s, [6, 6]);
-    s = use(s, 'p1', r, 'reroll');
-    expect(s.attack!.plays.some((p) => p.effect.t === 'reroll')).toBe(true);
-    expect(() => use(s, 'p1', r, 'reroll')).toThrow(/already/);
+    s = passAll(s);
+    // Re-rolled on its own; the roll window opens again for responses to the new roll.
+    expect(s.window?.kind).toBe('roll');
+    expect(rerolls(s)).toBe(1);
+    s.attack!.plays.find((p) => p.effect.t === 'reroll')!.effect = { t: 'reroll', dice: [6, 6] };
+    s = passAll(s);
+    expect(s.attack).toBeUndefined();
+    expect(s.cards[tgt].zone).toBe('hand');
+  });
+  it('re-rolls a successful attack on your Peaceful Group', () => {
+    let s = scenario();
+    give(s, 'p2', 'angel-s-feather', { resource: true });
+    const ama = give(s, 'p2', 'a-m-a', { under: ill(s, 1), side: 'BOTTOM' });
+    const g = give(s, 'p1', 'c-i-a', { under: ill(s, 0), side: 'BOTTOM' });
+    s = passAll(toRoll(boost(attack(s, 'p1', g, ama, 'destroy'), 'p1', 30), [1, 1]));
+    expect(s.window?.kind).toBe('roll');
+    expect(rerolls(s)).toBe(1);
   });
   it('must be linked to a Peaceful Group and does not re-roll a success', () => {
     let s = scenario();
@@ -73,8 +95,9 @@ describe("Angel's Feather", () => {
     const ama = give(s, 'p1', 'a-m-a', { under: ill(s, 0), side: 'TOP' });
     const tgt = give(s, 'p1', 'anti-war-activists', { hand: true });
     s = act(s, 'p1', { type: 'link', resource: r, to: ama });
-    s = toRoll(boost(attack(s, 'p1', ama, tgt, 'control'), 'p1', 5), [1, 1]);
-    expect(() => use(s, 'p1', r, 'reroll')).toThrow(/Only a failed/);
+    s = passAll(toRoll(boost(attack(s, 'p1', ama, tgt, 'control'), 'p1', 5), [1, 1]));
+    expect(s.attack).toBeUndefined();
+    expect(s.cards[tgt].zone).toBe('structure');
   });
 });
 
@@ -89,6 +112,25 @@ describe('Ark of the Covenant', () => {
     s = resolve(boost(attack(s, 'p2', mafia, batf, 'destroy'), 'p2', 40), [1, 1]);
     expect(s.cards[batf].zone).toBe('destroyed');
     expect(s.cards[mafia].zone).toBe('destroyed');
+    expect(s.players[0].destroyedCredit).toContain(mafia);
+  });
+  it('destroyed by an Illuminati: its owner chooses which Group to lose', () => {
+    let s = scenario();
+    const r = give(s, 'p1', 'ark-of-the-covenant', { resource: true });
+    const batf = give(s, 'p1', 'b-a-t-f', { under: ill(s, 0), side: 'BOTTOM' });
+    const mafia = give(s, 'p2', 'the-mafia', { under: ill(s, 1), side: 'BOTTOM' });
+    const sharks = give(s, 'p2', 'loan-sharks', { under: ill(s, 1), side: 'TOP' });
+    s = use(s, 'p1', r, 'name', { target: batf });
+    s.active = 1;
+    s = resolve(boost(attack(s, 'p2', ill(s, 1), batf, 'destroy'), 'p2', 40), [1, 1]);
+    expect(s.cards[batf].zone).toBe('destroyed');
+    expect(s.prompt?.kind).toBe('choose');
+    expect(s.prompt!.player).toBe('p2');
+    expect(s.prompt!.choice!.options.map((o) => o.id).sort()).toEqual([mafia, sharks].sort());
+    expect(() => choose(s, 'p1', [mafia])).toThrow();
+    s = choose(s, 'p2', [mafia]);
+    expect(s.cards[mafia].zone).toBe('destroyed');
+    expect(s.cards[sharks].zone).toBe('structure');
     expect(s.players[0].destroyedCredit).toContain(mafia);
   });
   it('can only name your own Group', () => {
@@ -124,6 +166,33 @@ describe('Bigfoot', () => {
     s = resolve(s);
     expect(s.log.some((l) => /cancelled/.test(l.text))).toBe(true);
   });
+  it('cancels the Relief a rival\'s Media Group sends', () => {
+    let s = scenario();
+    const r = give(s, 'p2', 'bigfoot', { resource: true });
+    s.cards[r].tokens = 1;
+    const hawaii = give(s, 'p1', 'hawaii', { under: ill(s, 0), side: 'BOTTOM' });
+    const media = give(s, 'p1', 'big-media', { under: ill(s, 0), side: 'TOP' });
+    s.cards[hawaii].devastated = true;
+    s = act(s, 'p1', { type: 'relief', place: hawaii, payWith: [media] });
+    expect(s.prompt?.player).toBe('p2');
+    s = choose(s, 'p2', [media]);
+    expect(s.cards[hawaii].devastated).toBe(true);
+    expect(s.cards[r].tokens).toBe(0);
+  });
+  it('is not asked about Relief without a Media Group, nor without its action', () => {
+    let s = scenario();
+    const r = give(s, 'p2', 'bigfoot', { resource: true });
+    const hawaii = give(s, 'p1', 'hawaii', { under: ill(s, 0), side: 'BOTTOM' });
+    const media = give(s, 'p1', 'big-media', { under: ill(s, 0), side: 'TOP' });
+    const fbi = give(s, 'p1', 'fbi', { under: ill(s, 0), side: 'LEFT' });
+    s.cards[hawaii].devastated = true;
+    const s1 = act(s, 'p1', { type: 'relief', place: hawaii, payWith: [media] });
+    expect(s1.prompt).toBeUndefined();
+    s.cards[r].tokens = 1;
+    const s2 = act(s, 'p1', { type: 'relief', place: hawaii, payWith: [fbi] });
+    expect(s2.prompt).toBeUndefined();
+    expect(s2.cards[hawaii].devastated).toBe(false);
+  });
 });
 
 describe('Book of Kells', () => {
@@ -144,6 +213,16 @@ describe('Book of Kells', () => {
     s = nextTurnOf(s, 'p1');
     expect(s.cards[druids].tokens).toBe(2);
     expect(s.cards[fbi].tokens).toBe(1);
+  });
+  it('the linked Magic Group may not attack to destroy, but may attack to control', () => {
+    let s = scenario();
+    const r = give(s, 'p1', 'book-of-kells', { resource: true });
+    const druids = give(s, 'p1', 'druids', { under: ill(s, 0), side: 'BOTTOM' });
+    const tgt = give(s, 'p2', 'loan-sharks', { under: ill(s, 1), side: 'BOTTOM' });
+    expect(() => attack(s, 'p1', druids, tgt, 'destroy')).not.toThrow();
+    s = act(s, 'p1', { type: 'link', resource: r, to: druids });
+    expect(() => attack(s, 'p1', druids, tgt, 'destroy')).toThrow(/may not attack to destroy/);
+    expect(() => attack(s, 'p1', druids, tgt, 'control')).not.toThrow();
   });
 });
 
@@ -196,23 +275,34 @@ describe('Clipper Chip', () => {
 });
 
 describe('Crystal Skull', () => {
-  it('after the turn draw, take any one of the top three Plots', () => {
+  it('whenever you draw a Plot, take any one of the top three; the others go on top or bottom', () => {
     let s = scenario();
-    const r = give(s, 'p1', 'crystal-skull', { resource: true });
-    s = nextTurnOf(s, 'p1');
+    give(s, 'p1', 'crystal-skull', { resource: true });
+    const [a, b, c] = s.players[0].plotDeck;
+    const n = s.players[0].plotDeck.length;
+    s = act(s, 'p1', { type: 'buyPlot', payWith: [ill(s, 0)] });
+    expect(s.prompt?.kind).toBe('choose');
+    expect(s.players[0].hand).not.toContain(a);
+    expect(() => choose(s, 'p1', [`take:${a}`, `take:${c}`])).toThrow(/exactly one/);
+    s = choose(s, 'p1', [`take:${c}`, `bottom:${a}`]);
     const deck = s.players[0].plotDeck;
-    const want = deck[1];
-    const bottomBefore = deck.length;
-    s = use(s, 'p1', r, 'search', { target: want, mode: 'bottom' });
-    expect(s.players[0].hand).toContain(want);
-    expect(s.players[0].plotDeck.length).toBe(bottomBefore);
-    expect(() => use(s, 'p1', r, 'search', { target: s.players[0].plotDeck[0] })).toThrow(/right after/);
+    expect(s.players[0].hand).toContain(c);
+    expect(deck.length).toBe(n - 1);
+    expect(deck[0]).toBe(b);
+    expect(deck[deck.length - 1]).toBe(a);
+    expect(s.prompt).toBeUndefined();
   });
-  it('only one of the top three', () => {
+  it('asks at the start of your turn before the takeover; not for a rival\'s draws', () => {
     let s = scenario();
-    const r = give(s, 'p1', 'crystal-skull', { resource: true });
-    s = nextTurnOf(s, 'p1');
-    expect(() => use(s, 'p1', r, 'search', { target: s.players[0].plotDeck[5] })).toThrow(/top three/);
+    give(s, 'p2', 'crystal-skull', { resource: true });
+    s = act(s, 'p1', { type: 'buyPlot', payWith: [ill(s, 0)] });
+    expect(s.prompt).toBeUndefined();
+    s = act(s, 'p1', { type: 'endTurn' });
+    for (let i = 0; i < 20 && !s.prompt; i++) s = act(s, waitingFor(s)[0], { type: 'pass' });
+    expect(s.prompt?.kind).toBe('choose');
+    expect(s.prompt!.player).toBe('p2');
+    s = choose(s, 'p2', [s.prompt!.choice!.options[1].id]);
+    expect(s.prompt?.kind === 'choose').toBe(false);
   });
 });
 
@@ -298,6 +388,31 @@ describe('Eliza', () => {
     s = nextTurnOf(s, 'p1');
     expect(s.cards[eff].tokens).toBe(2);
   });
+  it('crashes when the extra action rolls 11 or 12, not the first action', () => {
+    let s = scenario();
+    const r = give(s, 'p1', 'eliza', { resource: true });
+    const eff = give(s, 'p1', 'eff', { under: ill(s, 0), side: 'BOTTOM' });
+    const t1 = give(s, 'p2', 'loan-sharks', { under: ill(s, 1), side: 'BOTTOM' });
+    const t2 = give(s, 'p2', 'the-mafia', { under: ill(s, 1), side: 'TOP' });
+    s = act(s, 'p1', { type: 'link', resource: r, to: eff });
+    s = nextTurnOf(s, 'p1');
+    const plot = give(s, 'p1', 'fnord', { hand: true });
+    s = resolve(boost(attack(s, 'p1', eff, t1, 'destroy'), 'p1', 30), [6, 6]);
+    expect(s.cards[r].zone).toBe('resources');
+    s = resolve(boost(attack(s, 'p1', eff, t2, 'destroy'), 'p1', 30), [6, 5]);
+    expect(s.cards[r].zone).toBe('discard');
+    expect(s.cards[plot].exposed).toBe(true);
+  });
+  it('does not crash in a turn it gave no extra action', () => {
+    let s = scenario();
+    const r = give(s, 'p1', 'eliza', { resource: true });
+    const eff = give(s, 'p1', 'eff', { under: ill(s, 0), side: 'BOTTOM' });
+    const t1 = give(s, 'p2', 'loan-sharks', { under: ill(s, 1), side: 'BOTTOM' });
+    s = act(s, 'p1', { type: 'link', resource: r, to: eff });
+    s = resolve(boost(attack(s, 'p1', eff, t1, 'destroy'), 'p1', 30), [6, 6]);
+    expect(s.cards[eff].tokens).toBe(0);
+    expect(s.cards[r].zone).toBe('resources');
+  });
 });
 
 describe('Flying Saucer', () => {
@@ -380,6 +495,15 @@ describe('Hidden City', () => {
     const other = give(s, 'p2', 'hidden-city', { hand: true });
     expect(canEnterPlay(s, other, 'p2')).toBe(false);
   });
+  it('once destroyed, another Hidden City may come into play (unlike other Unique Resources)', () => {
+    const s = scenario();
+    const hc = give(s, 'p1', 'hidden-city', { resource: true });
+    const pm = give(s, 'p1', 'perpetual-motion-machine', { resource: true });
+    Object.assign(s.cards[hc], { zone: 'destroyed', controller: undefined, linkedTo: undefined });
+    Object.assign(s.cards[pm], { zone: 'destroyed', controller: undefined, linkedTo: undefined });
+    expect(canEnterPlay(s, give(s, 'p2', 'hidden-city', { hand: true }), 'p2')).toBe(true);
+    expect(canEnterPlay(s, give(s, 'p2', 'perpetual-motion-machine', { hand: true }), 'p2')).toBe(false);
+  });
 });
 
 describe("Hitler's Brain", () => {
@@ -394,13 +518,27 @@ describe("Hitler's Brain", () => {
     expect(s.players[0].hand.length).toBe(n + 1);
     expect(() => use(s, 'p1', r, 'hide')).toThrow(/destroy/);
   });
-  it('you cannot take control of Peaceful Groups', () => {
-    let s = scenario();
+  it('you cannot take control of Peaceful Groups, by attack or automatic takeover', () => {
+    const s = scenario();
     give(s, 'p1', 'hitler-s-brain', { resource: true });
-    const g = give(s, 'p1', 'a-m-a', { under: ill(s, 0), side: 'BOTTOM' });
+    const g = give(s, 'p1', 'c-i-a', { under: ill(s, 0), side: 'BOTTOM' });
     const t = give(s, 'p1', 'anti-war-activists', { hand: true });
-    s = resolve(attack(s, 'p1', g, t, 'control'), [2, 2]);
-    expect(s.cards[t].zone).toBe('hand');
+    const fbi = give(s, 'p1', 'fbi', { hand: true });
+    const ama = give(s, 'p2', 'a-m-a', { under: ill(s, 1), side: 'BOTTOM' });
+    expect(() => attack(s, 'p1', g, t, 'control')).toThrow(/Peaceful/);
+    expect(() => attack(s, 'p1', g, ama, 'control')).toThrow(/Peaceful/);
+    expect(() => attack(s, 'p1', g, ama, 'destroy')).not.toThrow();
+    expect(() => attack(s, 'p1', g, fbi, 'control')).not.toThrow();
+    const cards = takeoverOptions(s, 'p1').map((o) => o.card);
+    expect(cards).toContain(fbi);
+    expect(cards).not.toContain(t);
+  });
+  it('a rival without it may still take Peaceful Groups', () => {
+    const s = scenario();
+    give(s, 'p2', 'hitler-s-brain', { resource: true });
+    const g = give(s, 'p1', 'c-i-a', { under: ill(s, 0), side: 'BOTTOM' });
+    const t = give(s, 'p1', 'anti-war-activists', { hand: true });
+    expect(() => attack(s, 'p1', g, t, 'control')).not.toThrow();
   });
 });
 
@@ -431,6 +569,41 @@ describe('Immortality Serum', () => {
     s = use(attack(s, 'p1', g, bj, 'control'), 'p1', r, 'seize');
     s = resolve(s, [6, 6]);
     expect(s.cards[bj].zone).toBe('structure');
+    expect(s.cards[r].linkedTo).toBe(bj);
+  });
+  it('takes a Personality a rival has just taken over automatically', () => {
+    let s = scenario();
+    const r = give(s, 'p1', 'immortality-serum', { resource: true });
+    const bj = give(s, 'p2', 'bjorne', { hand: true });
+    s.active = 1;
+    s.phase = 'beginning';
+    s.prompt = { player: 'p2', kind: 'takeover' };
+    s = act(s, 'p2', { type: 'takeover', card: bj, onto: ill(s, 1), side: 'BOTTOM' });
+    expect(s.cards[bj].controller).toBe('p2');
+    expect(s.prompt?.player).toBe('p1');
+    const spot = s.prompt!.choice!.options.find((o) => o.id !== 'no')!.id;
+    s = choose(s, 'p1', [spot]);
+    expect(s.cards[bj].controller).toBe('p1');
+    expect(s.cards[bj].master).toBe(ill(s, 0));
+    expect(s.cards[r].linkedTo).toBe(bj);
+    expect(s.phase).toBe('main');
+  });
+  it('takes a Personality a rival captured from his hand; may be kept for later; never for non-Personalities', () => {
+    let s = scenario();
+    const r = give(s, 'p2', 'immortality-serum', { resource: true });
+    const g = give(s, 'p1', 'c-i-a', { under: ill(s, 0), side: 'BOTTOM' });
+    const bj = give(s, 'p1', 'bjorne', { hand: true });
+    const fbi = give(s, 'p1', 'fbi', { hand: true });
+    const s1 = resolve(boost(attack(s, 'p1', g, fbi, 'control'), 'p1', 30), [2, 2]);
+    expect(s1.prompt).toBeUndefined();
+    s = resolve(boost(attack(s, 'p1', g, bj, 'control'), 'p1', 30), [2, 2]);
+    expect(s.cards[bj].controller).toBe('p1');
+    expect(s.prompt?.player).toBe('p2');
+    const kept = choose(s, 'p2', ['no']);
+    expect(kept.cards[bj].controller).toBe('p1');
+    expect(kept.cards[r].linkedTo).toBe(ill(kept, 1));
+    s = choose(s, 'p2', [s.prompt!.choice!.options[1].id]);
+    expect(s.cards[bj].controller).toBe('p2');
     expect(s.cards[r].linkedTo).toBe(bj);
   });
 });
@@ -599,15 +772,27 @@ describe('Rogue Boomer', () => {
 });
 
 describe('Shroud of Turin', () => {
-  it('swap the Plot drawn for the bottom card, once', () => {
+  it('each Plot draw: see the top card, or leave it and draw the bottom card', () => {
     let s = scenario();
-    const r = give(s, 'p1', 'shroud-of-turin', { resource: true });
-    s = nextTurnOf(s, 'p1');
-    const deck = s.players[0].plotDeck;
-    const bottom = deck[deck.length - 1];
-    s = use(s, 'p1', r, 'swap', { mode: 'plot' });
-    expect(s.players[0].hand).toContain(bottom);
-    expect(() => use(s, 'p1', r, 'swap', { mode: 'group' })).toThrow(/right after/);
+    give(s, 'p1', 'shroud-of-turin', { resource: true });
+    const deck0 = [...s.players[0].plotDeck];
+    s = act(s, 'p1', { type: 'buyPlot', payWith: [ill(s, 0)] });
+    expect(s.prompt?.kind).toBe('choose');
+    expect(s.players[0].hand).not.toContain(deck0[0]);
+    s = choose(s, 'p1', ['bottom']);
+    expect(s.players[0].hand).toContain(deck0[deck0.length - 1]);
+    expect(s.players[0].plotDeck[0]).toBe(deck0[0]);
+  });
+  it('each Group draw too; keeping the top card is a normal draw; not for a rival', () => {
+    let s = scenario();
+    give(s, 'p1', 'shroud-of-turin', { resource: true });
+    const top = s.players[0].groupDeck[0];
+    s = act(s, 'p1', { type: 'drawGroup' });
+    s = choose(s, 'p1', ['top']);
+    expect(s.players[0].hand).toContain(top);
+    const s2 = scenario();
+    give(s2, 'p2', 'shroud-of-turin', { resource: true });
+    expect(act(s2, 'p1', { type: 'drawGroup' }).prompt).toBeUndefined();
   });
 });
 
@@ -648,6 +833,19 @@ describe('Spear of Longinus', () => {
     s = use(s, 'p2', r, 'boost');
     expect(attackStrength(s, s.attack!).attack).toBe(before + 1);
     expect(() => use(s, 'p2', r, 'boost')).toThrow(/already/);
+  });
+  it('an attack it helps counts as Magic, only for that attack', () => {
+    let s = scenario();
+    const r = give(s, 'p1', 'spear-of-longinus', { resource: true });
+    const g = give(s, 'p1', 'c-i-a', { under: ill(s, 0), side: 'BOTTOM' });
+    const t = give(s, 'p2', 'loan-sharks', { under: ill(s, 1), side: 'BOTTOM' });
+    s = attack(s, 'p1', g, t, 'destroy');
+    expect(attributes(s, g)).not.toContain('Magic');
+    s = use(s, 'p1', r, 'boost');
+    expect(attributes(s, g)).toContain('Magic');
+    expect(attributes(s, t)).not.toContain('Magic');
+    s = resolve(s, [6, 6]);
+    expect(attributes(s, g)).not.toContain('Magic');
   });
 });
 
@@ -724,6 +922,35 @@ describe('The Holy Grail', () => {
     const g = give(s, 'p2', 'c-i-a', { under: ill(s, 1), side: 'LEFT' });
     s = resolve(boost(attack(s, 'p2', g, hawaii, 'destroy'), 'p2', 50), [1, 1]);
     expect(s.cards[hawaii].zone).toBe('structure');
+  });
+  it('stays secret until a Disaster would succeed, then makes it fail', () => {
+    let s = scenario();
+    const r = give(s, 'p2', 'the-holy-grail', { resource: true });
+    const hawaii = give(s, 'p2', 'hawaii', { under: ill(s, 1), side: 'BOTTOM' });
+    s.active = 1;
+    s = use(s, 'p2', r, 'name', { target: hawaii });
+    s.active = 0;
+    const volcano = give(s, 'p1', 'volcano', { hand: true });
+    const seen = s.log.length;
+    s = act(s, 'p1', { type: 'playPlot', play: { card: volcano, target: hawaii } });
+    expect(attackStrength(s, s.attack!).lines.join()).not.toMatch(/Grail/);
+    s = toRoll(s, [1, 1]);
+    expect(s.log.slice(seen).some((l) => /Grail/.test(l.text))).toBe(false);
+    s = resolve(s);
+    expect(s.cards[hawaii].devastated).toBeFalsy();
+    expect(s.cards[hawaii].zone).toBe('structure');
+    expect(s.log.some((l) => /Holy Grail is revealed/.test(l.text))).toBe(true);
+  });
+  it('does not act on an attack that fails anyway', () => {
+    let s = scenario();
+    const r = give(s, 'p2', 'the-holy-grail', { resource: true });
+    const hawaii = give(s, 'p2', 'hawaii', { under: ill(s, 1), side: 'BOTTOM' });
+    s.active = 1;
+    s = use(s, 'p2', r, 'name', { target: hawaii });
+    s.active = 0;
+    const g = give(s, 'p1', 'c-i-a', { under: ill(s, 0), side: 'BOTTOM' });
+    s = resolve(boost(attack(s, 'p1', g, hawaii, 'destroy'), 'p1', 30), [6, 6]);
+    expect(s.log.some((l) => /Holy Grail is revealed/.test(l.text))).toBe(false);
   });
   it('is discarded if the Place is captured', () => {
     let s = scenario();
