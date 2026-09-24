@@ -84,6 +84,15 @@ export interface CardHooks {
   onDraw?: (s: GameState, self: string, player: string, deck: 'plot' | 'group', card: string) => void;
   /** Called for every game event (after it happens, before its response window). */
   onEvent?: (s: GameState, self: string, e: GameEvent) => void;
+  /** Resources linked to `self` may not be moved to another card (Evil Geniuses for a Better Tomorrow). */
+  lockLinks?: (s: GameState, self: string, resource: string) => boolean;
+  /** This card's `attackMod` still applies in attacks by or against Secret Groups (its ability is about them). */
+  worksInSecretAttacks?: boolean;
+  /**
+   * How many Groups of `alignment` this card counts as for Goal cards (default 1). Read for the card
+   * itself wherever it is (in play or destroyed), not through the active cards.
+   */
+  goalAlignWeight?: (s: GameState, iid: string, alignment: Alignment) => number;
 
   // ---- triggers
   onTurnStart?: (s: GameState, self: string) => void;

@@ -1,7 +1,7 @@
 // The Elitists War rules engine. Pure state transitions: applyAction(state, player, action)
 // validates the move against the rules, mutates a copy of the state and returns it.
 import type {
-  Action, AttackCtx, CardInstance, Contribution, GameSettings, GameState, PlayedPlot,
+  Action, Alignment, AttackCtx, CardInstance, Contribution, GameSettings, GameState, PlayedPlot,
   PlayerState, PlotPlay, Prompt, Side,
 } from './types';
 import { RuleError } from './types';
@@ -439,6 +439,11 @@ function enforceHandLimits(s: GameState) {
   if (over) s.prompt = { player: over.id, kind: 'discardToLimit', data: { resume: 'continue' } };
 }
 
+/** How many Groups of `alignment` a card counts as for Goal cards (Fred Birch Society counts as two Conservative Groups). */
+export function goalAlignWeight(s: GameState, iid: string, alignment: Alignment): number {
+  return HOOKS[s.cards[iid].cardId]?.goalAlignWeight?.(s, iid, alignment) ?? 1;
+}
+
 export function goalsInHand(s: GameState, playerId: string) {
   return player(s, playerId).hand.filter((iid) => def(s, iid).subtype === 'Goal');
 }
@@ -857,10 +862,11 @@ export function attackStrength(s: GameState, ctx: AttackCtx): StrengthBreakdown 
   }
   for (const b of liveBonus(ctx.defenseBonus)) add('d', b.amount, b.label);
   // Scripted card effects (Resources, linked Plots, special Groups).
-  if (!noAbilities || ctx.instant) {
+  {
     for (const self of activeHookCards(s)) {
       const h = HOOKS[s.cards[self].cardId];
       if (!h.attackMod) continue;
+      if (noAbilities && !ctx.instant && !h.worksInSecretAttacks) continue;
       add('a', h.attackMod(s, self, ctx, 'attack'), cardName(s, self));
       add('d', h.attackMod(s, self, ctx, 'defense'), cardName(s, self));
     }
@@ -1278,6 +1284,7 @@ export function applyAction(state: GameState, playerId: string, action: Action):
       const to = inst(s, action.to);
       if (to.zone !== 'structure' || to.controller !== playerId) throw new RuleError('Link it to a Group in your Power Structure.');
       if (r.linkMovedTurn === s.turn) throw new RuleError('A link can be moved only once per turn.');
+      if (r.linkedTo && anyHook(s, (h, self) => self === r.linkedTo && !!h.lockLinks?.(s, self, action.resource))) throw new RuleError(`${cardName(s, action.resource)} is locked to ${cardName(s, r.linkedTo)} and cannot be moved.`);
       const rule = HOOKS[r.cardId]?.linkTo;
       if (rule && def(s, action.to).type !== 'Illuminati' && !rule(s, action.resource, action.to)) throw new RuleError(`${cardName(s, action.resource)} cannot be linked to ${cardName(s, action.to)}.`);
       r.linkedTo = action.to;
