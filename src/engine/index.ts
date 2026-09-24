@@ -8,6 +8,8 @@ import './content/plots2';
 import './content/plots3';
 import './content/plots4';
 import './content/plots5';
+import './content/plots6';
+import './content/plots7';
 import './content/resources';
 
 export * from './types';
