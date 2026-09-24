@@ -90,6 +90,12 @@ To give a player an extra turn next, set `s.extraTurnFor = playerId`.
 - `worksInSecretAttacks: true` keeps the card's `attackMod` in attacks by or against Secret Groups (R014 normally drops it).
 - `goalAlignWeight(s, iid, alignment)` says how many Groups of that alignment the card counts as for Goal cards
   (in play or destroyed); Goal code reads it with `goalAlignWeight()` from game.ts.
+- `beforeAttackResult` runs when everyone has passed after the roll, before the result is applied. It may
+  push a live effect such as a re-roll or a `fail`. Return true to open the roll window again, and never
+  do that twice in one attack.
+- `replaceableWhenDestroyed` lets another copy of a Unique Resource come into play once this one is destroyed.
+- A question asked during the start-of-turn draws (`askChoice` in `onDraw`) is answered before the
+  automatic takeover prompt.
 
 Modifiers `{kind:'addAttr'|'removeAttr', attr}` and `{kind:'addArrow', side}` change attributes and arrows
 while the card is in play.

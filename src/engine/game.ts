@@ -285,7 +285,9 @@ export function canEnterPlay(s: GameState, iid: string, playerId?: string): bool
     const u = def(s, iid).uniqueness ?? '';
     if (/one per player/i.test(u)) return !Object.values(s.cards).some((c) => c.cardId === cardId && c.zone === 'resources' && c.controller === playerId);
     if (!isUnique(s, iid)) return true;
-    return !Object.values(s.cards).some((c) => c.cardId === cardId && c.iid !== iid && (c.zone === 'resources' || c.zone === 'destroyed'));
+    // Some Unique Resources may come back once destroyed (Hidden City).
+    const again = !!HOOKS[cardId]?.replaceableWhenDestroyed;
+    return !Object.values(s.cards).some((c) => c.cardId === cardId && c.iid !== iid && (c.zone === 'resources' || (c.zone === 'destroyed' && !again)));
   }
   if (HOOKS[cardId]?.multipleCopies) return s.cards[iid].zone !== 'structure' && s.cards[iid].zone !== 'destroyed';
   return !Object.values(s.cards).some((c) => c.cardId === cardId && c.iid !== iid && (c.zone === 'structure' || c.zone === 'destroyed'));
@@ -372,13 +374,17 @@ function turnDraws(s: GameState) {
 
 function takeoverStep(s: GameState) {
   const p = activePlayer(s);
-  if (!s.turnFlags.noTakeover && !s.turnFlags.restricted && !s.turnFlags.extraTurn && takeoverOptions(s, p.id).length) s.prompt = { player: p.id, kind: 'takeover' };
-  else finishBeginning(s);
+  if (!s.turnFlags.noTakeover && !s.turnFlags.restricted && !s.turnFlags.extraTurn && takeoverOptions(s, p.id).length) {
+    // A card's question asked during the draws (Crystal Skull) is answered first.
+    const pr: Prompt = { player: p.id, kind: 'takeover' };
+    if (s.prompt) (s.promptQueue ??= []).push(pr); else s.prompt = pr;
+  } else finishBeginning(s);
 }
 
 function finishBeginning(s: GameState) {
   const p = activePlayer(s);
-  s.prompt = undefined;
+  // Close the takeover prompt, but keep any card's question still waiting for an answer.
+  if (!s.prompt || s.prompt.kind === 'takeover') s.prompt = s.promptQueue?.shift();
   for (const iid of structureCards(s, p.id)) {
     const d = def(s, iid);
     if (d.type === 'Illuminati') {
@@ -1420,7 +1426,7 @@ export function applyAction(state: GameState, playerId: string, action: Action):
         log(s, `${p.name} takes over ${cardName(s, action.card)} automatically.`, playerId);
         hooksOf(s, action.card)?.onEnterPlay?.(s, action.card);
       }
-      s.prompt = undefined;
+      s.prompt = s.promptQueue?.shift();
       // Rivals may respond to an automatic takeover (Sabotage, Botched Contact) before tokens are placed.
       raiseEvent(s, { type: 'takeover', player: playerId, card: action.card }, 'finishBeginning');
       break;
@@ -1623,6 +1629,19 @@ function useAbility(s: GameState, playerId: string, card: string, abilityId: str
   if (s.window) s.window.passed = s.window.kind === 'plot' ? [playerId] : [];
 }
 
+/**
+ * Everyone has passed after the roll: cards that act on the result (automatic re-rolls, automatic
+ * failures) do so now. Returns true if the roll window must open again.
+ */
+function beforeResult(s: GameState): boolean {
+  const ctx = s.attack;
+  if (!ctx) return false;
+  let again = false;
+  for (const self of activeHookCards(s)) if (HOOKS[s.cards[self].cardId].beforeAttackResult?.(s, self, ctx)) again = true;
+  if (again && s.window) s.window.passed = [];
+  return again;
+}
+
 /** Close any window everyone has passed on, and advance the game. */
 function settleWindows(s: GameState) {
   for (let guard = 0; guard < 50; guard++) {
@@ -1630,7 +1649,7 @@ function settleWindows(s: GameState) {
     if (!w || s.phase === 'gameOver') return;
     if (waitingFor(s).length) return;
     if (w.kind === 'attack') rollAttack(s);
-    else if (w.kind === 'roll') finishAttack(s);
+    else if (w.kind === 'roll') { if (!beforeResult(s)) finishAttack(s); }
     else if (w.kind === 'plot') resolvePendingPlot(s);
     else if (w.kind === 'endOfTurn') { s.window = undefined; endTurnCleanup(s); }
     else if (w.kind === 'event') {

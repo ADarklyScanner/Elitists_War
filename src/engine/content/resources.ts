@@ -2,17 +2,19 @@
 // The 36 Resource cards. A Resource enters play linked to its controller's Illuminati ("unlinked");
 // `linkTo` limits which Groups it may be linked to. Parts the engine cannot express yet are marked
 // `// PENDING: …`.
-import type { Alignment, AttackCtx, Contribution, GameState, PlotEffect } from '../types';
+import type { Alignment, AttackCtx, Contribution, GameState, PlotEffect, Side } from '../types';
+import { RuleError } from '../types';
 import type { ActivatedAbility, CardHooks } from '../hooks';
-import { registerHooks, HOOKS } from '../hooks';
+import { registerChoice, registerHooks, fireHooks, hooksOf, HOOKS } from '../hooks';
 import { def, OPPOSITE, cardName } from '../cards';
 import { type Match, matches, attackingGroups } from '../abilities';
-import { alignments, countControlled } from '../stats';
-import { structureCards } from '../geometry';
+import { alignments, countControlled, power } from '../stats';
+import { openArrows, structureCards, subtree } from '../geometry';
 import { rollDie, roll2d6, shuffle } from '../rng';
 import {
-  activePlayer, canAid, canEnterPlay, canOppose, controllerOf2, currentOutcome, destroyGroup, discardCard,
-  drawPlot, giveToken, isPrivileged, liveEffects, log, player, playResourceCard, protectedPlayer, tokenBarred,
+  activePlayer, askChoice, attackCancelled, canAid, canEnterPlay, canOppose, controllerOf2, currentOutcome, destroyGroup,
+  discardCard, drawPlot, giveToken, isCancelled, isPrivileged, liveEffects, log, moveSubtree, player, playResourceCard,
+  protectedPlayer, tokenBarred,
 } from '../game';
 
 // ---------------------------------------------------------------- helpers
@@ -104,6 +106,11 @@ function bonus(s: GameState, pl: string, self: string, ctx: AttackCtx, amount: n
   (side === 'attack' ? ctx.attackBonus : ctx.defenseBonus).push(entry);
 }
 
+/** A live effect produced by a card on its own (not an activated ability), recorded like an ability use. */
+function hookEffect(s: GameState, ctx: AttackCtx, self: string, pl: string, id: string, effect: PlotEffect) {
+  ctx.plays.push({ iid: `ability:${self}:${id}:${s.version}:${ctx.plays.length}`, player: pl, play: { card: self }, effect, ability: self });
+}
+
 const needAttack = (ctx?: AttackCtx) => (!ctx ? 'Use this during an attack.' : null);
 
 /** "Cancel the action of …": target a Group acting in the current attack. */
@@ -136,42 +143,204 @@ function clipperCheck(s: GameState, self: string, gone?: string) {
 interface SoulDebt { rival: string; kind: 'capture' | 'destroy' }
 const debts = (s: GameState, self: string) => ((data(s, self).pending as SoulDebt[] | undefined) ?? []);
 
-/** Crystal Skull / Shroud of Turin: remember the cards drawn at the start of this turn. */
-function rememberDraws(s: GameState, self: string) {
-  const pl = ctrl(s, self);
-  if (!pl) return;
-  const hand = player(s, pl).hand;
-  const lastOf = (t: string) => [...hand].reverse().find((i) => def(s, i).type === t || (t === 'Group' && def(s, i).type === 'Resource'));
-  Object.assign(data(s, self), { turn: s.turn, plot: lastOf('Plot'), group: lastOf('Group'), used: false });
+// ---------------------------------------------------------------- draw helpers (Crystal Skull, Shroud of Turin)
+
+type DeckKind = 'plot' | 'group';
+/**
+ * A card that changes how a draw is made puts the card just drawn back on top of its deck and owes its
+ * controller that draw. Owed draws are settled one at a time with a question, in order, so each one
+ * sees the deck as the previous one left it.
+ */
+function oweDraw(s: GameState, self: string, pl: string, deck: DeckKind, card: string): boolean {
+  const p0 = player(s, pl);
+  if (!p0.hand.includes(card)) return false; // another card already took this draw over
+  p0.hand = p0.hand.filter((i) => i !== card);
+  s.cards[card].zone = deck === 'plot' ? 'plotDeck' : 'groupDeck';
+  (deck === 'plot' ? p0.plotDeck : p0.groupDeck).unshift(card);
+  const d = data(s, self);
+  const owed = [...((d.owed as DeckKind[] | undefined) ?? []), deck];
+  d.owed = owed;
+  return owed.length === 1; // nothing is being asked yet: ask now
 }
+/** Settle one owed draw: take `iid` out of the deck into its owner's hand. */
+function takeFromDeck(s: GameState, pl: string, deck: DeckKind, iid: string) {
+  const p0 = player(s, pl);
+  const pile = deck === 'plot' ? p0.plotDeck : p0.groupDeck;
+  const i = pile.indexOf(iid);
+  if (i >= 0) pile.splice(i, 1);
+  s.cards[iid].zone = 'hand';
+  p0.hand.push(iid);
+}
+/** One owed draw is settled; ask about the next one, if any. */
+function nextOwed(s: GameState, self: string, pl: string, ask: (s: GameState, self: string, pl: string) => void) {
+  const d = data(s, self);
+  d.owed = ((d.owed as DeckKind[] | undefined) ?? []).slice(1);
+  if ((d.owed as DeckKind[]).length) ask(s, self, pl);
+}
+
+function askSkull(s: GameState, self: string, pl: string) {
+  const top = player(s, pl).plotDeck.slice(0, 3);
+  if (top.length < 2) {
+    // Nothing to choose from: the draw is made normally.
+    if (top.length) takeFromDeck(s, pl, 'plot', top[0]);
+    nextOwed(s, self, pl, askSkull);
+    return;
+  }
+  askChoice(s, pl, {
+    key: 'crystal-skull', source: self, min: 1, max: top.length,
+    question: 'Crystal Skull: pick the Plot you draw from the top three of your deck. The others go back on top, unless you also mark them for the bottom.',
+    options: [
+      ...top.map((i) => ({ id: `take:${i}`, label: `Draw ${cardName(s, i)}` })),
+      ...top.map((i) => ({ id: `bottom:${i}`, label: `Put ${cardName(s, i)} at the bottom` })),
+    ],
+  });
+}
+registerChoice('crystal-skull', {
+  resolve(s, pl, picked, d) {
+    const self = d.source as string;
+    const takes = picked.filter((x) => x.startsWith('take:')).map((x) => x.slice(5));
+    if (takes.length !== 1) throw new RuleError('Pick exactly one of the three Plots to draw.');
+    const pile = player(s, pl).plotDeck;
+    const top = pile.slice(0, 3);
+    const keep = top.includes(takes[0]) ? takes[0] : top[0];
+    if (keep) {
+      const toBottom = picked.filter((x) => x.startsWith('bottom:')).map((x) => x.slice(7)).filter((i) => i !== keep && top.includes(i));
+      pile.splice(0, top.length);
+      pile.unshift(...top.filter((i) => i !== keep && !toBottom.includes(i)));
+      pile.push(...toBottom);
+      s.cards[keep].zone = 'hand';
+      player(s, pl).hand.push(keep);
+      log(s, `${player(s, pl).name} draws a Plot with the Crystal Skull${toBottom.length ? ` and puts ${toBottom.length} at the bottom of the deck` : ''}.`, pl);
+    }
+    nextOwed(s, self, pl, askSkull);
+  },
+  ai: (_s, _pl, options) => [options[0].id],
+});
+
+function askShroud(s: GameState, self: string, pl: string) {
+  const deck = (data(s, self).owed as DeckKind[])[0];
+  const pile = deck === 'plot' ? player(s, pl).plotDeck : player(s, pl).groupDeck;
+  if (pile.length < 2) {
+    if (pile.length) takeFromDeck(s, pl, deck, pile[0]);
+    nextOwed(s, self, pl, askShroud);
+    return;
+  }
+  askChoice(s, pl, {
+    key: 'shroud-of-turin', source: self, min: 1, max: 1, data: { deck },
+    question: `Shroud of Turin: the top card of your ${deck === 'plot' ? 'Plot' : 'Group'} deck is ${cardName(s, pile[0])}. Draw it, or leave it there and draw the bottom card without looking?`,
+    options: [{ id: 'top', label: `Draw ${cardName(s, pile[0])}` }, { id: 'bottom', label: 'Draw the bottom card instead' }],
+  });
+}
+registerChoice('shroud-of-turin', {
+  resolve(s, pl, picked, d) {
+    const self = d.source as string;
+    const deck = d.deck as DeckKind;
+    const pile = deck === 'plot' ? player(s, pl).plotDeck : player(s, pl).groupDeck;
+    const card = picked[0] === 'bottom' ? pile[pile.length - 1] : pile[0];
+    if (card) {
+      takeFromDeck(s, pl, deck, card);
+      if (picked[0] === 'bottom') log(s, `${player(s, pl).name} leaves the top card and draws from the bottom (Shroud of Turin).`, pl);
+    }
+    nextOwed(s, self, pl, askShroud);
+  },
+});
+
+// ---------------------------------------------------------------- choices: Ark of the Covenant, Bigfoot, Immortality Serum
+
+registerChoice('ark-of-the-covenant', {
+  resolve(s, _pl, picked, d) {
+    const g = picked[0];
+    if (!inPlay(s, g)) return;
+    log(s, `${cardName(s, g)} is lost to the Ark of the Covenant.`, d.by as string);
+    destroyGroup(s, g, d.by as string);
+  },
+  // The computer gives up its weakest Group.
+  ai: (s, _pl, options) => [[...options].sort((a, b) => (def(s, a.id).power ?? 0) - (def(s, b.id).power ?? 0))[0].id],
+});
+
+registerChoice('bigfoot', {
+  resolve(s, pl, picked, d) {
+    const self = d.source as string;
+    const g = picked[0];
+    const place = d.place as string;
+    if (g === 'no' || !active(s, self) || ctrl(s, self) !== pl || s.cards[self].tokens < 1) return;
+    s.cards[self].tokens--;
+    const rest = (d.payers as string[]).filter((x) => x !== g && inPlay(s, x));
+    const total = rest.reduce((n, x) => n + power(s, x), 0);
+    const need = 3 * (def(s, place).power ?? 0);
+    if (inPlay(s, place) && total < need) {
+      s.cards[place].devastated = true;
+      log(s, `Bigfoot cancels ${cardName(s, g)}'s action: the Relief falls short and ${cardName(s, place)} stays Devastated.`, pl);
+    } else log(s, `Bigfoot cancels ${cardName(s, g)}'s action, but the other Groups still send enough Relief.`, pl);
+  },
+  ai: (_s, _pl, options) => [options[options.length > 1 ? 1 : 0].id],
+});
+
+function offerSerum(s: GameState, self: string, target: string, from: string | undefined) {
+  const pl = ctrl(s, self);
+  if (!pl || !unlinked(s, self) || !from || from === pl || !inPlay(s, target) || !personality(s, target) || protectedPlayer(s, pl, from)) return;
+  const spots = structureCards(s, pl).flatMap((m) => openArrows(s, m).map((side) => ({
+    id: `${m}|${side}`, label: `Take ${cardName(s, target)}, placed on ${cardName(s, m)} (${side.toLowerCase()} arrow)`,
+  })));
+  if (!spots.length) return;
+  askChoice(s, pl, {
+    key: 'immortality-serum', source: self, min: 1, max: 1, data: { target },
+    question: `Immortality Serum: a rival has just played ${cardName(s, target)}. Take control of it with no roll, and let the Serum serve it?`,
+    options: [{ id: 'no', label: 'Keep the Serum for later' }, ...spots],
+  });
+}
+registerChoice('immortality-serum', {
+  resolve(s, pl, picked, d) {
+    if (picked[0] === 'no') return;
+    const self = d.source as string;
+    const t = d.target as string;
+    const [m, side] = picked[0].split('|') as [string, Side];
+    if (!inPlay(s, t) || !personality(s, t) || !unlinked(s, self) || ctrl(s, self) !== pl || !own(s, pl, m) || !openArrows(s, m).includes(side)) {
+      log(s, 'The Immortality Serum can no longer be used on that Personality.', pl);
+      return;
+    }
+    const from = s.cards[t].controller;
+    moveSubtree(s, t, pl, m, side, 'hand');
+    for (const g of subtree(s, t)) { s.cards[g].tokens = 0; s.cards[g].capturedTurn = s.turn; }
+    for (const r of Object.values(s.cards)) if (r.zone === 'resources' && r.linkedTo === t) r.controller = pl;
+    s.cards[self].linkedTo = t;
+    log(s, `${player(s, pl).name} uses the Immortality Serum to take control of ${cardName(s, t)}; the Serum now serves it.`, pl);
+    hooksOf(s, t)?.onEnterPlay?.(s, t);
+    fireHooks(s, (h, c) => h.onCapture?.(s, c, t, pl, from));
+  },
+  // The computer always takes the Personality.
+  ai: (_s, _pl, options) => [options[options.length > 1 ? 1 : 0].id],
+});
 
 // ---------------------------------------------------------------- the cards
 
-const hallucinationCancel = cancelAction('Cancel a Personality\'s action', 'a Personality', (s, g) => personality(s, g));
+/** Eliza gives `iid` (the Group or Illuminati it is attached to) an extra action: a Computer Group or the Network, one Eliza each. */
+function elizaBoosts(s: GameState, self: string, iid: string): boolean {
+  const ok = def(s, iid).type === 'Illuminati' ? s.cards[iid].cardId === 'the-network' : is(s, iid, { attributes: ['Computer'] });
+  return ok && firstAttached(s, iid, ['eliza'], () => true) === self;
+}
+
+const hallucinationCancel =cancelAction('Cancel a Personality\'s action', 'a Personality', (s, g) => personality(s, g));
 
 
 const T: Record<string, CardHooks> = {
-  // Re-rolls are offered as a free action in the roll window rather than happening on their own.
-  // PENDING: an automatic "after the roll" trigger (the player must use the ability to get the re-roll).
+  // Automatic: once everyone has passed after the roll, a qualifying result is re-rolled (once per
+  // attack) and the roll window opens again so players can respond to the new roll.
   'angel-s-feather': {
     linkTo: (s, _self, g) => alignments(s, g).includes('Peaceful'),
-    actions: [{
-      id: 'reroll', label: 'Re-roll the dice', timing: ['roll'], usesToken: false, ai: 'boostDefense',
-      check(s, pl, self, _p, ctx) {
-        if (!ctx?.roll) return 'Use this right after the dice are rolled.';
-        if (usedInAttack(ctx, self)) return 'Angel\'s Feather already re-rolled this attack.';
-        const g = linkedGroup(s, self);
-        const out = currentOutcome(s, ctx);
-        if (ctx.type === 'control' && !ctx.instant && g && ctx.attacker === g && alignments(s, g).includes('Peaceful') && out === 'failure') return null;
-        if (ctx.targetPlayer === pl && own(s, pl, ctx.target) && alignments(s, ctx.target).includes('Peaceful') && out === 'success') return null;
-        return 'Only a failed Attack to Control by the linked Peaceful Group, or a successful attack on one of your Peaceful Groups.';
-      },
-      apply(s, pl) {
-        const dice = roll2d6(s);
-        log(s, `Angel's Feather: re-roll ${dice[0]} + ${dice[1]} = ${dice[0] + dice[1]}.`, pl);
-        return { t: 'reroll', dice };
-      },
-    }],
+    beforeAttackResult(s, self, ctx) {
+      const pl = ctrl(s, self);
+      if (!pl || !active(s, self) || !ctx.roll || usedInAttack(ctx, self) || attackCancelled(ctx)) return false;
+      const g = linkedGroup(s, self);
+      const out = currentOutcome(s, ctx);
+      const ownFailed = ctx.type === 'control' && !ctx.instant && !!g && ctx.attacker === g && alignments(s, g).includes('Peaceful') && out === 'failure';
+      const hitMine = ctx.targetPlayer === pl && own(s, pl, ctx.target) && alignments(s, ctx.target).includes('Peaceful') && out === 'success';
+      if (!ownFailed && !hitMine) return false;
+      const dice = roll2d6(s);
+      log(s, `Angel's Feather: the attack is rolled again — ${dice[0]} + ${dice[1]} = ${dice[0] + dice[1]}, and this roll counts.`, pl);
+      hookEffect(s, ctx, self, pl, 'reroll', { t: 'reroll', dice });
+      return true;
+    },
   },
 
   // The note is kept on the card (secret in the UI).
@@ -188,13 +357,20 @@ const T: Record<string, CardHooks> = {
       log(s, `The Ark of the Covenant is revealed: it protected ${cardName(s, victim)}.`, pl);
       const ctx = s.attack;
       const destroyer = ctx && !ctx.instant ? ctx.attacker : undefined;
-      // PENDING: Instant attacks (Disasters, Assassinations) have no destroying Group, so nothing happens.
+      // The Ark strikes back at the Group that destroyed the named one. Instant attacks (Disasters,
+      // Assassinations) and attacks made by cards are made by a Plot, not by a Group, so there is no
+      // destroying Group to strike.
       if (!destroyer || !inPlay(s, destroyer)) return;
       if (def(s, destroyer).type === 'Illuminati') {
-        // PENDING: the rival should choose which Group to lose; the weakest one is taken instead.
+        // The Illuminati's owner chooses which of his Groups is lost.
         const rival = s.cards[destroyer].controller!;
-        const lose = structureCards(s, rival).filter((g) => isGroup(s, g)).sort((a, b) => (def(s, a).power ?? 0) - (def(s, b).power ?? 0))[0];
-        if (lose) { log(s, `${cardName(s, lose)} is lost to the Ark.`, pl); destroyGroup(s, lose, pl); }
+        const options = structureCards(s, rival).filter((g) => isGroup(s, g)).map((g) => ({ id: g, label: cardName(s, g) }));
+        if (options.length) {
+          askChoice(s, rival, {
+            key: 'ark-of-the-covenant', source: self, min: 1, max: 1, options, data: { by: pl },
+            question: `The Ark of the Covenant protected ${cardName(s, victim)}: your Illuminati destroyed it, so choose one of your Groups to lose.`,
+          });
+        }
       } else {
         log(s, `${cardName(s, destroyer)} is destroyed by the Ark.`, pl);
         destroyGroup(s, destroyer, pl);
@@ -204,8 +380,23 @@ const T: Record<string, CardHooks> = {
 
   'bigfoot': {
     hasAction: true,
-    // PENDING: only Media actions inside an attack can be cancelled (other actions have no response window).
+    // Media actions in an attack are cancelled with the ability; Relief sent by a rival's Media Group is
+    // offered for cancelling when it happens (the 'relief' event).
+    // PENDING: other Media actions outside attacks (moving, buying Plots, activated abilities) raise no
+    // event and open no response window, so they cannot be cancelled.
     actions: [cancelAction('Cancel a Media Group\'s action', 'a Media Group', (s, g) => is(s, g, { attributes: ['Media'] }))],
+    onEvent(s, self, e) {
+      const pl = ctrl(s, self);
+      if (e.type !== 'relief' || !pl || !active(s, self) || s.cards[self].tokens < 1 || !e.player || e.player === pl || !e.card) return;
+      if (protectedPlayer(s, pl, e.player)) return;
+      const media = (e.cards ?? []).filter((g) => is(s, g, { attributes: ['Media'] }));
+      if (!media.length) return;
+      askChoice(s, pl, {
+        key: 'bigfoot', source: self, min: 1, max: 1, data: { place: e.card, payers: e.cards },
+        question: `Bigfoot: a Media Group helps send Relief to ${cardName(s, e.card)}. Spend Bigfoot's action to cancel it?`,
+        options: [{ id: 'no', label: 'Let the Relief through' }, ...media.map((g) => ({ id: g, label: `Cancel ${cardName(s, g)}'s action` }))],
+      });
+    },
     attackMod: (s, self, ctx, side) =>
       side === 'attack' && active(s, self) && ctx.type === 'control' && !ctx.instant && ctx.attackerPlayer === ctrl(s, self) && is(s, ctx.target, { attributes: ['Green'] }) ? 3 : 0,
   },
@@ -214,8 +405,11 @@ const T: Record<string, CardHooks> = {
     linkTo: (s, _self, g) => is(s, g, { attributes: ['Magic'] }),
     powerMod: (s, self, iid) => (unlinked(s, self) && isOwnIlluminati(s, self, iid) ? 1 : 0),
     globalMod: (s, self, iid) => (unlinked(s, self) && isOwnIlluminati(s, self, iid) ? 1 : 0),
-    // PENDING: neither of the Magic Group's two actions may be an Attack to Destroy (no hook to forbid an attack).
     extraTokens: (s, self, iid) => (linkedGroup(s, self) === iid && is(s, iid, { attributes: ['Magic'] }) ? 1 : 0),
+    // Neither of the linked Magic Group's actions may be an Attack to Destroy.
+    forbidAttack: (s, self, attacker, _target, type) =>
+      type === 'destroy' && !!attacker && linkedGroup(s, self) === attacker && is(s, attacker, { attributes: ['Magic'] })
+        ? `${cardName(s, attacker)} acts twice a turn thanks to the Book of Kells, so it may not attack to destroy.` : null,
   },
 
   'center-for-weird-studies': {
@@ -260,36 +454,13 @@ const T: Record<string, CardHooks> = {
     onDestroy: (s, self, victim) => clipperCheck(s, self, victim),
   },
 
-  // PENDING: the engine has no "whenever you draw a Plot" hook. Encoded for the Plot drawn at the
-  // start of your turn: put it back and take any one of the top three, the other two go on top or bottom.
+  // Every Plot its controller draws: he picks one of the top three; each of the other two goes back on
+  // top or to the bottom (his choice, card by card) before the next draw.
   'crystal-skull': {
-    onTurnStart: rememberDraws,
-    actions: [{
-      id: 'search', label: 'Look at the top three Plots and take one', timing: ['main'], usesToken: false, needs: { target: 'plot', modes: ['top', 'bottom'] }, ai: 'never',
-      check(s, pl, self, p) {
-        const d = data(s, self);
-        const p0 = player(s, pl);
-        if (d.turn !== s.turn || d.used || !d.plot || !p0.hand.includes(d.plot as string)) return 'Use this right after drawing your Plot at the start of your turn.';
-        const pool = [d.plot as string, ...p0.plotDeck.slice(0, 2)];
-        if (!p.target || !pool.includes(p.target)) return 'Choose one of the top three Plot cards.';
-        return null;
-      },
-      apply(s, pl, self, p) {
-        const d = data(s, self);
-        const p0 = player(s, pl);
-        const drawn = d.plot as string;
-        p0.hand = p0.hand.filter((i) => i !== drawn);
-        s.cards[drawn].zone = 'plotDeck';
-        p0.plotDeck.unshift(drawn);
-        const top3 = p0.plotDeck.splice(0, 3);
-        const keep = p.target!;
-        const rest = top3.filter((i) => i !== keep);
-        if (p.mode === 'bottom') p0.plotDeck.push(...rest); else p0.plotDeck.unshift(...rest);
-        s.cards[keep].zone = 'hand';
-        p0.hand.push(keep);
-        d.used = true;
-      },
-    }],
+    onDraw(s, self, pl, deck, card) {
+      if (deck !== 'plot' || ctrl(s, self) !== pl || !active(s, self)) return;
+      if (oweDraw(s, self, pl, 'plot', card)) askSkull(s, self, pl);
+    },
   },
 
   'cyborg-soldiers': {
@@ -331,17 +502,20 @@ const T: Record<string, CardHooks> = {
   // Max one per Group (errata): only the first Eliza on a Group gives the extra action.
   'eliza': {
     linkTo: (s, self, g) => is(s, g, { attributes: ['Computer'] }) && !Object.values(s.cards).some((c) => c.iid !== self && c.cardId === 'eliza' && c.zone === 'resources' && c.linkedTo === g),
-    extraTokens: (s, self, iid) => {
+    extraTokens: (s, self, iid) => (attachedTo(s, self) === iid && elizaBoosts(s, self, iid) ? 1 : 0),
+    // The extra action is the last one the Group takes in a turn in which Eliza gave it a token: at the
+    // start of the turn Eliza notes whether it gives one; Eliza crashes when the Group leads an attack
+    // with its last token that turn and rolls 11 or 12.
+    onTurnStart(s, self) {
       const at = attachedTo(s, self);
-      if (at !== iid) return 0;
-      const ok = def(s, iid).type === 'Illuminati' ? s.cards[iid].cardId === 'the-network' : is(s, iid, { attributes: ['Computer'] });
-      return ok && firstAttached(s, iid, ['eliza'], () => true) === self ? 1 : 0;
+      const gives = !!at && elizaBoosts(s, self, at) && !tokenBarred(s, at) && s.cards[at].capturedTurn !== s.turn;
+      data(s, self).extra = gives ? { turn: s.turn, group: at } : undefined;
     },
-    // PENDING: the engine does not track which action is the "extra" one. Approximation: Eliza crashes
-    // when the linked Group leads an attack that rolls 11 or 12 while spending its last Action token.
     onAttackEnd(s, self, ctx) {
       const at = attachedTo(s, self);
-      if (!at || ctx.attacker !== at || naturalRoll(ctx) < 11 || s.cards[at].tokens > 0) return;
+      const extra = data(s, self).extra as { turn: number; group: string } | undefined;
+      if (!at || !extra || extra.turn !== s.turn || extra.group !== at) return;
+      if (ctx.attacker !== at || naturalRoll(ctx) < 11 || s.cards[at].tokens > 0) return;
       const pl = ctrl(s, self)!;
       log(s, 'Eliza crashes! It is discarded and all hidden Plots of its controller are revealed.', pl);
       for (const i of player(s, pl).hand) if (def(s, i).type === 'Plot') s.cards[i].exposed = true;
@@ -405,9 +579,12 @@ const T: Record<string, CardHooks> = {
     }],
   },
 
-  // PENDING: Hidden City cannot be targeted by Disasters (the engine only attacks Groups), so it never
-  // defends as a Power 10 Place; and a destroyed Hidden City still blocks a new one (canEnterPlay).
+  // Once destroyed, any player may bring in another Hidden City.
+  // PENDING: Disasters cannot strike Hidden City, so it never defends as a Power 10 Place that cannot be
+  // Devastated. The Disaster Plots only accept a Place Group in a Power Structure, and the attack code
+  // cannot take a Resource as its target.
   'hidden-city': {
+    replaceableWhenDestroyed: true,
     powerMod: (s, self, iid) => (isOwnIlluminati(s, self, iid) ? 2 : 0),
     globalMod: (s, self, iid) => (isOwnIlluminati(s, self, iid) ? 2 : 0),
   },
@@ -433,10 +610,10 @@ const T: Record<string, CardHooks> = {
         },
       },
     ],
-    // PENDING: no hook forbids declaring the attack; an Attack to Control on a Peaceful Group simply
-    // cannot succeed. Automatic takeovers of Peaceful Groups are not blocked.
-    attackMod: (s, self, ctx, side) =>
-      side === 'attack' && active(s, self) && ctx.type === 'control' && ctx.attackerPlayer === ctrl(s, self) && alignments(s, ctx.target).includes('Peaceful') ? -100 : 0,
+    // Its controller may not take control of Peaceful Groups: no Attack to Control, no automatic takeover.
+    forbidAttack: (s, self, _attacker, target, type, attackerPlayer) =>
+      type !== 'destroy' && active(s, self) && attackerPlayer === ctrl(s, self) && alignments(s, target).includes('Peaceful')
+        ? `While you hold Hitler's Brain you cannot take control of a Peaceful Group such as ${cardName(s, target)}.` : null,
   },
 
   'immortality-serum': {
@@ -450,8 +627,15 @@ const T: Record<string, CardHooks> = {
       const g = s.cards[self].linkedTo;
       return side === 'defense' && active(s, self) && ctx.type === 'destroy' && !ctx.instant && ctx.target === g && personality(s, g) ? 5 : 0;
     },
-    // PENDING: taking a Personality just played from a RIVAL's hand is not possible (it would need to be
-    // placed in your structure); only your own Attack to Control on a Personality from hand is covered.
+    // A Personality a rival has just played (automatic takeover, or a successful Attack to Control on it
+    // from his hand): the Serum's controller is asked whether to take it, choosing where it goes.
+    onEvent(s, self, e) {
+      if (e.type === 'takeover' && e.card) offerSerum(s, self, e.card, e.player);
+    },
+    onCapture(s, self, victim, by, from) {
+      if (from === undefined && by !== ctrl(s, self)) offerSerum(s, self, victim, by);
+    },
+    // Your own Personality played from hand: the ability takes it with no roll during your attack.
     actions: [{
       id: 'seize', label: 'Take control of the Personality with no die roll', timing: ['attack'], usesToken: false, ai: 'boostAttack',
       check(s, pl, self, _p, ctx) {
@@ -573,35 +757,14 @@ const T: Record<string, CardHooks> = {
     }],
   },
 
-  // PENDING: the engine has no draw hook. Encoded for the cards drawn at the start of your turn:
-  // swap the Plot (or Group) you drew for the bottom card of that deck; the rejected card goes back on top.
+  // Every Plot or Group card its controller draws: he sees the top card and either draws it or leaves
+  // it on top and draws the bottom card unseen. (With the Crystal Skull also in play, the card that
+  // reacts first handles a Plot draw.)
   'shroud-of-turin': {
-    onTurnStart: rememberDraws,
-    actions: [{
-      id: 'swap', label: 'Take the bottom card instead of the card you drew', timing: ['main'], usesToken: false, needs: { modes: ['plot', 'group'] }, ai: 'never',
-      check(s, pl, self, p) {
-        const d = data(s, self);
-        const card = (p.mode === 'group' ? d.group : d.plot) as string | undefined;
-        const p0 = player(s, pl);
-        const deck = p.mode === 'group' ? p0.groupDeck : p0.plotDeck;
-        if (d.turn !== s.turn || d.used || !card || !p0.hand.includes(card)) return 'Use this right after your draw at the start of your turn.';
-        return deck.length ? null : 'That deck is empty.';
-      },
-      apply(s, pl, self, p) {
-        const d = data(s, self);
-        const isGroupDeck = p.mode === 'group';
-        const card = (isGroupDeck ? d.group : d.plot) as string;
-        const p0 = player(s, pl);
-        const deck = isGroupDeck ? p0.groupDeck : p0.plotDeck;
-        const bottom = deck.pop()!;
-        p0.hand = p0.hand.filter((i) => i !== card);
-        s.cards[card].zone = isGroupDeck ? 'groupDeck' : 'plotDeck';
-        deck.unshift(card);
-        s.cards[bottom].zone = 'hand';
-        p0.hand.push(bottom);
-        d.used = true;
-      },
-    }],
+    onDraw(s, self, pl, deck, card) {
+      if (ctrl(s, self) !== pl || !active(s, self)) return;
+      if (oweDraw(s, self, pl, deck, card)) askShroud(s, self, pl);
+    },
   },
 
   // The choice after each capture/destruction is banked and spent with one of the two free abilities.
@@ -655,8 +818,16 @@ const T: Record<string, CardHooks> = {
     ],
   },
 
-  // PENDING: an attack aided by the Spear should count as Magic for defenses against Magic.
+  // Once the Spear helps an attack, the attacking Groups (leader and helpers) count as Magic for the
+  // rest of that attack, so defenses against Magic apply.
+  // PENDING: a Disaster has no attacking Group, so a Disaster helped by the Spear is not Magic
+  // (the engine checks Magic defenses only against attacking Groups).
   'spear-of-longinus': {
+    attributeMod(s, self, iid, current) {
+      const ctx = s.attack;
+      if (!ctx || current.includes('Magic') || !active(s, self) || !attackingGroups(ctx).includes(iid)) return current;
+      return ctx.plays.some((p) => p.ability === self && !isCancelled(ctx.plays, p.iid)) ? [...current, 'Magic'] : current;
+    },
     actions: [{
       id: 'boost', label: '+1 to an Attack to Destroy or a Disaster', timing: ['attack'], usesToken: false, ai: 'boostAttack',
       check: (_s, _pl, self, _p, ctx) => needAttack(ctx) ?? (ctx!.type !== 'destroy' ? 'Only an Attack to Destroy or a Disaster.' : usedInAttack(ctx!, self) ? 'The Spear already helps this attack.' : null),
@@ -711,11 +882,15 @@ const T: Record<string, CardHooks> = {
       apply(s, _pl, self, p) { s.cards[self].note = p.target; },
     }],
     preventDestroy: (s, self, target) => active(s, self) && s.cards[self].note === target,
-    // Disasters do not check preventDestroy in the engine, so the Grail makes them fail outright.
-    // PENDING: this shows the Grail's bonus before the roll, revealing the note early.
-    attackMod: (s, self, ctx, side) => (side === 'defense' && active(s, self) && !!ctx.disaster && s.cards[self].note === ctx.target ? 100 : 0),
-    onAttackEnd(s, self, ctx) {
-      if (active(s, self) && s.cards[self].note === ctx.target && ctx.type === 'destroy' && (ctx.result === 'success' || ctx.disaster)) data(s, self).revealed = true;
+    // Only when an attack would really destroy or Devastate the Place (everyone has passed after the
+    // roll and it succeeds) is the note revealed and the attack made to fail.
+    beforeAttackResult(s, self, ctx) {
+      const pl = ctrl(s, self);
+      if (!pl || !active(s, self) || s.cards[self].note !== ctx.target || ctx.type !== 'destroy' || currentOutcome(s, ctx) !== 'success') return false;
+      data(s, self).revealed = true;
+      log(s, `The Holy Grail is revealed: it protects ${cardName(s, ctx.target)}, so the attack fails.`, pl);
+      hookEffect(s, ctx, self, pl, 'protect', { t: 'fail' });
+      return false;
     },
     onCapture(s, self, victim) {
       if (!active(s, self) || s.cards[self].note !== victim) return;
@@ -729,7 +904,9 @@ const T: Record<string, CardHooks> = {
       side === 'attack' && active(s, self) && ctx.type === 'control' && !ctx.instant && ctx.attackerPlayer === ctrl(s, self) && is(s, ctx.target, { attributes: ['Science', 'Magic', 'Computer'] }) ? 5 : 0,
   },
 
-  // PENDING: hiding Resources face down under Warehouse 23 (hidden cards inactive and untouchable).
+  // PENDING: hiding new Resources face down under Warehouse 23 (inactive until exposed, unseen and
+  // untouchable by rivals, captured or destroyed with it). The engine has no zone for a card that is in
+  // play but face down, and the online view only hides decks and hands.
   'warehouse-23': {
     onEnterPlay(s, self) { data(s, self).enteredTurn = s.turn; },
     actions: [{
