@@ -3,7 +3,7 @@
 import type { Alignment, AttackCtx, GameState, PlotEffect, PlotPlay, Side } from '../types';
 import type { PlotHandler } from '../plotTypes';
 import { registerPlots } from '../plotTypes';
-import { registerHooks } from '../hooks';
+import { hooksOf, registerHooks } from '../hooks';
 import { OPPOSITE, cardName, def } from '../cards';
 import { abilitiesOf, attackingGroups, matches } from '../abilities';
 import { alignments, attributes, power, resistance } from '../stats';
@@ -13,7 +13,6 @@ import {
   activePlayer, cancelledGroups, currentOutcome, discardCard, giveToken, isCancelled, isSecret, log, placeGroup,
   player, playResourceCard, protectedPlayer, startInstantAttack, takeoverOptions,
 } from '../game';
-import { hooksOf } from '../hooks';
 
 // ---------------------------------------------------------------- helpers
 
@@ -228,17 +227,8 @@ registerPlots({
       if (err) return err;
       return play.payWith?.length === 1 && hasAttr(s, play.payWith[0], 'Media') ? null : 'Pay with the action of one of your Media Groups.';
     },
-    ...(() => {
-      const link = (s: GameState, _pl: string, play: PlotPlay) => {
-        if (!inPlay(s, play.target)) return;
-        s.cards[play.card].linkedTo = play.target;
-        s.cards[play.card].data = { turn: s.turn };
-      };
-      return {
-        apply: (s: GameState, pl: string, play: PlotPlay, ctx?: AttackCtx) => { pay(s, play.payWith); if (ctx) link(s, pl, play); },
-        resolve: link,
-      };
-    })(),
+    apply(s, _pl, play, ctx) { pay(s, play.payWith); if (ctx) linkForTurn(s, play); },
+    resolve: (s, _pl, play) => linkForTurn(s, play),
   },
 
   // ---- alignment changes (same family as Liberal Agenda etc.)
@@ -535,6 +525,12 @@ registerPlots({
     },
   },
 });
+
+function linkForTurn(s: GameState, play: PlotPlay) {
+  if (!inPlay(s, play.target)) return;
+  s.cards[play.card].linkedTo = play.target;
+  s.cards[play.card].data = { turn: s.turn };
+}
 
 function strip(s: GameState, pl: string, play: PlotPlay) {
   const list = play.targets ?? Object.values(s.cards).filter((c) => c.zone === 'structure' && c.controller !== pl && def(s, c.iid).type === 'Group'

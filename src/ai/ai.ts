@@ -5,7 +5,7 @@ import {
   applyAction, attackStrength, canAid, canOppose, checkPlot, currentOutcome, def, openArrows, player,
   plotsInHand, handLimit, power, resistance, structureCards, takeoverOptions, validateAttack, waitingFor,
   alignments, abilitiesOf, PLOTS, subtree, goalCount, goalNeeded, depth, bestLead, plotOptions,
-  HOOKS, checkAbility, resourcesOf, canEnterPlay, type AbilityParams,
+  HOOKS, checkAbility, resourcesOf, canEnterPlay, goalsInHand, goalLimit, type AbilityParams,
 } from '../engine';
 
 /** Activated abilities of our cards with a given AI hint, tried against a few likely targets. */
@@ -258,10 +258,14 @@ export function chooseAction(s: GameState, pl: string): Action {
       return opts.length ? { type: 'takeover', ...opts[0] } : { type: 'skipTakeover' };
     }
     if (s.prompt.kind === 'discardToLimit') {
-      const plots = plotsInHand(s, pl);
-      const excess = plots.length - handLimit(s, pl);
+      // Too many Goal cards (limit 1, UFOs 3) and/or Plots: drop surplus Goals first, then the least useful Plots.
+      const goals = goalsInHand(s, pl);
+      const drop = goals.slice(goalLimit(s, pl));
+      const outside = s.prompt.data?.resume === 'endTurn' || s.players[s.active].id !== pl;
+      const plots = plotsInHand(s, pl).filter((c) => !drop.includes(c));
+      const excess = outside ? plots.length - handLimit(s, pl) : 0;
       const byValue = [...plots].sort((a, b) => (PLOTS[s.cards[a].cardId] ? 1 : 0) - (PLOTS[s.cards[b].cardId] ? 1 : 0));
-      return { type: 'discard', cards: byValue.slice(0, excess) };
+      return { type: 'discard', cards: [...drop, ...byValue.slice(0, Math.max(0, excess))] };
     }
   }
   const w = s.window;

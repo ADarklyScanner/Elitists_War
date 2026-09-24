@@ -1,5 +1,5 @@
 // Supabase Edge Function: the Elitists War game server. The game engine is bundled into game.js
-// by tools/build-server.mjs.
+// by tools/build-server.mjs and loaded from this repository at a pinned commit (see deploy step).
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { handle, SupabaseStore } from './game.js';
 

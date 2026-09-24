@@ -62,13 +62,6 @@ const nwoActive = (s: GameState, cardId: string) =>
 
 // ---------------------------------------------------------------- Goals
 
-/** Goal cards are held in hand, never played; registering them makes them available in decks. */
-const goalCard: PlotHandler = {
-  timing: [],
-  check: () => 'Goal cards are kept in your hand: you win as soon as you meet the condition.',
-  apply: () => undefined,
-};
-
 /** Groups (not the Illuminati) that count for victory: not a Devastated Place or below one. */
 function countedGroups(s: GameState, pl: string): string[] {
   return structureCards(s, pl).filter((iid) => {
@@ -163,9 +156,12 @@ function wwiiiAttack(s: GameState, ctx: AttackCtx): boolean {
         const taker = player(s, s.cards[self].controller!);
         let n = 0;
         for (const p of livePlayers(s)) {
+          // The Lawyers make their controller immune to the I.R.S. tax effect.
+          if (structureCards(s, p.id).some((g) => s.cards[g].cardId === 'lawyers')) continue;
           const top = p.plotDeck.shift();
           if (!top) continue;
           s.cards[top].zone = 'hand';
+          s.cards[top].exposed = false;
           taker.hand.push(top);
           n++;
         }
@@ -221,16 +217,9 @@ const MONSTER_PREY = ['robot-sea-monsters', 'nuclear-power-companies'];
 // ---------------------------------------------------------------- the cards
 
 registerPlots({
-  // Goals (held in hand)
-  'criminal-overlords': goalCard,
-  'hail-eris': goalCard,
-  'the-corporate-masters': goalCard,
-  'kill-for-peace': goalCard,
-  'let-them-eat-cake': goalCard,
-  'power-to-the-people': goalCard,
-  'the-hand-of-madness': goalCard,
-  'up-against-the-wall': goalCard,
-  'power-for-its-own-sake': goalCard,
+  // Goal cards only register their condition (registerGoals above). Registering a PlotHandler
+  // for them would put them in random decks, and the computer player cannot yet discard down to
+  // the Goal-card limit (src/ai/ai.ts only discards Plots over the Plot limit).
   // Held in hand: the engine raises the Goal limit to two while it is held (goalLimit).
   'alternate-goals': {
     timing: [],
