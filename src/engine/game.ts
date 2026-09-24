@@ -240,8 +240,24 @@ function removeFromHand(s: GameState, iid: string) {
   for (const p of s.players) p.hand = p.hand.filter((x) => x !== iid);
 }
 
+/** Is this Resource in play protected from being discarded or targeted by rivals (Count Dracula)? */
+export function resourceProtected(s: GameState, iid: string | undefined): boolean {
+  return !!iid && s.cards[iid]?.zone === 'resources' && anyHook(s, (h, self) => !!h.protectResource?.(s, self, iid));
+}
+
+/** First reason a card in play gives to forbid using `card` against `target`. */
+function forbiddenUse(s: GameState, playerId: string, card: string, target: string | undefined, ctx?: AttackCtx): string | null {
+  for (const self of activeHookCards(s)) {
+    const why = HOOKS[s.cards[self].cardId].forbidUse?.(s, self, playerId, card, target, ctx);
+    if (why) return why;
+  }
+  if (target && resourceProtected(s, target) && s.cards[target].controller !== playerId) return `${cardName(s, target)} is protected and cannot be affected.`;
+  return null;
+}
+
 export function discardCard(s: GameState, iid: string) {
   const c = s.cards[iid];
+  if (resourceProtected(s, iid)) { log(s, `${cardName(s, iid)} is protected and stays in play.`); return; }
   const wasPlot = def(s, iid).type === 'Plot' && (c.zone === 'hand' || c.zone === 'table');
   removeFromHand(s, iid);
   c.zone = 'discard';
@@ -270,6 +286,7 @@ export function canEnterPlay(s: GameState, iid: string, playerId?: string): bool
     if (!isUnique(s, iid)) return true;
     return !Object.values(s.cards).some((c) => c.cardId === cardId && c.iid !== iid && (c.zone === 'resources' || c.zone === 'destroyed'));
   }
+  if (HOOKS[cardId]?.multipleCopies) return s.cards[iid].zone !== 'structure' && s.cards[iid].zone !== 'destroyed';
   return !Object.values(s.cards).some((c) => c.cardId === cardId && c.iid !== iid && (c.zone === 'structure' || c.zone === 'destroyed'));
 }
 
@@ -875,6 +892,12 @@ export function attackStrength(s: GameState, ctx: AttackCtx): StrengthBreakdown 
       add('a', h.attackMod(s, self, ctx, 'attack'), cardName(s, self));
       add('d', h.attackMod(s, self, ctx, 'defense'), cardName(s, self));
     }
+    // The target's own attack modifiers, which also work while it is attacked from hand.
+    const th = HOOKS[s.cards[tgt].cardId]?.asTarget;
+    if (th && (s.cards[tgt].zone === 'hand' || activeHookCards(s).includes(tgt))) {
+      add('a', th(s, tgt, ctx, 'attack'), td.name);
+      add('d', th(s, tgt, ctx, 'defense'), td.name);
+    }
   }
   return { attack: atk, defense: dfn, strength: atk - dfn, lines };
 }
@@ -1079,7 +1102,7 @@ export function destroyGroup(s: GameState, iid: string, by: string) {
     else discardCard(s, other.iid);
   }
   Object.assign(c, { zone: 'destroyed', controller: undefined, master: undefined, x: undefined, y: undefined, tokens: 0, mods: [], devastated: false });
-  if (!player(s, by).destroyedCredit.includes(iid)) player(s, by).destroyedCredit.push(iid);
+  if (!HOOKS[c.cardId]?.noDestroyCredit && !player(s, by).destroyedCredit.includes(iid)) player(s, by).destroyedCredit.push(iid);
   if (draws) drawPlot(s, player(s, by), draws);
   noteLastPuppet(s, prev, by);
 }
@@ -1126,6 +1149,8 @@ export function checkPlot(s: GameState, playerId: string, play: PlotPlay, declar
   if (activePlayer(s).id === playerId && (s.turnFlags.extraTurn || s.turnFlags.restricted)) return s.turnFlags.extraTurn ? 'No Plots may be played during an extra turn.' : 'This turn you may only draw cards and place Action tokens.';
   // Immunities also stop Plots aimed at a Group (R033 excepts Plots in general; card hooks may say otherwise).
   if (play.target && s.cards[play.target]?.zone === 'structure' && anyHook(s, (h, self) => !!h.immune?.(s, self, play.target!, play.card))) return `${cardName(s, play.target)} is immune to ${d.name}.`;
+  const forbidden = forbiddenUse(s, playerId, play.card, play.target, ctx);
+  if (forbidden) return forbidden;
   // First-turn protection (R001): no cards against a player who has not finished his first turn.
   const tgtOwner = play.target && s.cards[play.target] ? (s.cards[play.target].controller ?? s.cards[play.target].owner) : undefined;
   if (protectedPlayer(s, playerId, tgtOwner)) return 'That player has not finished a first turn yet.';
@@ -1527,6 +1552,8 @@ export function applyAction(state: GameState, playerId: string, action: Action):
   if (!isOver(s)) checkElimination(s);
   enforceHandLimits(s);
   advance(s);
+  // Plots that cannot be exposed (hidden beneath a card) are never left face up.
+  for (const c of Object.values(s.cards)) if (c.exposed && c.zone === 'hand' && anyHook(s, (h, self) => !!h.preventExpose?.(s, self, c.iid))) c.exposed = false;
   s.version++;
   return s;
 }
@@ -1557,6 +1584,8 @@ export function checkAbility(s: GameState, playerId: string, card: string, abili
   if (s.window && !waitingFor(s).includes(playerId)) return 'You have already passed.';
   if (ab.usesToken && (c.tokens < 1 || tokenBarred(s, card))) return `${cardName(s, card)} has no Action token.`;
   if (ab.oncePerTurn && c.abilityTurns?.[abilityId] === s.turn) return 'Already used this turn.';
+  const forbidden = forbiddenUse(s, playerId, card, params.target, s.attack);
+  if (forbidden) return forbidden;
   return ab.check(s, playerId, card, params, s.attack);
 }
 
