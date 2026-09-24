@@ -50,7 +50,7 @@ Illuminati card); and `rivalHand` (a card in a rival's hand). For a set of cards
 **Events.** Timing `'event'` plus `events: ['takeover', 'destroyed', …]` makes a Plot playable only
 in the response window that follows that event. The window shows the event in `s.window.event`. Engine code
 announces events with `raiseEvent(s, {type, player, card, cards, by, data}, then?)`. The events are
-`turnStart`, `drawn`, `takeover`, `destroyed`, `devastated`, `discarded`, `plotResolved` and `relief`.
+`turnStart`, `drawn`, `takeover`, `destroyed` (with `data.layout`, where the Group and its puppets were), `devastated`, `discarded`, `plotResolved`, `relief` and `failedTakeover` (a Group played from hand was not taken over).
 The `onEvent` hook runs at once for every event.
 
 **Choices.** When a card has to ask someone to choose, call
