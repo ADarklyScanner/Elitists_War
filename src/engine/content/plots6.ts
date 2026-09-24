@@ -225,7 +225,7 @@ registerPlots({
     },
   },
 
-  // A rival's automatic takeover: the Group goes back to his hand and he picks another. One Group's action.
+  // A rival's automatic takeover: the Group goes back to their hand and they pick another. One Group's action.
   'botched-contact': {
     timing: ['event'], events: ['takeover'],
     needs: { pay: 'tokens' },

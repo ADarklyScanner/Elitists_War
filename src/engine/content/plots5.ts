@@ -61,7 +61,7 @@ function chosenRival(s: GameState, pl: string, play: PlotPlay): string | undefin
 }
 function rivalError(s: GameState, pl: string, play: PlotPlay): string | null {
   const r = chosenRival(s, pl, play);
-  if (!r) return 'Choose a rival (pick one of his cards in play).';
+  if (!r) return 'Choose a rival (pick one of their cards in play).';
   if (protectedPlayer(s, pl, r)) return 'That player has not finished a first turn yet.';
   return null;
 }

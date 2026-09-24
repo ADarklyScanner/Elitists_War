@@ -559,7 +559,7 @@ registerHooks({
 
   'society-for-creative-anarchism': {
     actions: [{
-      id: 'discardTopGroup', label: 'Force a rival to discard the top card of his Group deck', timing: ['anytime'], usesToken: true, ai: 'never',
+      id: 'discardTopGroup', label: 'Force a rival to discard the top card of their Group deck', timing: ['anytime'], usesToken: true, ai: 'never',
       check(s, pl, _self, p) {
         const err = rivalCheck(s, pl, p);
         if (err) return err;

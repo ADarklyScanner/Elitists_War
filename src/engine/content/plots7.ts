@@ -251,8 +251,8 @@ registerPlots({
     check(s, pl, play) {
       const e = eventOf(s, play);
       const g = e?.card;
-      if (e?.type !== 'failedTakeover' || !g || !e.player || e.player === pl) return 'Play this right after a rival fails to take over a Group from his hand.';
-      if (!player(s, e.player).hand.includes(g) || s.cards[g].zone !== 'hand') return 'That Group is no longer in his hand.';
+      if (e?.type !== 'failedTakeover' || !g || !e.player || e.player === pl) return 'Play this right after a rival fails to take over a Group from their hand.';
+      if (!player(s, e.player).hand.includes(g) || s.cards[g].zone !== 'hand') return 'That Group is no longer in their hand.';
       if (protectedPlayer(s, pl, e.player)) return 'That player has not finished a first turn yet.';
       if (!play.helper) return 'Choose the Group that makes the attack.';
       return validateAttack(s, pl, knock(s, play, g), { outOfTurn: true, anyHand: true });
@@ -395,7 +395,7 @@ registerPlots({
       if (ill.data?.investigated) { log(s, `${player(s, who).name} has already faced a Senate investigation: this one achieves nothing.`, pl); return; }
       ill.data = { ...ill.data, investigated: true };
       s.turnFlags.restricted = true;
-      log(s, `${player(s, who).name} is under investigation: this turn he can only draw cards and place Action tokens.`, pl);
+      log(s, `${player(s, who).name} is under investigation: this turn they can only draw cards and place Action tokens.`, pl);
     },
   },
 
@@ -421,7 +421,7 @@ registerPlots({
       from.discard = from.discard.filter((x) => x !== c);
       Object.assign(s.cards[c], { zone: 'hand', exposed: false, controller: undefined, linkedTo: undefined });
       player(s, pl).hand.push(c);
-      log(s, `${player(s, pl).name} steals the plans: ${cardName(s, c)} goes into his hand.`, pl);
+      log(s, `${player(s, pl).name} steals the plans: ${cardName(s, c)} goes into their hand.`, pl);
     },
   },
 
@@ -529,7 +529,7 @@ registerPlots({
           min: 1, max: 1,
         });
       }
-      log(s, 'Upheaval! Every player must give up one of his Groups.', pl);
+      log(s, 'Upheaval! Every player must give up one of their Groups.', pl);
     },
   },
 });

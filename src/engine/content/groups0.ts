@@ -634,7 +634,7 @@ registerHooks({
         const r = rivalFor(s, pl, p);
         const err = rivalError(s, pl, r);
         if (err) return err;
-        if (structureCards(s, r!).some((g) => s.cards[g].cardId === 'lawyers')) return 'That rival\'s Lawyers make him immune to the I.R.S.';
+        if (structureCards(s, r!).some((g) => s.cards[g].cardId === 'lawyers')) return 'That rival\'s Lawyers make them immune to the I.R.S.';
         return player(s, r!).plotDeck.length ? null : 'That rival\'s Plot deck is empty.';
       },
       apply(s, pl, _self, p) {

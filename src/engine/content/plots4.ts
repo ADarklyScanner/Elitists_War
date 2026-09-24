@@ -209,7 +209,7 @@ registerPlots({
       const t = play.target;
       if (!t || !s.cards[t] || def(s, t).type !== 'Group' || !alignments(s, t).includes('Fanatic')) return 'Choose a Fanatic Group.';
       const justPlayed = !!ctx && ctx.fromHand && ctx.target === t && ctx.attackerPlayer !== pl;
-      if (!inPlay(s, t) && !justPlayed) return 'Choose a Fanatic Group in play, or one a rival has just played from his hand.';
+      if (!inPlay(s, t) && !justPlayed) return 'Choose a Fanatic Group in play, or one a rival has just played from their hand.';
       return null;
     },
     ...effectNow((s, _pl, play) => {
@@ -307,7 +307,7 @@ registerPlots({
     needs: { target: 'rivalGroup' },
     check(s, pl, play) {
       if (s.phase !== 'endOfTurn' || activePlayer(s).id !== pl || s.attack) return 'Play this only at the end of your own turn.';
-      if (!rivalOf(s, pl, play.target) || s.cards[play.target!].zone !== 'structure') return 'Choose a rival (one of his Groups).';
+      if (!rivalOf(s, pl, play.target) || s.cards[play.target!].zone !== 'structure') return 'Choose a rival (one of their Groups).';
       return s.cards[illOf(s, pl)].tokens >= 1 ? null : 'This costs an action from your Illuminati.';
     },
     apply(s, pl) { s.cards[illOf(s, pl)].tokens--; },
@@ -323,7 +323,7 @@ registerPlots({
     timing: ['anytime'],
     needs: { target: 'rivalGroup' },
     check(s, pl, play) {
-      if (!rivalOf(s, pl, play.target)) return 'Choose a rival (one of his Groups).';
+      if (!rivalOf(s, pl, play.target)) return 'Choose a rival (one of their Groups).';
       return s.cards[illOf(s, pl)].tokens >= 1 ? null : 'This costs an action from your Illuminati.';
     },
     apply(s, pl) { s.cards[illOf(s, pl)].tokens--; },
@@ -350,8 +350,8 @@ registerPlots({
     needs: { target: 'rivalGroup', pay: 'tokens' },
     check(s, pl, play) {
       const rival = rivalOf(s, pl, play.target);
-      if (!rival) return 'Choose a rival (one of his Groups or hidden Plots).';
-      if (play.targets?.length && (play.targets.length > 1 || !hiddenPlots(s, rival).includes(play.targets[0]))) return 'You may take one of his hidden Plots.';
+      if (!rival) return 'Choose a rival (one of their Groups or hidden Plots).';
+      if (play.targets?.length && (play.targets.length > 1 || !hiddenPlots(s, rival).includes(play.targets[0]))) return 'You may take one of their hidden Plots.';
       const err = spend(s, pl, play.payWith);
       if (err) return err;
       return play.payWith?.length === 1 && power(s, play.payWith[0]) >= 6 ? null : 'Pay with the action of one Group with Power 6 or more.';
@@ -380,8 +380,8 @@ registerPlots({
       if (protectedPlayer(s, pl, rival)) return 'That player has not finished a first turn yet.';
       const theirs = t.filter((x) => hiddenPlots(s, rival).includes(x));
       const mine = t.filter((x) => hiddenPlots(s, pl, play.card).includes(x));
-      if (new Set(t).size !== t.length || theirs.length + mine.length !== t.length) return 'List only his hidden Plots and your own hidden Plots.';
-      if (theirs.length !== mine.length) return 'For each of his Plots you expose, expose one of your own.';
+      if (new Set(t).size !== t.length || theirs.length + mine.length !== t.length) return 'List only their hidden Plots and your own hidden Plots.';
+      if (theirs.length !== mine.length) return 'For each of their Plots you expose, expose one of your own.';
       const err = spend(s, pl, play.payWith);
       if (err) return err;
       return play.payWith?.length === 1 ? null : 'Pay with the action of one Group.';
