@@ -84,6 +84,18 @@ export interface CardHooks {
   onDraw?: (s: GameState, self: string, player: string, deck: 'plot' | 'group', card: string) => void;
   /** Called for every game event (after it happens, before its response window). */
   onEvent?: (s: GameState, self: string, e: GameEvent) => void;
+  /** Forbid `player` from playing the Plot `card`, or using an ability of `card`, aimed at `target` (return a reason). */
+  forbidUse?: (s: GameState, self: string, player: string, card: string, target: string | undefined, ctx?: AttackCtx) => string | null;
+  /** The Resource in play `resource` cannot be discarded, or targeted by a rival's card (Count Dracula). */
+  protectResource?: (s: GameState, self: string, resource: string) => boolean;
+  /** The Plot `card` in a hand cannot be exposed (Plots hidden beneath Texas or Fidel Castro). */
+  preventExpose?: (s: GameState, self: string, card: string) => boolean;
+  /** Static: added to any attack on this card, even while it is attacked from its owner's hand. */
+  asTarget?: (s: GameState, self: string, ctx: AttackCtx, side: Side2) => number;
+  /** Static: any number of copies of this Group may be in play or destroyed (Media Sensation). */
+  multipleCopies?: boolean;
+  /** Static: destroying this Group gives no destruction credit for Goals (Media Sensation). */
+  noDestroyCredit?: boolean;
 
   // ---- triggers
   onTurnStart?: (s: GameState, self: string) => void;

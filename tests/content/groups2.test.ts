@@ -1,8 +1,9 @@
 // Scripted parts of the Group cards in src/engine/content/groups2.ts.
 import { describe, expect, it } from 'vitest';
 import {
-  alignments, applyAction, attackStrength, canAid, canOppose, finalRoll, globalPower, HOOKS, isPrivileged, openArrows, power,
-  resistance, waitingFor, CARDS, type Action, type AttackCtx, type GameState,
+  alignments, applyAction, attackStrength, canAid, canEnterPlay, canOppose, checkPlot, destroyGroup, discardCard, drawPlot,
+  finalRoll, globalPower, handLimit, HOOKS, isPrivileged, openArrows, power, resistance, waitingFor, CARDS, type Action,
+  type AttackCtx, type GameState,
 } from '../../src/engine';
 import { rollDie } from '../../src/engine/rng';
 import { give, scenario } from '../helpers';
@@ -699,5 +700,279 @@ describe('Trading Card Games', () => {
     const tcg = put(s0, 'p1', 'trading-card-games');
     const g = put(s0, 'p1', 'dentists');
     expect(() => use(s0, 'p1', tcg, 'replace', { target: g })).toThrow(/hand/);
+  });
+});
+
+// ---------------------------------------------------------------- parts encoded with the newer engine hooks
+
+/** Play a Plot and pass its counter window, so an Instant attack is under way. */
+function playThrough(s: GameState, pl: string, play: { card: string; target?: string; helper?: string }): GameState {
+  s = act(s, pl, { type: 'playPlot', play });
+  for (let i = 0; i < 10 && s.window?.kind === 'plot'; i++) s = act(s, waitingFor(s)[0], { type: 'pass' });
+  return s;
+}
+
+describe('Voudonistas: only Magic defenses stop their Assassinations', () => {
+  it('defense bonuses that only count against Assassinations are cancelled', () => {
+    const s = scenario();
+    const v = put(s, 'p1', 'voudonistas');
+    put(s, 'p2', 'paranoids');
+    const per = put(s, 'p2', 'hillary-clinton');
+    const base = { type: 'destroy' as const, instant: true, assassination: true, instantPower: 10, target: per };
+    const withV = ctxOf(s, { ...base, aid: [{ player: 'p1', iid: v, amount: 0, label: 'V' }] });
+    expect(line(s, withV, 'Defense', 'Paranoids')).toBe(2);
+    expect(line(s, withV, 'Defense', 'Voudonistas')).toBe(-2);
+    expect(line(s, ctxOf(s, base), 'Defense', 'Voudonistas')).toBe(0);
+  });
+  it('Mistaken Identity cannot stop their Assassination, but stops others', () => {
+    const s0 = scenario();
+    const v = put(s0, 'p1', 'voudonistas');
+    const per = put(s0, 'p2', 'hillary-clinton');
+    const mi = give(s0, 'p2', 'mistaken-identity', { hand: true });
+    const curse = give(s0, 'p1', 'withering-curse', { hand: true });
+    const sniper = give(s0, 'p1', 'sniper', { hand: true });
+    const s = playThrough(s0, 'p1', { card: curse, target: per, helper: v });
+    expect(s.attack?.assassination).toBe(true);
+    expect(checkPlot(s, 'p2', { card: mi })).toMatch(/Magic/);
+    const t = playThrough(s0, 'p1', { card: sniper, target: per });
+    expect(t.attack?.assassination).toBe(true);
+    expect(checkPlot(t, 'p2', { card: mi })).toBeNull();
+  });
+});
+
+describe('Bill Clinton', () => {
+  it('+3 on any attempt to control a U.S. Government Group', () => {
+    const s = scenario();
+    put(s, 'p1', 'bill-clinton');
+    const att = put(s, 'p1', 'the-mafia');
+    const fbi = put(s, 'p2', 'fbi');
+    const mi5 = put(s, 'p2', 'mi-5');
+    expect(line(s, ctxOf(s, { attacker: att, target: fbi }), 'Attack', 'Bill Clinton')).toBe(3);
+    expect(line(s, ctxOf(s, { attacker: att, target: mi5 }), 'Attack', 'Bill Clinton')).toBe(0);
+    expect(line(s, ctxOf(s, { type: 'destroy', attacker: att, target: fbi }), 'Attack', 'Bill Clinton')).toBe(0);
+  });
+  it('a die roll each turn decides whether he is Liberal', () => {
+    const s = scenario();
+    const b = put(s, 'p1', 'bill-clinton');
+    for (let i = 0; i < 6; i++) {
+      HOOKS['bill-clinton'].onEvent!(s, b, { type: 'turnStart', player: 'p1' });
+      const liberal = !s.log.at(-1)!.text.includes('not Liberal');
+      expect(alignments(s, b).includes('Liberal')).toBe(liberal);
+    }
+    s.cards[b].data = { liberalTurn: s.turn };
+    expect(alignments(s, b)).toContain('Liberal');
+    s.turn++; // the result lasts for one turn only
+    expect(alignments(s, b)).not.toContain('Liberal');
+  });
+});
+
+describe('Count Dracula: linked Magic Artifacts', () => {
+  function setup(resource: string) {
+    const s = scenario();
+    const d = put(s, 'p2', 'count-dracula');
+    const r = give(s, 'p2', resource, { resource: true });
+    s.cards[r].linkedTo = d;
+    return { s, d, r };
+  }
+  it('cannot be discarded or targeted by a rival while he lives', () => {
+    const { s, r } = setup('necronomicon');
+    discardCard(s, r);
+    expect(s.cards[r].zone).toBe('resources');
+    const hex = give(s, 'p1', 'hex', { hand: true });
+    expect(checkPlot(s, 'p1', { card: hex, target: r })).toMatch(/protected/);
+  });
+  it('are lost with him when he dies', () => {
+    const { s, d, r } = setup('necronomicon');
+    destroyGroup(s, d, 'p1');
+    expect(s.cards[r].zone).toBe('destroyed');
+  });
+  it('Resources that are not Magic Artifacts get no protection', () => {
+    const { s, r } = setup('cyborg-soldiers');
+    discardCard(s, r);
+    expect(s.cards[r].zone).toBe('discard');
+  });
+});
+
+describe('Fidel Castro', () => {
+  it('a Plot hidden beneath him cannot be exposed', () => {
+    let s = scenario();
+    const fc = put(s, 'p2', 'fidel-castro');
+    const x = give(s, 'p2', 'reload', { hand: true });
+    const y = give(s, 'p2', 'reload', { hand: true });
+    s.active = 1; // p2's turn
+    s = use(s, 'p2', fc, 'hide', { target: x });
+    s.active = 0;
+    const pc = put(s, 'p1', 'phone-company');
+    s = use(s, 'p1', pc, 'expose');
+    expect(s.cards[y].exposed).toBe(true);
+    expect(s.cards[x].exposed).toBeFalsy();
+    expect(hand(s, 'p2')).toContain(x);
+  });
+  it('hides a new Plot only after the first one has been used', () => {
+    let s = scenario();
+    const fc = put(s, 'p1', 'fidel-castro');
+    const x = give(s, 'p1', 'reload', { hand: true });
+    const z = give(s, 'p1', 'reload', { hand: true });
+    const limit = handLimit(s, 'p1');
+    s = use(s, 'p1', fc, 'hide', { target: x });
+    expect(handLimit(s, 'p1')).toBe(limit); // still counts toward the hand limit
+    expect(() => use(s, 'p1', fc, 'hide', { target: z })).toThrow(/already hides/);
+    discardCard(s, x);
+    s = use(s, 'p1', fc, 'hide', { target: z });
+    expect(s.cards[fc].data?.hidden).toBe(z);
+  });
+});
+
+describe('Texas', () => {
+  it('its hidden Plot goes beyond the hand limit and can be swapped, but not for a Goal', () => {
+    let s = scenario();
+    const tx = put(s, 'p1', 'texas');
+    const x = give(s, 'p1', 'reload', { hand: true });
+    const y = give(s, 'p1', 'reload', { hand: true });
+    const goal = give(s, 'p1', 'fratricide', { hand: true });
+    const limit = handLimit(s, 'p1');
+    expect(() => use(s, 'p1', tx, 'hide', { target: goal })).toThrow(/Goal/);
+    s = use(s, 'p1', tx, 'hide', { target: x });
+    expect(handLimit(s, 'p1')).toBe(limit + 1);
+    s = use(s, 'p1', tx, 'hide', { target: y });
+    expect(s.cards[tx].data?.hidden).toBe(y);
+    expect(HOOKS['texas'].preventExpose!(s, tx, x)).toBe(false);
+  });
+  it('the hidden Plot is lost if Texas is captured', () => {
+    let s = scenario();
+    const tx = put(s, 'p2', 'texas');
+    const x = give(s, 'p2', 'reload', { hand: true });
+    s.active = 1;
+    s = use(s, 'p2', tx, 'hide', { target: x });
+    s.active = 0;
+    const att = put(s, 'p1', 'the-mafia');
+    boost(s, att);
+    s = resolve(act(s, 'p1', { type: 'attack', attackType: 'control', attacker: att, target: tx }), [1, 1]);
+    expect(s.cards[tx].controller).toBe('p1');
+    expect(s.cards[x].zone).toBe('discard');
+  });
+  it('the hidden Plot is lost if Texas is destroyed', () => {
+    let s = scenario();
+    const tx = put(s, 'p1', 'texas');
+    const x = give(s, 'p1', 'reload', { hand: true });
+    s = use(s, 'p1', tx, 'hide', { target: x });
+    destroyGroup(s, tx, 'p2');
+    expect(s.cards[x].zone).toBe('discard');
+  });
+});
+
+describe('Media Sensation', () => {
+  it('several copies may be in play, and destroying one gives no Goal credit', () => {
+    const s = scenario();
+    const a = put(s, 'p1', 'media-sensation');
+    const b = give(s, 'p1', 'media-sensation', { hand: true });
+    expect(canEnterPlay(s, b)).toBe(true);
+    destroyGroup(s, a, 'p2');
+    expect(s.players[1].destroyedCredit).not.toContain(a);
+    expect(canEnterPlay(s, b)).toBe(true);
+    // Other Groups are still unique and still credited.
+    const d = put(s, 'p1', 'dentists');
+    expect(canEnterPlay(s, give(s, 'p2', 'dentists', { hand: true }))).toBe(false);
+    destroyGroup(s, d, 'p2');
+    expect(s.players[1].destroyedCredit).toContain(d);
+  });
+});
+
+describe('Ronald Reagan', () => {
+  function oppose(attacker: string) {
+    const s0 = scenario();
+    const att = put(s0, 'p1', attacker);
+    const tab = put(s0, 'p2', 'tabloids');
+    const s = act(s0, 'p1', { type: 'attack', attackType: 'control', attacker: att, target: tab });
+    return canOppose(s, 'p2', tab);
+  }
+  it('Media Groups cannot oppose an attack he makes', () => expect(oppose('ronald-reagan')).toMatchObject({ ok: false, why: expect.stringMatching(/stops/) }));
+  it('they may oppose other attacks', () => expect(oppose('the-mafia').ok).toBe(true));
+});
+
+describe('Ross Perot', () => {
+  it('his puppets become Straight and Conservative, losing Weird and Liberal', () => {
+    const s = scenario();
+    const rp = put(s, 'p1', 'ross-perot');
+    const cal = put(s, 'p1', 'california', rp);
+    expect(alignments(s, cal).sort()).toEqual(['Conservative', 'Government', 'Straight']);
+    const sla = put(s, 'p1', 'semiconscious-liberation-army');
+    expect(alignments(s, sla)).toContain('Weird');
+  });
+});
+
+describe('Russia and Switzerland attacked from hand', () => {
+  it('Russia: Communist Groups get +4 to take it over from hand', () => {
+    const s = scenario();
+    const r = give(s, 'p1', 'russia', { hand: true });
+    const comm = put(s, 'p1', 'international-communist-conspiracy');
+    const plain = put(s, 'p1', 'loan-sharks');
+    expect(line(s, ctxOf(s, { attacker: comm, target: r }), 'Attack', 'Russia')).toBe(4);
+    expect(line(s, ctxOf(s, { attacker: plain, target: r }), 'Attack', 'Russia')).toBe(0);
+  });
+  it('Switzerland: the Gnomes get +15 to take it over from hand', () => {
+    const s = scenario();
+    s.cards[ill(s, 'p1')].cardId = 'gnomes-of-zurich';
+    const sw = give(s, 'p1', 'switzerland', { hand: true });
+    const other = put(s, 'p1', 'the-mafia');
+    expect(line(s, ctxOf(s, { attacker: ill(s, 'p1'), target: sw }), 'Attack', 'Switzerland')).toBe(15);
+    expect(line(s, ctxOf(s, { attacker: other, target: sw }), 'Attack', 'Switzerland')).toBe(0);
+  });
+});
+
+describe('Stonehenge: immune to Magic', () => {
+  it('rivals cannot use Magic Plots against you', () => {
+    const s = scenario();
+    const v = put(s, 'p1', 'voudonistas');
+    const per = put(s, 'p2', 'hillary-clinton');
+    const curse = give(s, 'p1', 'withering-curse', { hand: true });
+    expect(checkPlot(s, 'p1', { card: curse, target: per, helper: v })).toBeNull();
+    put(s, 'p2', 'stonehenge');
+    expect(checkPlot(s, 'p1', { card: curse, target: per, helper: v })).toMatch(/Stonehenge/);
+    const sniper = give(s, 'p1', 'sniper', { hand: true });
+    expect(checkPlot(s, 'p1', { card: sniper, target: per })).toBeNull();
+  });
+  it('rivals cannot use Magic Resources in an attack on you', () => {
+    const run = (stonehenge: boolean) => {
+      const s0 = scenario();
+      const att = put(s0, 'p1', 'the-mafia');
+      boost(s0, att);
+      const spear = give(s0, 'p1', 'spear-of-longinus', { resource: true });
+      const tgt = put(s0, 'p2', 'dentists');
+      if (stonehenge) put(s0, 'p2', 'stonehenge');
+      const s = act(s0, 'p1', { type: 'attack', attackType: 'destroy', attacker: att, target: tgt });
+      return () => use(s, 'p1', spear, 'boost');
+    };
+    expect(run(false)).not.toThrow();
+    expect(run(true)).toThrow(/Stonehenge/);
+  });
+  it('bonuses from a rival\'s Magic Groups to an attack on you are cancelled', () => {
+    const s = scenario();
+    const att = put(s, 'p1', 'loan-sharks');
+    const mafia = put(s, 'p1', 'the-mafia'); // +2 on any attack on a Criminal Group
+    const tgt = put(s, 'p2', 'junk-mail');
+    put(s, 'p2', 'stonehenge');
+    expect(line(s, ctxOf(s, { attacker: att, target: tgt }), 'Defense', 'Stonehenge')).toBe(0);
+    s.cards[mafia].mods.push({ source: 'test', kind: 'addAttr', attr: 'Magic', until: 'permanent' });
+    expect(line(s, ctxOf(s, { attacker: att, target: tgt }), 'Defense', 'Stonehenge')).toBe(2);
+  });
+});
+
+describe('The Great Pyramid: rivals show you their first Plot draw', () => {
+  it('reveals only the first Plot a rival draws each turn, and you forget it next turn', () => {
+    const s = scenario();
+    const gp = put(s, 'p1', 'the-great-pyramid');
+    const p1 = s.players[0], p2 = s.players[1];
+    const [first, second] = drawPlot(s, p2, 2);
+    expect(p1.known).toContain(first);
+    expect(p1.known).not.toContain(second);
+    expect(s.log.at(-1)!.to).toBe('p1');
+    const [own] = drawPlot(s, p1, 1);
+    expect(p1.known).not.toContain(own);
+    HOOKS['the-great-pyramid'].onEvent!(s, gp, { type: 'turnStart', player: 'p2' });
+    expect(p1.known).not.toContain(first);
+    s.turn++;
+    const [next] = drawPlot(s, p2, 1);
+    expect(p1.known).toContain(next);
   });
 });

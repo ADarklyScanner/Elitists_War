@@ -1,20 +1,26 @@
 import type { Alignment, AttackCtx, GameState } from '../types';
-import { attackingGroups, registerAbilities } from '../abilities';
-import { type ActivatedAbility, type CardHooks, hooksOf, registerHooks } from '../hooks';
+import { attackingGroups, abilitiesOf, matches, registerAbilities } from '../abilities';
+import { type ActivatedAbility, type CardHooks, HOOKS, activeHookCards, hooksOf, registerHooks } from '../hooks';
 import { def } from '../cards';
 import { alignments, attributes, countControlled, globalPower, isOpposite, power } from '../stats';
 import { NWO_EFFECTS } from '../nwo';
-import { DELTA, SIDES, puppets } from '../geometry';
+import { DELTA, SIDES, puppets, structureCards } from '../geometry';
+import { resourceKinds } from './plots3';
 import { rollDie } from '../rng';
 import {
   attackCancelled, canEnterPlay, cancelledGroups, controllerOf2, destroyGroup, discardCard, drawPlot, isPrivileged, log,
-  placeGroup, player,
+  placeGroup, player, revealTo,
 } from '../game';
+
+/** Government Groups of the United States (Bill Clinton's +3; the data has no U.S. attribute). */
+const US_GOVERNMENT = [
+  'b-a-t-f', 'c-i-a', 'fbi', 'federal-reserve', 'i-r-s', 'nasa', 'n-s-a', 'post-office', 'secret-service', 'supreme-court',
+  'al-gore', 'california', 'center-for-disease-control', 'new-york', 'pentagon', 'texas',
+];
 
 registerAbilities({
   'voudonistas': [
     { kind: 'attackBonus', on: 'destroy', target: { subtypes: ['Personality'] }, value: 8, scope: 'direct' },
-    { kind: 'pending', note: 'Assassination defenses from other cards that are not specifically anti-Magic still apply against it (only Moonbase honours this); needs defenses tagged as Magic-specific' },
   ],
   'wall-street': [],
   'wargamers': [
@@ -26,22 +32,19 @@ registerAbilities({
   ],
   'bill-clinton': [
     { kind: 'attackBonus', on: 'control', target: { alignments: ['Government'] }, value: 8, scope: 'direct' },
-    { kind: 'pending', note: '+3 to control U.S. Government groups (no U.S. attribute); Liberal status determined by die roll when relevant' },
+    { kind: 'attackBonus', on: 'control', target: { names: US_GOVERNMENT, alignments: ['Government'] }, value: 3, scope: 'any' },
   ],
   'bjorne': [
     { kind: 'attackBonus', on: 'control', target: { attributes: ['Media'] }, value: 4, scope: 'direct' },
   ],
   'count-dracula': [
     { kind: 'attackBonus', on: 'control', target: { names: ['vampires'] }, value: 10, scope: 'direct' },
-    { kind: 'pending', note: 'Linked Magic Artifacts cannot be taken from him or lost while he lives (needs a hook protecting Resources from being stolen or discarded)' },
   ],
   'dan-quayle': [],
   'elvis': [
     { kind: 'attackBonus', on: 'control', target: { names: ['church-of-elvis'] }, value: 6, scope: 'direct' },
   ],
-  'fidel-castro': [
-    { kind: 'pending', note: 'May hide one Plot linked beneath him (unexposable); may relink after the Plot is used' },
-  ],
+  'fidel-castro': [],
   'george-bush': [],
   'gordo-remora': [
     { kind: 'attackBonus', on: 'destroy', target: { alignments: ['Weird'] }, value: 10, scope: 'direct' },
@@ -60,9 +63,7 @@ registerAbilities({
   'margaret-thatcher': [
     { kind: 'attackBonus', on: 'control', target: { names: ['england'] }, value: 10, scope: 'direct' },
   ],
-  'media-sensation': [
-    { kind: 'pending', note: 'Multiple copies legal with unique Personality names; destroying one does not count toward Goals' },
-  ],
+  'media-sensation': [],
   'nancy-reagan': [
     { kind: 'attackBonus', on: 'control', target: { names: ['ronald-reagan'] }, value: 10, scope: 'direct' },
   ],
@@ -73,11 +74,8 @@ registerAbilities({
   'princess-di': [],
   'ronald-reagan': [
     { kind: 'selfImmune', from: { attributes: ['Media'] } },
-    { kind: 'pending', note: 'After he makes/aids an attack, Media groups cannot join the opposite side' },
   ],
-  'ross-perot': [
-    { kind: 'pending', note: 'Groups he controls become Straight and Conservative, losing Weird/Liberal, until they get a new master' },
-  ],
+  'ross-perot': [],
   'saddam-hussein': [],
   'brazil': [],
   'california': [],
@@ -112,7 +110,7 @@ registerAbilities({
     { kind: 'attackBonus', on: 'control', target: { attributes: ['Science', 'Computer'] }, value: 6, scope: 'direct' },
   ],
   'las-vegas': [
-    { kind: 'pending', note: 'Action: wager 1-3 Plots against a rival, resolve 2d6 card-transfer gamble' },
+    { kind: 'pending', note: 'Action: wager 1-3 Plots against a rival in a 2d6 gamble. The card data does not give the dice results or which cards change hands, so the gamble cannot be played yet' },
   ],
   'moonbase': [
     { kind: 'attackBonus', on: 'both', target: { attributes: ['Space'] }, value: 4, scope: 'direct' },
@@ -123,27 +121,19 @@ registerAbilities({
   'russia': [
     { kind: 'attackBonus', on: 'control', target: { attributes: ['Communist'] }, value: 4, scope: 'direct' },
     { kind: 'attackBonus', on: 'both', target: { attributes: ['Communist'] }, value: 2, scope: 'any' },
-    { kind: 'pending', note: 'Communist +4 on direct control of Russia works only while Russia is in play, not when it is attacked from hand (hooks of a card in hand are inactive)' },
   ],
   'silicon-valley': [
     { kind: 'attackBonus', on: 'control', target: { attributes: ['Computer'] }, value: 4, scope: 'direct' },
   ],
   'stonehenge': [
     { kind: 'structureImmune', from: { attributes: ['Magic'] } },
-    { kind: 'pending', note: 'Also immune to effects of Magic Plots and Resources' },
   ],
-  'switzerland': [
-    { kind: 'pending', note: 'Gnomes +15 direct control works only while Switzerland is in play, not when it is attacked from hand (hooks of a card in hand are inactive)' },
-  ],
-  'texas': [
-    { kind: 'pending', note: 'May hide one non-Goal Plot beneath it beyond hand limit, unexposable, swappable; lost if Texas is captured/destroyed' },
-  ],
+  'switzerland': [],
+  'texas': [],
   'vatican-city': [
     { kind: 'structureImmune', from: { alignments: ['Peaceful'] } },
   ],
-  'the-great-pyramid': [
-    { kind: 'pending', note: 'Rivals must show you the first Plot they draw each turn (needs private reveals to one player)' },
-  ],
+  'the-great-pyramid': [],
   'pyramid-marketing-schemes': [
     { kind: 'powerPer', per: { alignments: ['Fanatic'] }, value: 1 },
   ],
@@ -254,11 +244,105 @@ const moonbaseLinks = (s: GameState, self: string) => ((s.cards[self].data?.link
 
 const moonbaseDisasters = disasterImmunity(['nuclear-accident', 'meteor-strike'], null);
 
+/** Plots that count as Magic (spells, or their banner asks for a Magic action). */
+const MAGIC_PLOTS = new Set([
+  'withering-curse', 'plague-of-demons', 'air-magic', 'earth-magic', 'counterspell', 'hex', 'unlucky-13',
+  'the-stars-are-right', 'talisman-of-ahrimanes', 'harmonica-virgins',
+]);
+/** Is this Group, Plot or Resource Magic? */
+function isMagicCard(s: GameState, iid: string): boolean {
+  const d = def(s, iid);
+  if (d.type === 'Plot') return MAGIC_PLOTS.has(d.id);
+  if (d.type === 'Resource') return resourceKinds(s, iid).includes('Magic');
+  return hasAttr(s, iid, 'Magic');
+}
+
+/** Plots that stop an Assassination and are not Magic: Voudonistas ignore them. */
+const PLAIN_ASSASSINATION_DEFENSES = ['mistaken-identity', 'bodyguard'];
+/** Is this an Assassination the Voudonistas are making (their action not cancelled)? */
+const voudonAssassination = (self: string, ctx?: AttackCtx) =>
+  !!ctx?.assassination && ctx.aid.some((a) => a.iid === self) && !cancelledGroups(ctx).has(self);
+
+/**
+ * "Hide one Plot beneath this card": the Plot stays in its owner's hand but cannot be exposed.
+ * Texas may swap it on your turn and lets it go beyond the hand limit; Fidel Castro hides a new one
+ * only after the old one has been used.
+ */
+function plotHider(opts: { name: string; swap: boolean; beyondLimit: boolean; goals: boolean }): CardHooks {
+  const hidden = (s: GameState, self: string): string | undefined => {
+    const d = s.cards[self].data, iid = d?.hidden as string | undefined, who = d?.hider as string | undefined;
+    if (!iid || !who || who !== controllerOf2(s, self) || !player(s, who).hand.includes(iid)) return undefined;
+    return iid;
+  };
+  return {
+    preventExpose: (s, self, card) => hidden(s, self) === card,
+    handLimit: opts.beyondLimit ? (s, self) => (hidden(s, self) ? 1 : 0) : undefined,
+    actions: [{
+      id: 'hide',
+      label: `Hide a Plot beneath ${opts.name}`,
+      timing: ['main'],
+      usesToken: false,
+      needs: { target: 'handPlot' },
+      ai: 'never',
+      check(s, pl, self, p) {
+        const c = p.target ? s.cards[p.target] : undefined;
+        if (!c || !player(s, pl).hand.includes(c.iid) || def(s, c.iid).type !== 'Plot') return 'Choose a Plot card in your hand.';
+        if (!opts.goals && def(s, c.iid).subtype === 'Goal') return `A Goal cannot be hidden beneath ${opts.name}.`;
+        if (c.exposed) return 'That Plot is already exposed; choose one that is still hidden.';
+        const now = hidden(s, self);
+        if (now === c.iid) return `That Plot is already hidden beneath ${opts.name}.`;
+        if (now && !opts.swap) return `${opts.name} already hides a Plot; you can hide another once it has been used.`;
+        return null;
+      },
+      apply(s, pl, self, p) {
+        s.cards[self].data = { ...s.cards[self].data, hidden: p.target, hider: pl };
+        log(s, `${player(s, pl).name} hides a Plot beneath ${opts.name}.`, pl);
+      },
+    }],
+  };
+}
+/** Texas: the hidden Plot is lost if Texas is captured or destroyed. */
+function loseHidden(s: GameState, self: string) {
+  const d = s.cards[self].data, iid = d?.hidden as string | undefined, who = d?.hider as string | undefined;
+  s.cards[self].data = { ...d, hidden: undefined, hider: undefined };
+  if (!iid || !who || !player(s, who).hand.includes(iid)) return;
+  log(s, 'The Plot hidden beneath Texas is lost.', who);
+  discardCard(s, iid);
+}
+
+/** Bill Clinton: whether he counts as Liberal is rolled each turn (1-3: Liberal). */
+function rollClinton(s: GameState, self: string) {
+  const die = rollDie(s);
+  s.cards[self].data = { ...s.cards[self].data, liberalTurn: die <= 3 ? s.turn : undefined };
+  log(s, `Bill Clinton rolls ${die}: he is ${die <= 3 ? '' : 'not '}Liberal this turn.`);
+}
+
+/** The Great Pyramid: its controller forgets the Plots it showed him (no notes allowed). */
+function forgetShown(s: GameState, self: string) {
+  const shown = (s.cards[self].data?.shown as string[] | undefined) ?? [];
+  if (!shown.length) return;
+  const me = controllerOf2(s, self);
+  if (me) player(s, me).known = (player(s, me).known ?? []).filter((c) => !shown.includes(c));
+  s.cards[self].data = { ...s.cards[self].data, shown: [] };
+}
+
 registerHooks({
   'voudonistas': {
-    // +4 on an Assassination it joins.
-    attackMod: (s, self, ctx, side) =>
-      (side === 'attack' && ctx.assassination && ctx.aid.some((a) => a.iid === self) && !cancelledGroups(ctx).has(self) ? 4 : 0),
+    // +4 on an Assassination it joins; defenses made only against Assassinations work only if they are Magic.
+    attackMod(s, self, ctx, side) {
+      if (!voudonAssassination(self, ctx)) return 0;
+      if (side === 'attack') return 4;
+      const plain = { ...ctx, assassination: false };
+      let extra = 0;
+      for (const o of activeHookCards(s)) {
+        const h = HOOKS[s.cards[o].cardId];
+        if (o === self || !h.attackMod || isMagicCard(s, o)) continue;
+        extra += h.attackMod(s, o, ctx, 'defense') - h.attackMod(s, o, plain, 'defense');
+      }
+      return extra > 0 ? -extra : 0;
+    },
+    forbidUse: (s, self, _pl, card, _target, ctx) => (voudonAssassination(self, ctx) && PLAIN_ASSASSINATION_DEFENSES.includes(s.cards[card]?.cardId)
+      ? `The Voudonistas' Assassination is Magic: ${def(s, card).name} cannot stop it.` : null),
   },
 
   'wall-street': {
@@ -318,6 +402,13 @@ registerHooks({
     }],
   },
 
+  'bill-clinton': {
+    onEnterPlay: rollClinton,
+    onEvent(s, self, e) { if (e.type === 'turnStart') rollClinton(s, self); },
+    alignmentMod: (s, self, iid, cur) => (iid === self && s.cards[self].data?.liberalTurn === s.turn && !cur.includes('Liberal')
+      ? [...cur.filter((a) => a !== 'Conservative'), 'Liberal'] : cur),
+  },
+
   'bjorne': {
     extraTokens: (s, self, iid) => (iid === self ? puppets(s, self).filter((g) => hasAttr(s, g, 'Media')).length : 0),
     onDestroy(s, self, victim, by) {
@@ -335,6 +426,67 @@ registerHooks({
       const magicGroup = attackingGroups(ctx).some((g) => !gone.has(g) && hasAttr(s, g, 'Magic'));
       const magicCard = !!ctx.instantCard && MAGIC_DESTROYERS.includes(s.cards[ctx.instantCard]?.cardId);
       return !(magicGroup || magicCard);
+    },
+    // Magic Artifacts linked to him cannot be taken or lost while he lives.
+    protectResource: (s, self, r) => s.cards[r].linkedTo === self && resourceKinds(s, r).includes('Magic') && resourceKinds(s, r).includes('Artifact'),
+  },
+
+  'fidel-castro': plotHider({ name: 'Fidel Castro', swap: false, beyondLimit: false, goals: true }),
+
+  'texas': {
+    ...plotHider({ name: 'Texas', swap: true, beyondLimit: true, goals: false }),
+    onDestroy(s, self, victim) { if (victim === self) loseHidden(s, self); },
+    onCapture(s, self) {
+      const who = s.cards[self].data?.hider as string | undefined;
+      if (who && who !== controllerOf2(s, self)) loseHidden(s, self);
+    },
+  },
+
+  'media-sensation': { multipleCopies: true, noDestroyCredit: true },
+
+  'ronald-reagan': {
+    // Once he makes or aids an attack, Media Groups may not take the other side.
+    forbidJoin: (s, self, ctx, group, as) => as === 'oppose' && hasAttr(s, group, 'Media') && !cancelledGroups(ctx).has(self)
+      && (ctx.attacker === self || ctx.aid.some((a) => a.iid === self)),
+  },
+
+  'ross-perot': {
+    alignmentMod(s, self, iid, cur) {
+      if (s.cards[iid]?.master !== self || s.cards[iid].zone !== 'structure') return cur;
+      const out: Alignment[] = cur.filter((a) => a !== 'Weird' && a !== 'Liberal');
+      for (const a of ['Straight', 'Conservative'] as Alignment[]) if (!out.includes(a)) out.push(a);
+      return out;
+    },
+  },
+
+  'stonehenge': {
+    // Rivals' Magic Plots, Resources and Magic Groups' abilities cannot be used against you.
+    forbidUse(s, self, pl, card, target, ctx) {
+      const me = controllerOf2(s, self);
+      if (!me || pl === me || !isMagicCard(s, card)) return null;
+      const t = target ? s.cards[target] : undefined;
+      const mine = !!t && t.controller === me && (t.zone === 'structure' || t.zone === 'resources' || t.zone === 'table');
+      return mine || (ctx?.targetPlayer === me && ctx.attackerPlayer !== me) ? `${player(s, me).name} controls Stonehenge and is immune to Magic.` : null;
+    },
+    // Bonuses that rivals' Magic cards give to an attack on you are cancelled.
+    attackMod(s, self, ctx, side) {
+      const me = controllerOf2(s, self);
+      if (side !== 'defense' || !me || ctx.targetPlayer !== me || ctx.attackerPlayer === me) return 0;
+      let n = 0;
+      for (const o of activeHookCards(s)) {
+        const h = HOOKS[s.cards[o].cardId];
+        if (o === self || !h.attackMod || controllerOf2(s, o) === me || !isMagicCard(s, o)) continue;
+        n += Math.max(0, h.attackMod(s, o, ctx, 'attack'));
+      }
+      if (!ctx.instant && ctx.attacker) {
+        for (const g of structureCards(s, ctx.attackerPlayer)) {
+          if (g === ctx.attacker || !isMagicCard(s, g)) continue;
+          for (const a of abilitiesOf(s, g)) {
+            if (a.kind === 'attackBonus' && a.scope === 'any' && (a.on === 'both' || a.on === ctx.type) && matches(s, ctx.target, a.target, g)) n += a.value;
+          }
+        }
+      }
+      return n;
     },
   },
 
@@ -589,7 +741,8 @@ registerHooks({
   },
 
   'russia': {
-    attackMod: (s, self, ctx, side) => (side === 'attack' && !ctx.instant && ctx.type === 'control' && ctx.target === self
+    // Also works while Russia is attacked from its owner's hand.
+    asTarget: (s, self, ctx, side) => (side === 'attack' && !ctx.instant && ctx.type === 'control' && ctx.target === self
       && !!ctx.attacker && !cancelledGroups(ctx).has(ctx.attacker) && hasAttr(s, ctx.attacker, 'Communist') ? 4 : 0),
   },
 
@@ -608,16 +761,29 @@ registerHooks({
   'switzerland': {
     attackMod(s, self, ctx, side) {
       if (side !== 'attack' || ctx.instant) return 0;
-      let n = 0;
-      if (ctx.type === 'control' && ctx.target === self && ctx.attacker && s.cards[ctx.attacker].cardId === 'gnomes-of-zurich') n += 15;
       const ctrl = controllerOf2(s, self);
-      if (ctrl && !isGnomes(s, ctrl) && ctx.attackerPlayer === ctrl && isGnomes(s, ctx.targetPlayer)) n += 2;
-      return n;
+      return ctrl && !isGnomes(s, ctrl) && ctx.attackerPlayer === ctrl && isGnomes(s, ctx.targetPlayer) ? 2 : 0;
     },
+    // The Gnomes' +15 also works while Switzerland is attacked from hand.
+    asTarget: (s, self, ctx, side) => (side === 'attack' && !ctx.instant && ctx.type === 'control' && ctx.target === self
+      && !!ctx.attacker && !cancelledGroups(ctx).has(ctx.attacker) && s.cards[ctx.attacker].cardId === 'gnomes-of-zurich' ? 15 : 0),
     preventDestroy: (s, self, target, ctx) => target === self && !!ctx && isGnomes(s, ctx.attackerPlayer),
   },
 
-  'the-great-pyramid': disasterImmunity(null, ['tornado', 'hurricane']),
+  'the-great-pyramid': {
+    ...disasterImmunity(null, ['tornado', 'hurricane']),
+    // Each rival shows you the first Plot he draws each turn; you forget it when the next turn starts.
+    onDraw(s, self, pl, deck, card) {
+      const me = controllerOf2(s, self);
+      if (deck !== 'plot' || !me || pl === me) return;
+      const d = s.cards[self].data ?? {};
+      const seen = (d.seen as Record<string, number> | undefined) ?? {};
+      if (seen[pl] === s.turn) return;
+      s.cards[self].data = { ...d, seen: { ...seen, [pl]: s.turn }, shown: [...((d.shown as string[] | undefined) ?? []), card] };
+      revealTo(s, me, [card], `The Great Pyramid shows you the first Plot ${player(s, pl).name} drew this turn`);
+    },
+    onEvent(s, self, e) { if (e.type === 'turnStart') forgetShown(s, self); },
+  },
 
   'pyramid-marketing-schemes': {
     resistanceMod(s, self, iid) {
