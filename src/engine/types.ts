@@ -90,6 +90,7 @@ export interface PlayerState {
   known?: string[];        // cards this player has privately looked at (still secret from others)
   lastPuppetTakenBy?: string; // who removed this player's last Group (credit for knocking out an Illuminati)
   eliminatedBy?: string;
+  lastPuppetHelpers?: string[]; // players who helped remove that last Group (Fratricide: any help counts)
 }
 
 export type AttackType = 'control' | 'destroy';
@@ -223,6 +224,7 @@ export interface GameState {
     extraTurn?: boolean;        // an extra turn: no draws, no Plots, no new Illuminati token (Seize the Time)
     freeMoves?: string;         // this player may move Groups without paying (Reorganization)
     noDraws?: boolean;          // skip this turn's normal draws (An Offer You Can't Refuse)
+    redoTakeover?: boolean;     // the automatic takeover was undone: offer it again (Botched Contact)
   };
   events?: GameEvent[];       // queued events waiting for their response window
   continuation?: string;      // what to do when the current event window closes

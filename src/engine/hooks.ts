@@ -127,6 +127,9 @@ export interface CardHooks {
 
 export const HOOKS: Record<string, CardHooks> = {};
 
+/** Set while the engine checks whether a player meets a Goal (for effects that do not count for Goals). */
+export const goalCheck = { active: false };
+
 /** Resolvers for player choices asked with askChoice (key -> what to do with the picked ids). */
 export const CHOICES: Record<string, {
   resolve: (s: GameState, player: string, picked: string[], data: Record<string, unknown>) => void;
