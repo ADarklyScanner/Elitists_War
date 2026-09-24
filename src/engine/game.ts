@@ -41,8 +41,12 @@ export function createGame(opts: { id?: string; seed?: number; players: NewPlaye
     log: [],
   };
   const n = opts.players.length;
-  if (n === 2) s.settings.basicGoal = Math.max(opts.settings?.basicGoal ?? 12, s.settings.houseRules.includes('quickGame') ? 8 : 12);
-  else if (!opts.settings?.basicGoal) s.settings.basicGoal = n === 3 ? 12 : n === 4 ? 11 : 10;
+  // Basic Goal (R016): 12 for 2-3 players, 11 for 4, 10 for 5+; never below 12 with two players,
+  // unless the players chose the "quick game" house rule (8 Groups).
+  const standard = n <= 3 ? 12 : n === 4 ? 11 : 10;
+  if (s.settings.houseRules.includes('quickGame')) s.settings.basicGoal = 8;
+  else if (n === 2) s.settings.basicGoal = Math.max(opts.settings?.basicGoal ?? 12, 12);
+  else s.settings.basicGoal = opts.settings?.basicGoal ?? standard;
 
   for (const p of opts.players) {
     let k = 0;

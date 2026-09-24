@@ -13,3 +13,5 @@ export { openArrows, outSides, structureCards, puppets, subtree, depth, DELTA, S
 export { abilitiesOf, isImplemented, GROUP_ABILITIES } from './abilities';
 export { PLOTS } from './plotTypes';
 export { NWO_EFFECTS } from './nwo';
+export * from './moves';
+export { randomDeck, ILLUMINATI, PLAYABLE_PLOTS } from './decks';
