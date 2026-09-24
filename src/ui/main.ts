@@ -6,7 +6,7 @@ import {
   goalCount, goalNeeded, hasResponse, ILLUMINATI, isImplemented, GROUP_ABILITIES, openArrows, outSides,
   plotOptions, plotsInHand, handLimit, power, resistance, globalPower, alignments, randomDeck,
   responseOptions, structureCards, subtree, takeoverOptions, waitingFor, DELTA, PLOTS, NWO_EFFECTS,
-  describePlay, player, leadOptions, abilitiesOf, abilityOptions, resourcesOf, canEnterPlay, HOOKS,
+  describePlay, player, leadOptions, abilitiesOf, abilityOptions, resourcesOf, canEnterPlay, HOOKS, goalsInHand, goalLimit,
 } from '../engine';
 import { chooseAction, successChance } from '../ai/ai';
 
@@ -25,6 +25,7 @@ type Sel =
   | { kind: 'link'; resource: string };
 
 interface Ui {
+  slotChoice?: string[];
   game: GameState | null;
   me: string;
   sel: Sel;
@@ -198,7 +199,13 @@ function renderSide(s: GameState, pl: string, mine: boolean): string {
     const c = s.cards[iid];
     return `<div class="cell" style="grid-column:${c.x! - minX + 1};grid-row:${c.y! - minY + 1}">${tableCard(s, iid)}</div>`;
   });
-  for (const sl of slots) cells.push(`<button class="cell slot" style="grid-column:${sl.x - minX + 1};grid-row:${sl.y - minY + 1}" data-slot="${sl.onto}:${sl.side}" aria-label="Place here">+</button>`);
+  // One "+" per empty space; if two open arrows point at the same space, the button offers both.
+  const byCell = new Map<string, typeof slots>();
+  for (const sl of slots) byCell.set(`${sl.x},${sl.y}`, [...(byCell.get(`${sl.x},${sl.y}`) ?? []), sl]);
+  for (const group of byCell.values()) {
+    const sl = group[0];
+    cells.push(`<button class="cell slot" style="grid-column:${sl.x - minX + 1};grid-row:${sl.y - minY + 1}" data-slot="${group.map((g) => `${g.onto}:${g.side}`).join('|')}" aria-label="Place here">+</button>`);
+  }
   const n = goalCount(s, pl), need = goalNeeded(s, pl);
   return `
     <div class="side ${mine ? 'mine' : 'theirs'} ${s.players[s.active].id === pl && s.phase !== 'gameOver' ? 'active' : ''}">
@@ -324,6 +331,11 @@ function attackPanel(s: GameState): string {
 
 function renderConsole(s: GameState): string {
   const err = ui.error ? `<div class="error" role="alert">${esc(ui.error)}</div>` : '';
+  if (ui.slotChoice) {
+    return `<div class="panel now"><h2>Which arrow?</h2><p>Two of your cards have an open arrow pointing at that space.</p>
+      <div class="opts">${ui.slotChoice.map((c) => { const [onto, side] = c.split(':'); return `<button data-slotpick="${c}">Attach to ${esc(cardName(s, onto))} (its ${side.toLowerCase()} arrow)</button>`; }).join('')}</div>
+      <div class="btns"><button class="linkish" data-act="clearSlot">Cancel</button></div></div>`;
+  }
   const waiting = waitingFor(s);
   let body = '';
   if (s.phase === 'gameOver') {
@@ -340,9 +352,20 @@ function renderConsole(s: GameState): string {
       <div class="btns"><button data-act="skipTakeover">Skip takeover</button></div>`;
   } else if (s.prompt?.player === ui.me && s.prompt.kind === 'discardToLimit') {
     const sel = ui.sel.kind === 'discard' ? ui.sel.cards : [];
-    const excess = plotsInHand(s, ui.me).length - handLimit(s, ui.me);
-    body = `<h2>Too many Plots</h2><p>Pick ${excess} Plot${excess > 1 ? 's' : ''} in your hand to discard.</p>
-      <div class="btns"><button class="primary" data-act="discard" ${sel.length === excess ? '' : 'disabled'}>Discard ${sel.length}/${excess}</button><button data-act="return" ${sel.length === excess ? '' : 'disabled'}>Put back in my Plot deck</button></div>`;
+    // Goal cards: never more than the Goal limit. Plots: the hand limit applies outside your own turn.
+    const goals = goalsInHand(s, ui.me);
+    const goalExcess = Math.max(0, goals.length - goalLimit(s, ui.me));
+    const outside = s.prompt.data?.resume === 'endTurn' || s.players[s.active].id !== ui.me;
+    const plotsAfter = plotsInHand(s, ui.me).length - sel.length;
+    const goalsLeft = goals.filter((g) => !sel.includes(g)).length;
+    const ok = goalsLeft <= goalLimit(s, ui.me) && (!outside || plotsAfter <= handLimit(s, ui.me));
+    const plotExcess = outside ? Math.max(0, plotsInHand(s, ui.me).length - handLimit(s, ui.me)) : 0;
+    const parts = [
+      goalExcess ? `You may hold only ${goalLimit(s, ui.me)} Goal card${goalLimit(s, ui.me) > 1 ? 's' : ''}: pick ${goalExcess} Goal${goalExcess > 1 ? 's' : ''} to get rid of.` : '',
+      plotExcess ? `Outside your turn you may hold ${handLimit(s, ui.me)} Plots: pick Plots to get rid of until you are down to ${handLimit(s, ui.me)}.` : '',
+    ].filter(Boolean).join(' ');
+    body = `<h2>${goalExcess ? 'Too many Goal cards' : 'Too many Plots'}</h2><p>${parts} Tap the cards in your hand.</p>
+      <div class="btns"><button class="primary" data-act="discard" ${ok && sel.length ? '' : 'disabled'}>Discard ${sel.length} card${sel.length === 1 ? '' : 's'}</button><button data-act="return" ${ok && sel.length ? '' : 'disabled'}>Put back in my Plot deck</button></div>`;
   } else if (s.window && waiting.includes(ui.me)) {
     const opts = responseOptions(s, ui.me);
     const head = s.window.kind === 'plot' ? `<p><b>${esc(cardName(s, s.window.plot!.iid))}</b> was played. You can counter it.</p>`
@@ -566,7 +589,13 @@ function bind() {
   app.querySelectorAll<HTMLElement>('[data-hand]').forEach((b) => b.onclick = () => onHandCard(b.dataset.hand!));
   app.querySelectorAll<HTMLElement>('[data-inspect]').forEach((b) => b.onclick = () => { ui.inspect = b.dataset.inspect; render(); });
   app.querySelectorAll<HTMLElement>('[data-slot]').forEach((b) => b.onclick = () => {
-    const [onto, side] = b.dataset.slot!.split(':') as [string, Side];
+    const choices = b.dataset.slot!.split('|');
+    if (choices.length > 1) { ui.slotChoice = choices; render(); return; }
+    placeAt(choices[0]);
+  });
+  app.querySelectorAll<HTMLElement>('[data-slotpick]').forEach((b) => b.onclick = () => { const c = b.dataset.slotpick!; ui.slotChoice = undefined; placeAt(c); });
+  function placeAt(choice: string) {
+    const [onto, side] = choice.split(':') as [string, Side];
     const sel = ui.sel;
     if (sel.kind === 'takeover') act({ type: 'takeover', card: sel.card, onto, side });
     else if (sel.kind === 'move') {
@@ -575,7 +604,7 @@ function bind() {
       if (!payWith) { ui.error = 'Moving needs a token from the Group, its old or new master, or your Illuminati.'; render(); return; }
       act({ type: 'move', group: sel.group, onto, side, payWith });
     } else if (sel.kind === 'confirm') { ui.sel = { ...sel, side }; render(); }
-  });
+  }
   app.querySelectorAll<HTMLElement>('[data-opt]').forEach((b) => b.onclick = () => {
     const o = (window as unknown as { __opts: { action: Action }[] }).__opts[Number(b.dataset.opt)];
     act(o.action);
@@ -619,6 +648,7 @@ function bind() {
     switch (b.dataset.act) {
       case 'home': clearTimeout(timer); ui.game = null; if (online) { online.gameId = undefined; online.channel?.unsubscribe(); loadGames(); } render(); break;
       case 'clear': ui.sel = { kind: 'none' }; ui.error = undefined; render(); break;
+      case 'clearSlot': ui.slotChoice = undefined; render(); break;
       case 'skipTakeover': act({ type: 'skipTakeover' }); break;
       case 'pass': act({ type: 'pass' }); break;
       case 'endTurn': act({ type: 'endTurn' }); break;
@@ -724,8 +754,12 @@ async function openGame(id: string) {
 }
 
 function startOnline() {
-  const g = window as unknown as { supabase: { createClient(u: string, k: string): unknown } };
-  online = { client: g.supabase.createClient(__SB_URL__, __SB_KEY__), name: 'Player', games: [], busy: false, authMode: 'signin' };
+  const g = window as unknown as { supabase?: { createClient(u: string, k: string): unknown } };
+  if (!g.supabase) {
+    app.innerHTML = '<div class="start"><header class="hero"><h1>Elitists War</h1><p>The game could not connect. Check your internet connection and reload the page.</p></header></div>';
+    return;
+  }
+  online = { client: g.supabase!.createClient(__SB_URL__, __SB_KEY__), name: 'Player', games: [], busy: false, authMode: 'signin' };
   online.client.auth.onAuthStateChange((_e: string, session: { user: { id: string; email: string; user_metadata?: { name?: string } } } | null) => {
     online!.userId = session?.user.id;
     if (session) online!.name = session.user.user_metadata?.name || session.user.email.split('@')[0];
