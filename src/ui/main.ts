@@ -213,16 +213,33 @@ const goalFor = (n: number) => (n <= 3 ? 12 : n === 4 ? 11 : 10);
 function botsEditor(humans: number, minBots: number): string {
   const bots = loadBots().slice(0, 8 - humans);
   const total = humans + bots.length;
-  return `<div class="bots">${bots.map((lv, i) => `
+  return `<div class="bots" data-humans="${humans}">${bots.map((lv, i) => `
     <div class="bot-row"><span class="bot-name">Computer ${i + 1}</span>
       <span class="seg" role="radiogroup" aria-label="Computer ${i + 1} difficulty">${LEVELS.map(([id, name, what]) => `<button type="button" role="radio" aria-checked="${lv === id}" class="${lv === id ? 'on' : ''}" data-bot="${i}" data-bot-level="${id}" title="${esc(what)}">${name}</button>`).join('')}</span>
       ${bots.length > minBots ? `<button type="button" class="linkish" data-bot-del="${i}" aria-label="Remove Computer ${i + 1}">Remove</button>` : ''}</div>`).join('')}
     ${total < 8 ? '<button type="button" class="add-bot" data-bot-add>+ Add a computer player</button>' : ''}
-    <p class="muted small">${total} players in all · Goal ${goalFor(total)} Groups. Best with 4–6 players; 7–8 works, but rounds take longer.
+    ${recommend(humans, minBots, total)}
+    <p class="muted small">${total} players in all · Goal ${goalFor(total)} Groups. 7–8 players works, but rounds take longer.
     <br><b>Easy</b> makes mistakes · <b>Normal</b> plays solidly · <b>Hard</b> plans its help and fights hardest near a win.</p></div>`;
 }
 
+/** Players generally find 4 or 6 at the table the sweet spot; offer one tap to get there. */
+const SWEET = [4, 6];
+function recommend(humans: number, minBots: number, total: number): string {
+  const opts = SWEET.filter((t) => t - humans >= Math.max(minBots, 0) && t - humans <= 7);
+  if (!opts.length) return '';
+  const bots = (t: number) => `${t - humans} computer${t - humans === 1 ? '' : 's'}`;
+  return `<div class="sweet"><span class="small">★ Recommended: <b>4 or 6 players</b> in all${humans > 1 ? ` (with ${humans} people)` : ''}.</span>
+    ${opts.map((t) => t === total ? `<span class="sweet-on">✓ ${t} players</span>` : `<button type="button" class="sweet-btn" data-bot-total="${t}">Make it ${t} (${bots(t)})</button>`).join('')}</div>`;
+}
+
 function bindBots(rerender: () => void) {
+  app.querySelectorAll<HTMLElement>('[data-bot-total]').forEach((b) => b.onclick = () => {
+    const humans = +(b.closest<HTMLElement>('[data-humans]')?.dataset.humans ?? 1);
+    const want = +b.dataset.botTotal! - humans, bots = loadBots();
+    while (bots.length < want) bots.push(bots[bots.length - 1] ?? 'normal');
+    saveBots(bots.slice(0, want)); rerender();
+  });
   app.querySelectorAll<HTMLElement>('[data-bot-level]').forEach((b) => b.onclick = () => {
     const bots = loadBots(); bots[+b.dataset.bot!] = b.dataset.botLevel as AiLevel; saveBots(bots); rerender();
   });
