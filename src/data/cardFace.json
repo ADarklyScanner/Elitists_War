@@ -1,0 +1,1882 @@
+{
+"adepts-of-hermes": {
+"rules": "+6 on any attack to control or destroy a Magic Group. Each Magic Resource you hold counts as 1 more Group toward victory. A failed Attack to Control on a Group from your hand returns it to your hand.",
+"goal": "",
+"flavor": "The Moon consults us before it rises. We have not yet approved tomorrow."
+},
+"bavarian-illuminati": {
+"rules": "Once per turn, you may declare 1 of your attacks Privileged without playing any card or spending anything to do so.",
+"goal": "Special Goal: your Power Structure totals 50 Power, this Illuminati included.",
+"flavor": "Europe's oldest boardroom has never adjourned. The minutes are written in advance."
+},
+"bermuda-triangle": {
+"rules": "Once per turn, during your turn, you may begin a free reorganization: for the rest of the turn, moving your Groups costs no Action tokens, but you make no more attacks.",
+"goal": "Special Goal: 35 Power in your Power Structure, this Illuminati included, with at least 1 Group of every alignment.",
+"flavor": "Ships, planes and quarterly reports sail in. Only the reports ever resurface."
+},
+"discordian-society": {
+"rules": "+4 on any attack to control a Weird Group. Your Weird Groups with Power 3 or more count double toward victory. Attacks made or aided by Government or Straight Groups cannot target your Power Structure, nor can their special abilities.",
+"goal": "",
+"flavor": "Membership is free, compulsory and optional. Bylaws are drafted by whoever laughs first."
+},
+"gnomes-of-zurich": {
+"rules": "Your Plot hand limit is 6. +4 on any attack to control a Bank. Your Corporate Groups and Banks with Power 4 or more count double toward victory.",
+"goal": "",
+"flavor": "They never raise their voices. They simply raise your rates."
+},
+"the-network": {
+"rules": "At the start of your turn, draw 2 Plots instead of 1. Your Computer Groups with Power 3 or more count double toward victory.",
+"goal": "",
+"flavor": "Every password on Earth was issued by us, and we remember all of them."
+},
+"servants-of-cthulhu": {
+"rules": "+4 on any attack to destroy, Disasters and Assassinations included. Whenever you destroy a Group, draw 1 Plot. Each Group you have destroyed lowers the number of Groups your Basic Goal needs by 1.",
+"goal": "Special Goal: 8 Groups destroyed by you, by any means.",
+"flavor": "The stars are nearly right. Until then: bake sales, arson and very long chants."
+},
+"shangri-la": {
+"rules": "Every Group in your Power Structure gets +5 to defend against any attack, Instant attacks included. You may Attack to Destroy only Violent Groups.",
+"goal": "Special Goal: Peaceful Groups in play total 30 Power, whoever controls them. Rival Shangri-La factions meeting it together share the win.",
+"flavor": "Nobody here ages, argues or pays retail. Please leave your shoes and ambitions outside."
+},
+"ufos": {
+"rules": "Your Illuminati gets 2 Action tokens each turn, but cannot use both in the same attack. You may hold up to 3 different Goal cards and win by meeting any one of them.",
+"goal": "",
+"flavor": "Nobody knows what they want. Possibly cattle. Definitely your attention at 3 a.m."
+},
+"criminal-overlords": {
+"rules": "Goal. When you count your Groups for victory, each Group that is both Violent and Criminal counts as 2.",
+"goal": "",
+"flavor": "Every neighbourhood deserves protection. Every protection deserves a monthly fee."
+},
+"fratricide": {
+"rules": "Goal. Win once 2 rival Illuminati lose their last puppet with your help: taking it, adding Power, playing a Plot or using a special ability all count. Combines with no other Goal.",
+"goal": "",
+"flavor": "Brotherhood is sacred, and so is the reading of the will."
+},
+"hail-eris": {
+"rules": "Goal. When you count your Groups for victory, each Weird Group with Power 3 or more counts as 2.",
+"goal": "",
+"flavor": "Order is only a rumour. Go and start a better one."
+},
+"kill-for-peace": {
+"rules": "Goal. Win when Violent Groups you destroyed and Peaceful Groups you control reach any pair: 2 and 6, 3 and 5, 4 and 4, 5 and 3, 6 and 1. Combines with no other Goal.",
+"goal": "",
+"flavor": "We will have peace, even if we have to flatten everyone for it."
+},
+"let-them-eat-cake": {
+"rules": "Goal. Win when Liberal Groups you destroyed and Conservative Groups you control reach any pair: 2 and 6, 3 and 5, 4 and 4, 5 and 3, 6 and 1. Combines with no other Goal.",
+"goal": "",
+"flavor": "Tradition must be preserved, ideally behind gates and a very long driveway."
+},
+"power-for-its-own-sake": {
+"rules": "Goal. Win when your Power Structure totals 50 Power, your Illuminati's Power included.",
+"goal": "",
+"flavor": "Why do we want more? Because there is more, and it is not ours yet."
+},
+"power-to-the-people": {
+"rules": "Goal. Win when Conservative Groups you destroyed and Liberal Groups you control reach any pair: 2 and 6, 3 and 5, 4 and 4, 5 and 3, 6 and 1. Combines with no other Goal.",
+"goal": "",
+"flavor": "Seize the means of production, then form a subcommittee to name them."
+},
+"the-corporate-masters": {
+"rules": "Goal. When you count your Groups for victory, each Corporate Group with Power 4 or more counts as 2.",
+"goal": "",
+"flavor": "Acquire, merge, rebrand, repeat. The shareholders are always pleased."
+},
+"the-hand-of-madness": {
+"rules": "Goal. Win when Peaceful Groups you destroyed and Violent Groups you control reach any pair: 2 and 6, 3 and 5, 4 and 4, 5 and 3, 6 and 1. Combines with no other Goal.",
+"goal": "",
+"flavor": "Every peace treaty is just a pause to reload."
+},
+"up-against-the-wall": {
+"rules": "Goal. Win when Government Groups you destroyed and Violent Groups you control reach any pair: 2 and 6, 3 and 5, 4 and 4, 5 and 3, 6 and 1. Combines with no other Goal.",
+"goal": "",
+"flavor": "The uprising begins Tuesday, once the militia agrees on a flag colour."
+},
+"a-thousand-points-of-light": {
+"rules": "Blue New World Order. Opposite alignments give no modifier, whether the attack is to control or to destroy.",
+"goal": "",
+"flavor": "Left and right now hold hands. Nobody checks what the other hands are doing."
+},
+"bigger-business": {
+"rules": "Yellow New World Order. Corporate Groups get +2 Power, and Conservative Groups get +2 Power. A Group that is both gets +3 instead.",
+"goal": "",
+"flavor": "Too big to fail is now also too big to fit in the courtroom."
+},
+"chicken-in-every-pot": {
+"rules": "Blue New World Order. Banks and Coastal Places get +2 Power. Violent Groups get -1 Power.",
+"goal": "",
+"flavor": "Prosperity now arrives by harbour, is banked by noon and trickles down never."
+},
+"don-t-forget-to-smash-the-state": {
+"rules": "Yellow New World Order. Government Groups get -3 Power. Straight Groups that are not Government get -2 Power.",
+"goal": "",
+"flavor": "Today's errands: milk, dog food, topple the ruling order. Two out of three will do."
+},
+"energy-crisis": {
+"rules": "Blue New World Order. Corporate Groups get -2 Power. Green Groups get -1 Power and -1 Resistance.",
+"goal": "",
+"flavor": "The pumps are dry and the windmills have unionised. Kindly conserve your ambitions."
+},
+"fear-and-loathing": {
+"rules": "Blue New World Order. Each identical alignment between attacker and target gives +8 to control and -8 to destroy. Each opposite alignment gives -8 to control and +8 to destroy.",
+"goal": "",
+"flavor": "Friends became family, rivals became targets, and every shed got a second padlock."
+},
+"gun-control": {
+"rules": "Red New World Order. Groups that are both Violent and Government get +3 Power. Criminal Groups get +1 Power.",
+"goal": "",
+"flavor": "Only the proper authorities may be armed. The improper ones kept their receipts."
+},
+"law-and-order": {
+"rules": "Yellow New World Order. Conservative Groups get +2 Power, and Straight Groups get +2 Power. A Group that is both gets +3 instead.",
+"goal": "",
+"flavor": "Lawns will be trimmed to regulation height. Dissent will be filed in triplicate, then shredded."
+},
+"military-industrial-complex": {
+"rules": "Yellow New World Order. Every Corporate card also counts as Government for all purposes except Goals.",
+"goal": "",
+"flavor": "The tank factory lobbies the ministry, which orders more tanks. Synergy."
+},
+"peace-in-our-time": {
+"rules": "Red New World Order. Peaceful Groups get +1 Power, or +3 when defending against an attempt to destroy. Peaceful Groups in a Power Structure get +3 Resistance. Any Violent or Criminal Group gets -1 Power.",
+"goal": "",
+"flavor": "The treaty is signed, the doves are out, and arms dealers are on sabbatical."
+},
+"political-correctness": {
+"rules": "Red New World Order. Liberal Groups get +3 Power. Conservative Groups with Power 1 or less also become Criminal.",
+"goal": "",
+"flavor": "All speech must now be pre-approved by a committee still debating its own name."
+},
+"solidarity": {
+"rules": "Red New World Order. The Resistance of every Group in the game is doubled.",
+"goal": "",
+"flavor": "Link arms, sing loudly and refuse to budge. The takeover specialists went home early."
+},
+"tax-reform": {
+"rules": "Red New World Order. The I.R.S.'s once-per-turn tax takes the top Plot of every rival's Plot deck, not just one rival's. The I.R.S. gets +10 on every defense.",
+"goal": "",
+"flavor": "The new tax code fits on one page. The page is eleven kilometres long."
+},
+"world-hunger": {
+"rules": "Blue New World Order. Green Groups lose their Action tokens, cannot gain new ones and cannot use special abilities. Groups that are Liberal, a Nation or both get -2 Power.",
+"goal": "",
+"flavor": "The famine summit was a triumph. The canapés were superb."
+},
+"world-war-three": {
+"rules": "Yellow New World Order. A Nation making an Attack to Destroy on another Nation triples its Power. Success: its controller draws 1 Plot; it gains 1 Action token. Failure: the defender destroys it.",
+"goal": "",
+"flavor": "Diplomacy is cancelled. Please proceed calmly to the bunker gift shop."
+},
+"a-m-a": {
+"rules": "May aid or oppose any attack on a Science Group, whatever the alignments. +5 when it attacks a Science Group directly, aids an attack on one, or helps defend one.",
+"goal": "",
+"flavor": "Our second opinion always matches our first, and it is billed separately."
+},
+"american-autoduel-association": {
+"rules": "+4 when it attacks to destroy a Violent Group, and it ignores the usual penalty for identical alignments. +4 when it aids an attack to destroy a Violent Group.",
+"goal": "",
+"flavor": "Signal before firing. Never tailgate anything with a rear-mounted flamethrower."
+},
+"anti-nuclear-activists": {
+"rules": "+6 on any attack to destroy a Science Group. +4 on any attack to control a Green Group. Any attack on Nuclear Power Companies gets +10 instead of these bonuses.",
+"goal": "",
+"flavor": "We chained ourselves to the reactor fence, then noticed it glowed. Morale remains high."
+},
+"anti-war-activists": {
+"rules": "Every Group in your Power Structure gets +4 Resistance against Attacks to Control made or aided by a Government Group.",
+"goal": "",
+"flavor": "We have outlasted four generals with folk guitars and a thermos of lukewarm tea."
+},
+"bank-of-england": {
+"rules": "Any time: spend this Group's Action token to draw 2 Plots.",
+"goal": "",
+"flavor": "Founded to fund one war, we now underwrite tea, crumpets and other nations' revolutions."
+},
+"b-a-t-f": {
+"rules": "+8 when it attacks to destroy a Fanatic Group directly. +6 on any attack to control or destroy Gun Lobby, Tobacco Companies or Liquor Companies.",
+"goal": "",
+"flavor": "Three vices, one agency, and an evidence room that keeps getting lighter."
+},
+"big-media": {
+"rules": "+4 on any attack to control or destroy a Media Group. Can join either side of any attack in which a Media Group attacks or is attacked.",
+"goal": "",
+"flavor": "Six owners, one script, a thousand channels. Your opinion will be delivered shortly."
+},
+"black-activists": {
+"rules": "+2 on any attack to control a Liberal Group. This Group gets +4 to defend against attacks made or aided by Liberal Groups.",
+"goal": "",
+"flavor": "Every candidate promises change. We keep the receipts, filed by election year."
+},
+"boy-sprouts": {
+"rules": "When this Group takes part in Relief, its Power counts as 12, and you draw 1 Plot.",
+"goal": "",
+"flavor": "Forty-one knots mastered, one hurricane survived, and a badge for staying cheerful through both."
+},
+"cable-tv": {
+"rules": "Gets +1 Power and +1 Global Power per Personality you control.",
+"goal": "",
+"flavor": "Nine hundred channels, and a celebrity selling knives on every single one."
+},
+"cattle-mutilators": {
+"rules": "Action, your turn only: choose a rival. That player exposes every hidden Plot in their hand.",
+"goal": "",
+"flavor": "Neat incisions, no witnesses, and a herd that has taken a vow of silence."
+},
+"cfl-aio": {
+"rules": "+10 when it attacks to destroy a Corporate Group directly, and it ignores the usual penalty for identical alignments. +4 on any other attack to destroy a Corporate Group.",
+"goal": "",
+"flavor": "Solidarity forever, dues monthly, and a pension fund invested in the very firms we picket."
+},
+"church-of-elvis": {
+"rules": "Its Power becomes 4 while Elvis is in play, or 8 while you control Elvis.",
+"goal": "",
+"flavor": "Services nightly at the all-night diner. The collection plate accepts sequins."
+},
+"c-i-a": {
+"rules": "+4 when it attacks to destroy another Government Group directly, ignoring the identical-alignment penalty. When it attacks to destroy a Personality, you may make that an Assassination (Instant attack) before anyone aids or opposes.",
+"goal": "",
+"flavor": "Officially, this card does not exist. Unofficially, it has already read your hand."
+},
+"clone-arrangers": {
+"rules": "Any attack you make to control a Personality gets +4. Action, in the turn a Personality is killed: place it on an open control arrow in your Power Structure. It no longer counts as destroyed.",
+"goal": "",
+"flavor": "Lost a beloved strongman? Our vats are warm, our waiting list is short, and refunds are imaginary."
+},
+"comic-books": {
+"rules": "When it attacks or aids an Attack to Control on a Weird Group, that target's printed Resistance counts as 0, and it gets no Resistance bonus from a Weird master.",
+"goal": "",
+"flavor": "Send three box tops for the decoder ring. The ring decodes you."
+},
+"congressional-wives": {
+"rules": "+10 when it attacks to control a Government Group directly.",
+"goal": "",
+"flavor": "The senators write the laws. We decide which ones survive the charity luncheon."
+},
+"conspiracy-theorists": {
+"rules": "Your Plot hand limit rises by 1 while this Group is yours.",
+"goal": "",
+"flavor": "They pinned every cabal to a corkboard the size of a barn. They are wrong about everyone but us."
+},
+"cycle-gangs": {
+"rules": "+2 on any attack to destroy. +4 on any Disaster you play, except a Space Disaster.",
+"goal": "",
+"flavor": "We arrive unannounced, loudly, and at the worst possible moment. Every single time."
+},
+"democrats": {
+"rules": "+4 when it attacks to control a Government Group directly, unless that Group is a Nation.",
+"goal": "",
+"flavor": "A big tent with many poles, several leaks, and a subcommittee on whether tents are fair."
+},
+"dentists": {
+"rules": "Action, during an attack: cancel the action of a Personality taking part in that attack.",
+"goal": "",
+"flavor": "Open wide. This will only hurt your public image. Now rinse, spit and resign."
+},
+"deprogrammers": {
+"rules": "Any attack you make to destroy gets +4 against Weird or Fanatic targets, or +8 against targets with both. When it attacks, the Discordian Society's immunity to Straight Groups does not apply.",
+"goal": "",
+"flavor": "Step into the van. We have pamphlets, a sensible haircut and a tub of mild opinions."
+},
+"druids": {
+"rules": "Can join either side of attacks involving a Magic Group, even Secret ones. Link it to any Place in play: that Place gets +8 against Disasters. If the Place is destroyed, so are the Druids.",
+"goal": "",
+"flavor": "Four thousand years of chanting at the same rocks. The rocks have not budged."
+},
+"eco-guerrillas": {
+"rules": "+6 when it attacks to destroy a Corporate Group directly. Every Group in your Power Structure gets +2 Resistance against Attacks to Control made or aided by Corporate Groups.",
+"goal": "",
+"flavor": "We spike trees, glue ourselves to bulldozers and compost the annual reports."
+},
+"eff": {
+"rules": "+4 when it attacks to control a Computer Group directly. When it helps defend a Computer Group, double the Power added by every Group helping defend.",
+"goal": "",
+"flavor": "We defend your right to encrypt everything, and to argue about it in forums until dawn."
+},
+"elders-of-zion": {
+"rules": "Action, your turn only: also spend 1 Illuminati Action token. Reorganize your Power Structure in one step: your Groups move for free until you do anything else.",
+"goal": "",
+"flavor": "Forged by a tsar's secret police, spread by bigots, debunked for a century. The forgery is the only conspiracy."
+},
+"empty-vee": {
+"rules": "Media Groups in your Power Structure are immune to attacks by Straight Groups. Personalities you control get +1 Power each.",
+"goal": "",
+"flavor": "Round-the-clock videos for forty-second attention spans. The ads now run longer than the songs."
+},
+"evil-geniuses-for-a-better-tomorrow": {
+"rules": "Action, your turn only: put a Gadget from your hand into play, linked to this Group. Resources linked here cannot be moved away and go with this Group if it is captured or destroyed.",
+"goal": "",
+"flavor": "Our five-year plan: a volcano lair, a moon laser and a generous dental plan for henchmen."
+},
+"fast-food-chains": {
+"rules": "+6 on any attack to destroy a Green Group. During your turn, you may hide up to 2 of your exposed Plots at no cost.",
+"goal": "",
+"flavor": "The burgers are cheap. The rainforest was cheaper. The sauce recipe is classified."
+},
+"fbi": {
+"rules": "+4 on any attack to destroy a Criminal Group, or +10 when the FBI attacks directly. +2 on any attack to control a Criminal Group.",
+"goal": "",
+"flavor": "A file on every citizen, alphabetised, cross-referenced and occasionally left in a taxi."
+},
+"federal-reserve": {
+"rules": "+6 on any attack against a Bank. +2 on any attack against a Nation or Corporate Group.",
+"goal": "",
+"flavor": "We print the money, set the rates, and assure you that nobody is in charge."
+},
+"feminists": {
+"rules": "+3 on any attack to control a Liberal Group or to destroy a Conservative Group. Action, your turn only: draw a random Group card from a rival's hand. Keep it if Liberal; otherwise return it.",
+"goal": "",
+"flavor": "Asked politely for a century. Now they take the minutes, and names."
+},
+"fiendish-fluoridators": {
+"rules": "Any attack you make to destroy a Straight or Conservative target gets +5. Each time you destroy one, draw 1 Plot.",
+"goal": "",
+"flavor": "A drop in every reservoir and a smile on every face. Do not ask about the tingling."
+},
+"flat-earthers": {
+"rules": "Action, your turn only: roll 2 dice. If the total is no more than the number of Places you control, draw that many Plots.",
+"goal": "",
+"flavor": "We walked to the edge of the world three times. The map keeps cheating."
+},
+"fnord-motor-company": {
+"rules": "When an attack led by another Group you control fails, you may spend this Group's Action token and discard a Plot to reroll the dice.",
+"goal": "",
+"flavor": "Our cars run on optimism and a fuel we cannot name. You did not read this."
+},
+"fraternal-orders": {
+"rules": "Any time: spend this Group's Action token to draw 1 Group card.",
+"goal": "",
+"flavor": "Funny hats, firm handshakes, and the same ceremonial pretzel bowl since 1873."
+},
+"fred-birch-society": {
+"rules": "When a Goal card counts Conservative Groups, this Group counts as 2. For everything else, it is a single Group.",
+"goal": "",
+"flavor": "A subversive under every bed, then every closet, and finally in the mirror. Meeting adjourned."
+},
+"gay-activists": {
+"rules": "Action, your turn only, not during an attack: choose any Group in play and reverse one of its alignments until the end of the turn.",
+"goal": "",
+"flavor": "They organised until the establishment changed its mind. Now they flip votes before breakfast."
+},
+"girlie-magazines": {
+"rules": "+5 when it attacks to control a Straight Group directly.",
+"goal": "",
+"flavor": "Read strictly for the articles, say the senators and bishops on the subscription list."
+},
+"goldfish-fanciers": {
+"rules": "Attacks made or aided by Fanatic Groups cannot target any Group in your Power Structure.",
+"goal": "",
+"flavor": "Our devotion to the goldfish is total and unshakeable. Never, ever mention cats."
+},
+"gun-lobby": {
+"rules": "Resistance 10 against attacks involving a Liberal, Weird or Communist attacker. Whenever an attack on one of your Conservative or Violent Groups ends, either way, draw 1 Plot if this Group is still yours.",
+"goal": "",
+"flavor": "Every attack on freedom is a fundraising opportunity, and vice versa."
+},
+"hackers": {
+"rules": "+4 when it attacks to control a Computer Group directly. +2 on any other attack to control or destroy a Computer Group.",
+"goal": "",
+"flavor": "We broke into the mainframe to prove we could. We stayed for the free snacks."
+},
+"intellectuals": {
+"rules": "If this Group's master is a Media Group, that master gets +1 Power, cannot be captured, and can be destroyed only by a Disaster or an Assassination.",
+"goal": "",
+"flavor": "We host the panels, write the think pieces, and explain why the anchor is irreplaceable."
+},
+"international-cocaine-smugglers": {
+"rules": "+4 on any attack you make to control Hollywood, Manuel Noriega, Urban Gangs, Cycle Gangs or Punk Rockers, or any puppet of theirs.",
+"goal": "",
+"flavor": "Our supply chain is the envy of every logistics firm. Our loyalty programme is lifelong."
+},
+"international-communist-conspiracy": {
+"rules": "+3 on any attack to control a Communist Group or a Communist master's puppet. When it directly attacks to control a Fanatic Communist Group, it gets +4 instead of the usual -4.",
+"goal": "",
+"flavor": "Comrades, form an orderly queue. The five-year plan arrives in about seven years."
+},
+"international-weather-organization": {
+"rules": "Your Places get +6 against Disasters. Disasters you play against rival Places get +4, except Space Disasters.",
+"goal": "",
+"flavor": "Officially, the weather is natural. Please stop asking why the hurricane turned at the border."
+},
+"i-r-s": {
+"rules": "Once per turn, during your turn, you may take the top Plot of one rival's Plot deck into your hand. That rival sees it first. This needs no action.",
+"goal": "",
+"flavor": "Form 9 requires Form 8, your receipts, and a notarised apology for existing."
+},
+"joggers": {
+"rules": "+2 on every Assassination you make. This Group cannot be destroyed.",
+"goal": "",
+"flavor": "Up at five, three laps past every embassy, and nobody ever questions a person in running shorts."
+},
+"junk-mail": {
+"rules": "Can lead, aid or oppose attacks on Secret Groups. +6 on any attack you make to take over a Secret Group.",
+"goal": "",
+"flavor": "We found your address, your hobbies and your hidden lair. A coupon is enclosed."
+},
+"kkk": {
+"rules": "When it attacks or aids an Attack to Destroy on a Peaceful Group, double the Power of every Violent Group on both sides.",
+"goal": "",
+"flavor": "Membership is shrinking, the robes are fraying, and history keeps filing them under losers."
+},
+"l-4-society": {
+"rules": "+4 on any attack to control or destroy a Science or Space Group. When it attacks to control a Space Group directly, it gets +8 instead.",
+"goal": "",
+"flavor": "Orbital blueprints: done. Zero-gravity cookbook: done. Rocket: still pending."
+},
+"lawyers": {
+"rules": "Every Group in your Power Structure gets +4 to defend against attacks made or aided by Government or Corporate Groups. The I.R.S. cannot tax you.",
+"goal": "",
+"flavor": "Billed in six-minute increments, including the six minutes you spent reading this."
+},
+"libertarians": {
+"rules": "When it takes part in an Attack to Control on a puppet of a Government master, double the attacking Power. If it captures a Nation or U.S. state, its Power becomes that card's Power.",
+"goal": "",
+"flavor": "Roads should be optional, and the fire brigade should accept coupons."
+},
+"liquor-companies": {
+"rules": "+4 when it attacks to control a Media Group directly. Any time: spend this Group's Action token to make a rival skip their next card draw.",
+"goal": "",
+"flavor": "Please drink responsibly, says the small print. The large print lists happy hours."
+},
+"loan-sharks": {
+"rules": "Its Power rises by 1 per Criminal Group in your Power Structure, not counting itself.",
+"goal": "",
+"flavor": "Flexible repayment plans: weekly, daily, or right now in this alley."
+},
+"local-police-departments": {
+"rules": "+4 on any attack to destroy a Criminal Group. Its master gets +1 Power and +3 Resistance. This Group cannot be destroyed.",
+"goal": "",
+"flavor": "Overtime approved, and the new armoured vehicle is cleared for the summer parade."
+},
+"madison-avenue": {
+"rules": "+10 when it attacks to control a Media Group directly. +2 on any other attack to control or destroy a Media Group.",
+"goal": "",
+"flavor": "We sold you toothpaste, a car, a candidate and the itch to buy more."
+},
+"mi-5": {
+"rules": "Spend this Group's Action token to either cancel an attempt to expose your hidden Plots or, at any time, turn all your exposed Plots face down.",
+"goal": "",
+"flavor": "Discretion is our watchword. We would tell you the watchword, but it is classified."
+},
+"moonies": {
+"rules": "Action, during a Privileged attack: join either side, whatever the alignments. The attack is no longer Privileged.",
+"goal": "",
+"flavor": "One flower at the airport, one newspaper in the capital, and a pledge drive that never ends."
+},
+"opec": {
+"rules": "When it enters your Power Structure and at the start of each of your turns, its Power becomes 2 dice minus 2, +1 if you control Texas, +1 if you control Multinational Oil Companies.",
+"goal": "",
+"flavor": "Quotas are agreed unanimously, and then every member pumps whatever the dice suggest."
+},
+"paranoids": {
+"rules": "Each Group in your Power Structure gets +2 defending against attacks and Assassinations, not Disasters. At Power 0, the Paranoids get no Action tokens, can do nothing and cannot be destroyed.",
+"goal": "",
+"flavor": "They swept the room for bugs, then swept the sweepers, and now suspect the broom."
+},
+"phone-company": {
+"rules": "Once on your turn, free: look at 2 random hidden Plots in a rival's hand. As an action: make a rival expose 2 random hidden Plots.",
+"goal": "",
+"flavor": "Every call is recorded for quality purposes. The purposes are ours, and so is the quality."
+},
+"phone-phreaks": {
+"rules": "Your Attacks to Control or Destroy on Computer Groups get +6. As an action outside an attack, move any Group to another legal open arrow, except a rival Illuminati's direct puppet.",
+"goal": "",
+"flavor": "They never hacked the network. They whistled at it until it put them through."
+},
+"pollsters": {
+"rules": "When the Pollsters make, aid, oppose or are the target of an attack, ignore any alignment modifiers that would hurt their side.",
+"goal": "",
+"flavor": "Seventy percent of respondents agreed with whoever commissioned the survey."
+},
+"post-office": {
+"rules": "Once on your turn, free: look at 2 random hidden Group cards in a rival's hand. As an action: make a rival expose 2 random hidden Group cards.",
+"goal": "",
+"flavor": "Your parcel was delayed for inspection, rerouted out of curiosity and resealed with admirable neatness."
+},
+"professional-sports": {
+"rules": "Your Attacks to Control on Straight Groups get +4. Once per turn you may link it, for free, to one Personality you control; that Personality gets +3 Power.",
+"goal": "",
+"flavor": "The fans riot on cue, the stadium bond passes on cue, and the owner moves the team anyway."
+},
+"psychiatrists": {
+"rules": "Your Attacks to Destroy on Personalities get +6 unless Privileged. As an action, make a rival discard one of their exposed Plots that is not a Goal.",
+"goal": "",
+"flavor": "Tell us about your childhood, then your associates, then initial each page of the release."
+},
+"punk-rockers": {
+"rules": "If the Punk Rockers make, aid or oppose an attack, no Weird or Liberal Group may help defend its target.",
+"goal": "",
+"flavor": "Three chords, one borrowed amplifier and a manifesto photocopied too dark to read."
+},
+"recording-industry": {
+"rules": "Your Media Personalities get +2 Power. Your other Personalities get +1 Power.",
+"goal": "",
+"flavor": "Talent is optional; the contract is not, and it outlives you by several decades."
+},
+"red-cross": {
+"rules": "Your Power Structure gets +6 against Disasters. Red Cross's master gets Relief as soon as a Disaster Devastates it. As an action, give Relief to a Devastated Place. Attempts to destroy Red Cross get -15.",
+"goal": "",
+"flavor": "They arrive before the cameras, stay after them, and mention both in the annual report."
+},
+"reformed-church-of-satan": {
+"rules": "While you control it, Straight Groups cannot attack or help attack your other Groups. Straight Groups may attack it only to destroy it, and it gets +8 against their attacks.",
+"goal": "",
+"flavor": "Midnight services, potluck at one, and a strict policy of bringing your own candles."
+},
+"religious-reich": {
+"rules": "As an action, it may aid or oppose a Privileged attack made or aided by a Straight or Conservative Group. That attack stops being Privileged.",
+"goal": "",
+"flavor": "Their voter guides are strictly non-partisan and printed by the candidate's own campaign."
+},
+"republicans": {
+"rules": "The Republicans get +5 on their own Attacks to Control against Government Groups, except Nations.",
+"goal": "",
+"flavor": "Smaller government, they promised, and then they bought all of it to be sure."
+},
+"rifkinites": {
+"rules": "+6 when the Rifkinites make an Attack to Control on a Green Group. Your Attacks to Destroy get +2 for each of these the target is: Corporate, Science, Space, Computer.",
+"goal": "",
+"flavor": "They have filed an injunction against the future, pending environmental review of the present."
+},
+"robot-sea-monsters": {
+"rules": "Your Attacks to Destroy, and your Disasters other than Meteor Strike, get +4 against Corporate or Government Groups and Coastal Places. When they attack to destroy Japan or California, +10 instead.",
+"goal": "",
+"flavor": "The shipyard insists it built submarines. The submarines, surfacing with glowing eyes, disagree."
+},
+"rosicrucians": {
+"rules": "When you would draw a Plot, you may instead spend their action to search your Plot deck for any card you choose, within the game's time limit, then shuffle.",
+"goal": "",
+"flavor": "The teachings are open to every worthy seeker, after a modest fee and several centuries."
+},
+"saturday-morning-cartoons": {
+"rules": "Your Attacks to Control on Violent Groups get +2. Its puppets are Violent, and not Peaceful, until they get a new master.",
+"goal": "",
+"flavor": "This week's lesson in sharing is brought to you by a laser cannon and three cereals."
+},
+"savings-and-loans": {
+"rules": "Your Attacks to Control on Corporate, Government or Bank Groups get +3. As an action, cancel an action by a Bank, Corporate or Government Group.",
+"goal": "",
+"flavor": "Your deposit is perfectly safe, currently enjoying a golf resort we are not at liberty to name."
+},
+"science-fiction-fans": {
+"rules": "Your Attacks to Control or Destroy on Computer Groups get +2, or +6 when their master makes the attack. Your Attacks to Control on Weird Groups get +2.",
+"goal": "",
+"flavor": "They predicted the orbital mind lasers decades ago, in a paperback nobody bought but the lasers."
+},
+"secret-service": {
+"rules": "Your Attacks to Destroy and Assassinations get +10 against Government Personalities. When it attacks to destroy any other Government Group, the usual shared-alignment penalty applies.",
+"goal": "",
+"flavor": "Their earpieces pick up two channels: the protectee's pulse and a second one nobody discusses."
+},
+"secular-humanists": {
+"rules": "Any attack on your other Groups gets -3 when a Straight or Conservative Group leads it.",
+"goal": "",
+"flavor": "They believe in reason, evidence and humanity, and have a twelve-page pamphlet explaining why."
+},
+"semiconscious-liberation-army": {
+"rules": "Every Attack to Destroy you make gets +3, whatever the target.",
+"goal": "",
+"flavor": "Half awake, heavily armed and firmly committed to a revolution scheduled right after the nap."
+},
+"s-m-o-f": {
+"rules": "+2 to control Weird Groups, or +6 when it attacks Science Fiction Fans, Trekkies, Wargamers, Comic Books or Trading Card Games. Once on your turn, free: remove a rival Weird Group's Action token.",
+"goal": "",
+"flavor": "There is no cabal running fandom. Please stop asking. The cabal finds it tiresome."
+},
+"society-for-creative-anarchism": {
+"rules": "Your Attacks to Destroy on Straight Groups get +4. As an action, make a rival discard the top card of their Group deck.",
+"goal": "",
+"flavor": "The swords are foam, the chainmail is homemade, and the grudge against the zoning board is real."
+},
+"south-american-nazis": {
+"rules": "+6 when they make an Attack to Control on a Group that is both Weird and Science. Each of their puppets that is Weird and Science gets +3 Power.",
+"goal": "",
+"flavor": "The compound has fine laboratories, no extradition treaty and a gift shop that never opens."
+},
+"subliminals": {
+"rules": "It gets +1 Power and +1 Global Power for each Media Group you control.",
+"goal": "",
+"flavor": "You do not remember reading this card. You only feel a sudden urge to buy more."
+},
+"supreme-court": {
+"rules": "As an action, cancel an action by a Government Group.",
+"goal": "",
+"flavor": "The decision is final, the reasoning is sealed, and the opinion runs to four hundred pages."
+},
+"survivalists": {
+"rules": "Your Power Structure gets +3 against Disasters. At the start of your turn, their master and their puppets get free Relief.",
+"goal": "",
+"flavor": "Forty years of canned beans, one hand-cranked radio and a firm belief the neighbours are in on it."
+},
+"tabloids": {
+"rules": "It may attack Secret Groups directly. In those attacks the target is not Secret and any Group may aid either side, whatever its alignment. Your Attacks to Control on Convenience Stores get +3.",
+"goal": "",
+"flavor": "Senator revealed as three raccoons in a trench coat. Sources confirm they are the raccoons."
+},
+"telephone-psychics": {
+"rules": "+6 when they make an Attack to Control on Ronald Reagan, Nancy Reagan, the Tabloids, or a Media Group whose Power is 1 or 2.",
+"goal": "",
+"flavor": "The spirits foresee a long relationship with your credit card. The first three minutes are free."
+},
+"templars": {
+"rules": "As an action, choose an exposed Plot a rival holds. They must discard it.",
+"goal": "",
+"flavor": "Officially dissolved centuries ago. Nobody told the order, which has kept excellent minutes ever since."
+},
+"the-mafia": {
+"rules": "Your Attacks to Control or Destroy on Criminal Groups get +2. When the Mafia itself attacks to destroy a Criminal Group, it gets +4 instead, with no shared-alignment penalty.",
+"goal": "",
+"flavor": "Nobody is forced to buy protection. It simply becomes very hard to own a shop without it."
+},
+"the-men-in-black": {
+"rules": "Attacks to Destroy that the Men in Black make or aid get +4. If such an attack succeeds, the target is removed from the game for good.",
+"goal": "",
+"flavor": "You saw nothing. You will keep seeing nothing. Please look directly at this small blinking light."
+},
+"tobacco-companies": {
+"rules": "+8 when they make an Attack to Control on a Government Group, ignoring any penalty for opposite alignments. Attacks to Destroy led by Green Groups against Tobacco Companies get +4.",
+"goal": "",
+"flavor": "Independent studies funded by us conclude that more studies funded by us are urgently needed."
+},
+"trekkies": {
+"rules": "Media Groups get +4 when they attack to control the Trekkies. The Trekkies get +4 when they make an Attack to Control on a Media Group.",
+"goal": "",
+"flavor": "They have memorised every episode, every blueprint and every clause the network hoped nobody read."
+},
+"triliberal-commission": {
+"rules": "Whenever a Goal counts Liberal Groups, controlled or destroyed, the Triliberal Commission counts as 2. For every other purpose it is an ordinary Liberal Group.",
+"goal": "",
+"flavor": "Membership is by invitation only. The invitations are delivered by people who were never invited."
+},
+"tv-preachers": {
+"rules": "+6 when they make an Attack to Control on a Group that is Straight and Fanatic, ignoring any penalty for opposite alignments. Their puppets get +5 Resistance.",
+"goal": "",
+"flavor": "Operators are standing by. Major credit cards accepted; small miracles billed separately."
+},
+"underground-newspapers": {
+"rules": "Draw 1 extra Plot each time they make or aid an attack that destroys a Corporate, Government or Straight Group.",
+"goal": "",
+"flavor": "Printed in a garage, stapled by hand, and read cover to cover by three intelligence agencies."
+},
+"united-nations": {
+"rules": "Your Attacks to Control on Nations get +6. When it gives Relief, its Power counts 5 times over.",
+"goal": "",
+"flavor": "After long debate, the committee formed a subcommittee to agree the wording of its concern."
+},
+"urban-gangs": {
+"rules": "Your Attacks to Destroy and your Assassinations get +2.",
+"goal": "",
+"flavor": "Colours, codes and a territory: the zoning board has the same, plus better lawyers."
+},
+"vampires": {
+"rules": "+4 when they make an Attack to Control on a Personality. A Personality they take over becomes a Vampire: only Magic can destroy it, and then it is gone for good.",
+"goal": "",
+"flavor": "Immortality has drawbacks: the hours are late, the diet is restrictive and the mirrors are useless."
+},
+"video-games": {
+"rules": "Your Attacks to Control on Computer Groups or Convenience Stores get +3. Your other Computer Groups get +1 Power.",
+"goal": "",
+"flavor": "Insert coin to continue. Insert another to learn what the first one was for."
+},
+"voudonistas": {
+"rules": "+8 when they make an Attack to Destroy on a Personality. Assassinations they take part in get +4, and defenses against Assassination that are not Magic do not apply.",
+"goal": "",
+"flavor": "Several fund managers have filed complaints. None can say exactly what they are complaining about."
+},
+"wall-street": {
+"rules": "When Wall Street makes or aids an attack, it may count as Government instead of Corporate, or as Corporate instead of Government, for its own part. Its puppets get +10 Resistance.",
+"goal": "",
+"flavor": "Markets fell on rumours that the rumours had been sold short by the people spreading them."
+},
+"wargamers": {
+"rules": "Your Attacks to Control or Destroy on Computer Groups get +2. As an action, put any exposed Plot on the bottom of its owner's Plot deck.",
+"goal": "",
+"flavor": "They have simulated every war ever fought and several not yet scheduled. The generals borrow their dice."
+},
+"w-i-t-c-h": {
+"rules": "As an action, right after any die roll, raise or lower it by 1, or by 2 if a Magic Group is involved.",
+"goal": "",
+"flavor": "The coven meets monthly to discuss herbs, moon phases and gently bending a probability curve."
+},
+"al-gore": {
+"rules": "+8 when Al Gore makes an Attack to Control on a Green Group.",
+"goal": "",
+"flavor": "He brings a slideshow to every meeting, including the clandestine ones, which are starting to enjoy it."
+},
+"bill-clinton": {
+"rules": "+3 to your Attacks to Control on U.S. Government Groups; +8 on his own against any Government Group. He is Liberal on a die of 1-3, rolled each turn and afresh for each attack.",
+"goal": "",
+"flavor": "He shook every hand in the room, then pocketed the room on his way out."
+},
+"bjorne": {
+"rules": "+4 on his own Attacks to Control on Media Groups. +1 Action token for each Media puppet of his. Whoever destroys him draws 1 Plot, plus 1 per point of his Power.",
+"goal": "",
+"flavor": "Famous for being famous, booked for being booked, and quoted for saying absolutely nothing."
+},
+"count-dracula": {
+"rules": "+10 on his own Attacks to Control on the Vampires. Only Magic can destroy him, permanently. Linked Magic Artifacts cannot be taken or lost while he lives, and are lost forever when he dies.",
+"goal": "",
+"flavor": "The castle is drafty, the staff are undead, and the property tax has been unpaid since 1462."
+},
+"dan-quayle": {
+"rules": "As an action, cancel an action by a Media Group.",
+"goal": "",
+"flavor": "He corrected the spelling on a classroom flashcard, and the correction became his best-known policy."
+},
+"elvis": {
+"rules": "As an action, cancel an action by a Media Group. +6 when Elvis makes an Attack to Control on the Church of Elvis.",
+"goal": "",
+"flavor": "Sighted this week at a gas station, a moon crater and a very exclusive board meeting."
+},
+"fidel-castro": {
+"rules": "On your turn, you may hide 1 Plot from your hand beneath him. It cannot be exposed. Once it has been used, you may hide another on your turn.",
+"goal": "",
+"flavor": "He outlasted nine presidents and dozens of plots, and never once mislaid a file."
+},
+"george-bush": {
+"rules": "Whenever it matters whether George Bush is Conservative, his controller decides.",
+"goal": "",
+"flavor": "His positions were firmly held, briefly, and then firmly held the other way."
+},
+"gordo-remora": {
+"rules": "+10 when Gordo Remora makes an Attack to Destroy on a Weird Group.",
+"goal": "",
+"flavor": "His talk show has exposed forty cults, twelve covens and one very confused knitting circle."
+},
+"hillary-clinton": {
+"rules": "+2 to your Attacks to Control on Bill Clinton, Congressional Wives or the Democrats, or +6 when she makes the attack herself.",
+"goal": "",
+"flavor": "She read every briefing, memorised every name and drafted the agenda for meetings nobody admits happened."
+},
+"imelda-marcos": {
+"rules": "When she makes or aids an attack on a Government or Bank target, you may roll a die once. 1-5: her Power counts as 5. 6: she is destroyed, credited to the target's owner.",
+"goal": "",
+"flavor": "Three thousand pairs of shoes, paid for by a treasury that could not afford one."
+},
+"jimmy-hoffa": {
+"rules": "As an action, cancel an action by a Corporate Group. +6 when Jimmy Hoffa makes an Attack to Control on CFL-AIO.",
+"goal": "",
+"flavor": "He guarded the pension fund personally, and lent it only to friends with casinos."
+},
+"manuel-noriega": {
+"rules": "When his master makes or aids an attack, it may also count as having any of Noriega's alignments for that attack. Your Attacks to Control on International Cocaine Smugglers get +6.",
+"goal": "",
+"flavor": "Everybody's ally at some point, which made him very useful until it made him very inconvenient."
+},
+"margaret-thatcher": {
+"rules": "Your Attacks to Control on England get +10.",
+"goal": "",
+"flavor": "She privatised the phones, the gas and the water, and was pricing the fog."
+},
+"media-sensation": {
+"rules": "You may have any number in play, each with a different Personality name. Destroying one never counts toward Goals.",
+"goal": "",
+"flavor": "Booked solid through three news cycles, though no one can name a single thing achieved."
+},
+"nancy-reagan": {
+"rules": "+10 when Nancy Reagan makes an Attack to Control on Ronald Reagan.",
+"goal": "",
+"flavor": "The President's calendar was cleared with an astrologer, who took the responsibility very seriously."
+},
+"ollie-north": {
+"rules": "+8 when Ollie North makes an Attack to Control on a Media Group that is Conservative.",
+"goal": "",
+"flavor": "He shredded the documents, then the shredder's manual, and saluted the committee throughout."
+},
+"prince-charles": {
+"rules": "He, his master and his puppets are immune to Privileged attacks. Any Group may help defend him, whatever its alignment. Media Groups attacking him count their Power twice.",
+"goal": "",
+"flavor": "He vetoed a skyscraper with one speech and has been redesigning the skyline in his head ever since."
+},
+"princess-di": {
+"rules": "Each of your other Liberal Groups gets +1 Power. Peaceful or Liberal Groups of rivals may not attack her or her puppets; Media Groups are exempt.",
+"goal": "",
+"flavor": "Charities courted her, crowds adored her, and three separate orders failed politely to recruit her."
+},
+"ronald-reagan": {
+"rules": "Media Groups cannot attack him or aid attacks on him. Once he makes or aids an attack, no Media Group may oppose it.",
+"goal": "",
+"flavor": "He read the script beautifully. Nobody could say who wrote it, but the lighting was perfect."
+},
+"ross-perot": {
+"rules": "Groups he controls are Straight and Conservative and lose Weird and Liberal, until they get a new master.",
+"goal": "",
+"flavor": "He brought charts, graphs and a pointer to the revolution, and paid for the revolution himself."
+},
+"saddam-hussein": {
+"rules": "As an action, cancel an action by a Government Group.",
+"goal": "",
+"flavor": "He won his last referendum with every vote cast, and several that never were."
+},
+"brazil": {
+"rules": "If Brazil's master is Corporate, that master gets 1 extra Action token each turn.",
+"goal": "",
+"flavor": "The ministry values the rainforest as priceless, and the consultants are negotiating the discount."
+},
+"california": {
+"rules": "Every Media Group you control gets +1 Power.",
+"goal": "",
+"flavor": "The state budget runs on ballot measures, film subsidies and a disaster fund that is nearly enough."
+},
+"canada": {
+"rules": "+10 when Canada makes an Attack to Control on a Green Group.",
+"goal": "",
+"flavor": "Its government signs every climate accord going, then approves one more pipeline to cover the travel."
+},
+"center-for-disease-control": {
+"rules": "As an action, give Relief to a Devastated Place. +15 on its own Attacks to Destroy on Places, but if one fails, it is destroyed, credited to the target's owner.",
+"goal": "",
+"flavor": "Every known pathogen is catalogued, labelled and stored safely, apart from those filed under miscellaneous."
+},
+"china": {
+"rules": "If China's master is Corporate, that master gets 1 extra Action token each turn. Attempts to destroy China, Disasters included, get -20.",
+"goal": "",
+"flavor": "The Party welcomes your factory, your investment and, as a condition of entry, your blueprints."
+},
+"dinosaur-park": {
+"rules": "As an action, add +4 to a Disaster. Whenever a Corporate or Science Group is attacked, Dinosaur Park and its master may join either side.",
+"goal": "",
+"flavor": "All safety systems are operational. Please disregard the rattling fence and keep your arms inside the tram."
+},
+"england": {
+"rules": "England receives 2 Action tokens every turn instead of 1.",
+"goal": "",
+"flavor": "The Foreign Office still keeps a map of the old empire in a drawer, just in case."
+},
+"finland": {
+"rules": "Your Attacks to Control on Computer Groups get +2, or +6 when Finland makes the attack.",
+"goal": "",
+"flavor": "Long winters and generous research grants have turned its ministries into very patient software houses."
+},
+"annual-convention": {
+"rules": "Instant. Play right after a Place is destroyed or Devastated: Instant Attack to Destroy an Organization in play, at Power 12 if the Place was destroyed, 9 if Devastated. Only Magic or Weird Science Groups may join, on either side.",
+"goal": "",
+"flavor": "The keynote speaker summoned something. Catering left before the closing remarks."
+},
+"are-we-having-fun-yet": {
+"rules": "Play against a Group acting in an attack, or right after it announces an action or ability use. Cancel that action. Pay with actions of your Groups whose total Power is more than the target's Power.",
+"goal": "",
+"flavor": "Mandatory fun hour has been extended indefinitely. Attendance is being monitored."
+},
+"assertiveness-training": {
+"rules": "The target Group becomes Violent for good, losing Peaceful. Pay with your Illuminati's action, or Violent Groups' actions totalling Power at least its Resistance (x2 if Peaceful), plus its position bonus if a rival controls it. Link to it.",
+"goal": "",
+"flavor": "Week one: stop apologizing. Week two: stop asking. Week three: the ski mask arrives."
+},
+"atomic-monster": {
+"rules": "Instant. Attack to Destroy a Coastal Place at Power 20 (Huge: 16; Japan or California: 24). Success Devastates; beating the roll by 7+ destroys. Or add +10 to any Attack to Destroy on Robot Sea Monsters or Nuclear Power Companies.",
+"goal": "",
+"flavor": "Scientists called it merely curious. It has since eaten the scientists."
+},
+"backlash": {
+"rules": "Undo one change a Plot made to a Group's alignment, Power or Resistance, and discard that Plot. New World Order changes cannot be undone. Pay with the action of one of your Groups sharing a non-Fanatic alignment with it.",
+"goal": "",
+"flavor": "The makeover was a triumph until the public noticed. Now they want the old one back."
+},
+"bank-merger": {
+"rules": "Each Bank Group you control gets an Action token, even if it already has one. Groups barred from receiving Action tokens get none.",
+"goal": "",
+"flavor": "Two banks became one. The layoffs became thousands. The bonuses became legendary."
+},
+"benefit-concert": {
+"rules": "One Liberal Group you control gets +10 Power or Resistance. Boosting an action: play it as the action is announced; it lasts for that action. Defending: it lasts until end of turn and never counts for Goals.",
+"goal": "",
+"flavor": "Tickets start at a modest donation. Proceeds support awareness, which is expensive to raise."
+},
+"bimbo-at-eleven": {
+"rules": "During an attack. Play as your Media Group declares an Attack to Destroy on a male Personality: +5, and the attack is Privileged, except any Media Group may interfere on either side. If it succeeds, the Personality can never return.",
+"goal": "",
+"flavor": "Tonight at eleven: an exclusive that ends a career. Stay tuned for the weather."
+},
+"blitzkrieg": {
+"rules": "Give an Action token to a Group you took control of this turn, so it can act the same turn it was captured.",
+"goal": "",
+"flavor": "Occupation begins at dawn. Productivity reports are due at noon."
+},
+"blood-toil-tears-and-sweat": {
+"rules": "Discard one New World Order in play. Pay with actions of your Media Groups totalling Power 4 or more.",
+"goal": "",
+"flavor": "A rousing broadcast, a swell of strings, and the new order quietly goes back in its box."
+},
+"bodyguard": {
+"rules": "During an attack. Play after an Assassination is played: it fails. Link this to the Personality it targeted; that Personality gets +6 to resist Attacks to Destroy, Assassinations included. Bodyguard leaves play with it.",
+"goal": "",
+"flavor": "He took a bullet once. Now he bills for it by the hour."
+},
+"botched-contact": {
+"rules": "Play right after a rival makes his automatic takeover with a Group. It returns to his hand, and he must pick another card for this turn's automatic takeover. Costs the action of one of your Groups.",
+"goal": "",
+"flavor": "The handshake was off by one finger. Negotiations are postponed indefinitely."
+},
+"bribery": {
+"rules": "During an attack. Play right after the attack dice are rolled: the roll becomes 2, so the attack succeeds only if its net Power is at least 2. Spend every Action token on your Illuminati (at least 1).",
+"goal": "",
+"flavor": "The dice were reasonable once they understood the offer."
+},
+"car-bomb": {
+"rules": "Instant. Assassination: Instant Attack to Destroy any Personality at Power 8, no action needed. One of your Violent or Criminal Groups may spend its action to add its Power.",
+"goal": "",
+"flavor": "The owner had enemies on three continents. The valet had wisely gone on break."
+},
+"celebrity-spokesman": {
+"rules": "Not during an attack. Link one of your Personalities to an Organization that is neither Secret nor Government and has no alignment opposed to it. The Personality's Power becomes 4 until either card is captured or destroyed.",
+"goal": "",
+"flavor": "He has never used the product. He has used the paycheck extensively."
+},
+"censorship": {
+"rules": "During an attack. Play as you declare an attack on a Media Group made or aided by your Straight, Conservative or Government Group. The attack gets +15 Power and is Privileged.",
+"goal": "",
+"flavor": "The broadcast has been paused for your protection. Please enjoy this soothing test pattern."
+},
+"charismatic-leader": {
+"rules": "Spend the action of a Fanatic Group you control: its Power becomes 6. Link this to it. You may have only 1 Charismatic Leader in play.",
+"goal": "",
+"flavor": "He promised salvation, a new world and a tote bag. Two out of three arrived."
+},
+"citizenship-award": {
+"rules": "Spend the action of a Conservative Group you control: its Power becomes 6. Link this to it. You may have only 1 Citizenship Award in play.",
+"goal": "",
+"flavor": "For outstanding service to the community, which noticed and filed several complaints."
+},
+"clone": {
+"rules": "Your turn only, not during an attack. Play a Personality from your hand that duplicates an Assassinated one. The original stops counting as destroyed for Goals. Then control it normally, or automatically if you control the Clone Arrangers.",
+"goal": "",
+"flavor": "Same smile, same handshake, same memories. Slightly different fingerprints, but who checks?"
+},
+"cold-fusion": {
+"rules": "One Science Group you control gets +10 Power or Resistance. Boosting an action: play it as the action is announced; it lasts for that action. Defending: it lasts until end of turn and never counts for Goals.",
+"goal": "",
+"flavor": "The results were revolutionary. The lab notebook was, tragically, lost in a fire."
+},
+"combined-disasters": {
+"rules": "Instant. Play with two Disasters from your hand against one Place that both can strike. Resolve one as the main Disaster, adding only the other's Power; ignore the rest of the second card.",
+"goal": "",
+"flavor": "Insurance adjusters have added a new category: acts of multiple gods."
+},
+"commitment": {
+"rules": "Link this to any Group, even one under attack or just played from a rival's hand: its Resistance becomes 8. This is a free move, playable at any time.",
+"goal": "",
+"flavor": "They signed the pledge in triplicate. Leaving now requires a notarized miracle."
+},
+"computer-security": {
+"rules": "Counter. Play immediately after a Plot about Computers or aimed at a Computer Group: cancel it completely. Costs the action of the Network or one of your Computer Groups.",
+"goal": "",
+"flavor": "Our password policy has been strengthened. Please write your new one on a sticky note."
+},
+"computer-virus": {
+"rules": "During an attack. Play right after the attack dice are rolled: change the roll by 2, up or down. Costs the action of one of your Science, Space or Computer Groups.",
+"goal": "",
+"flavor": "It is not a bug. It is an undocumented feature with its own agenda."
+},
+"corruption": {
+"rules": "Play right after Relief is sent to a Devastated Place. The Relief is wasted: the Place stays Devastated, the Groups under it lose their Action tokens, and no Relief may be tried there until after your next turn.",
+"goal": "",
+"flavor": "The aid shipment arrived on schedule. The trucks were last seen in a private garage."
+},
+"counter-revolution": {
+"rules": "Your turn only, outside attacks. Play a Nation from hand duplicating a destroyed one as if never destroyed; the original no longer counts for its destroyer's Goals. Pay with your Illuminati's action or Government Groups totalling Power 10+.",
+"goal": "",
+"flavor": "The old regime returned with new flags, the same generals and freshly painted palaces."
+},
+"counterspell": {
+"rules": "During an attack. When a Magic Resource is used against you in any way, cancel that use; the Resource is destroyed and discarded. Costs the action of your Illuminati or a Magic Group.",
+"goal": "",
+"flavor": "The incantation bounced. Somewhere, a very expensive amulet is now a paperweight."
+},
+"cover-of-darkness": {
+"rules": "Play right after a Gadget or Artifact Resource in play is destroyed or discarded. Undo that loss: the Resource returns to play under your control.",
+"goal": "",
+"flavor": "Officially it was lost in a warehouse fire. Unofficially it sits in a very nice display case."
+},
+"cover-up": {
+"rules": "Choose one. During an attack: after an attack on a Secret Group succeeds, it fails instead; costs the action of your Illuminati or a different Secret Group. Counter: cancel an Exposed! just played, for free.",
+"goal": "",
+"flavor": "There was no incident. There is no file. Please return the file."
+},
+"crop-circles": {
+"rules": "Play at the start of your turn, before drawing. Instead of drawing from your Plot or Group deck, search it and pick as many cards as you would draw, then shuffle it. Costs a Magic Group's action.",
+"goal": "",
+"flavor": "Two farmers, one plank and a rope. Also, possibly, a message from the stars."
+},
+"currency-speculation": {
+"rules": "Choose a Bank Group you control. Triple its Power for its next action, or its Resistance for its next defense. The tripled value never counts for Goals.",
+"goal": "",
+"flavor": "Buy low, sell high, and make sure the market knows which is which before you do."
+},
+"deasil-engine": {
+"rules": "Destroy any Gadget Resource in play; its owner discards it. Counter: another Deasil Engine played right after this one cancels it. Neither play is an action.",
+"goal": "",
+"flavor": "It turns clockwise, then faster, and then it turns into scrap."
+},
+"deep-agent": {
+"rules": "During an attack. A Privileged attack loses its privilege and cannot become Privileged again. Playing this is free, but each Group that then interferes spends its own action.",
+"goal": "",
+"flavor": "He has been on the inside for twenty years and forgot which side he started on."
+},
+"dictatorship": {
+"rules": "Your turn only, outside attacks. Spend the action of a Nation you control, or of its master. The Nation becomes a Dictatorship: +2 Power, and it turns Violent. Link this to it.",
+"goal": "",
+"flavor": "Elections are postponed until the weather improves. The forecast is permanently cloudy."
+},
+"dollars-for-decency": {
+"rules": "Spend your Illuminati's action. Give an Action token to your Straight Groups without one: any number totalling Power 5 or less, or any single Group. Groups captured this turn or barred from tokens cannot be chosen.",
+"goal": "",
+"flavor": "Every donation buys a family a brighter tomorrow and a senator a nicer boat."
+},
+"double-cross": {
+"rules": "Counter. Play when a rival plays a Plot to look at your hidden Plots. His Plot is lost, along with any actions spent on it, and he sees and takes nothing.",
+"goal": "",
+"flavor": "The file they stole was blank, and the paper was laced with something that itches."
+},
+"early-warning": {
+"rules": "During an attack. A Place struck by a Disaster gets +10 to its defense. Playing this is a free action.",
+"goal": "",
+"flavor": "The sirens sounded, the town evacuated, and the golf course was saved."
+},
+"earthquake": {
+"rules": "Instant. Attack to Destroy any Place, no action needed, at Power 16, or 12 against a Huge Place. Success Devastates it; beating the roll by 6+ destroys it.",
+"goal": "",
+"flavor": "The fault line was reportedly under new management."
+},
+"earth-magic": {
+"rules": "During an attack. Play while a Disaster strikes a Place. Any Magic Groups in play may spend their Action tokens to oppose that Disaster attack.",
+"goal": "",
+"flavor": "The stones remember everything. Particularly who paved over them."
+},
+"eat-the-rich": {
+"rules": "During an attack. Play as you declare an Attack to Destroy on a Group with Power 6 or more, made or aided by your Media Group. The attack gets +10 and is Privileged.",
+"goal": "",
+"flavor": "The yacht was hosting a charity gala. The irony was served as an appetizer."
+},
+"embezzlement": {
+"rules": "Play the moment another player draws a Plot, before it is used or shown. Take that Plot into your hand, then discard a different Plot from your hand.",
+"goal": "",
+"flavor": "The accounts balanced perfectly. The balance was in a different country."
+},
+"emergency-powers": {
+"rules": "Spend the action of a Government Group you control: its Power becomes 6. Link this to it. You may have only 1 Emergency Powers in play.",
+"goal": "",
+"flavor": "The emergency ended decades ago. Nobody has found the paperwork to end the powers."
+},
+"epidemic": {
+"rules": "Your turn only. Disaster: Attack to Destroy any Place at Power 14, no action needed. It is not Instant, so Groups may interfere normally. Success Devastates the Place; it can never destroy it.",
+"goal": "",
+"flavor": "It spread by handshake, by elevator button, and mostly by panicked news reports."
+},
+"exposed": {
+"rules": "Spend the action of your Media Group with Power 4 or more. A Secret Group loses Secret for good, unless this card is countered at once.",
+"goal": "",
+"flavor": "The organization denied everything, then denied denying it, then issued a commemorative mug."
+},
+"faction-fight": {
+"rules": "During an attack. Play as you declare an attack on a rival's Group, together with a duplicate of that Group from your hand. The attack gets +5 more and is Privileged. This card costs no action; the attack does.",
+"goal": "",
+"flavor": "Both sides claim to be the true founders. Both sides are suing. Both sides are armed."
+},
+"flower-power": {
+"rules": "Spend your Illuminati's action. Give an Action token to your Peaceful Groups without one: any number totalling Power 5 or less, or any single Group. Groups captured this turn or barred from tokens cannot be chosen.",
+"goal": "",
+"flavor": "Sit-ins resume at noon, after a brief pause for herbal tea and a stern petition."
+},
+"fnord": {
+"rules": "During an attack. Play right after you roll for your attack: ignore the result and roll again. No action needed, but discard the top card of your Group deck or 2 Group cards from your hand.",
+"goal": "",
+"flavor": "You did not see this card. You will not remember this roll. Everything is fine."
+},
+"foiled": {
+"rules": "Spend the action of one of your Media Groups. A rival discards one of his exposed Goal cards.",
+"goal": "",
+"flavor": "Their master plan made the evening news, right after a skateboarding dog."
+},
+"forgery": {
+"rules": "Your turn only, outside attacks. Bring a Resource from your hand into play by automatic takeover, even though it duplicates a Unique Resource in play. Yours is genuine; the other copy is discarded.",
+"goal": "",
+"flavor": "Experts examined both. One was declared authentic, the other owner declared unlucky."
+},
+"freaking-the-mundanes": {
+"rules": "Spend your Illuminati's action. Give an Action token to your Weird Groups without one: any number totalling Power 5 or less, or any single Group. Groups captured this turn or barred from tokens cannot be chosen.",
+"goal": "",
+"flavor": "Normal people stared. The Weird people stared back, harder, and in costume."
+},
+"full-moon": {
+"rules": "Each Fanatic Group you control gets an Action token, even if it has one. You may also give one to any other players' Fanatic Groups. Groups captured this turn or barred from tokens get none.",
+"goal": "",
+"flavor": "The true believers gathered under the moon and planned something very, very enthusiastic."
+},
+"fundie-money": {
+"rules": "The target Group becomes Conservative for good, losing Liberal. Pay with your Illuminati's action, or Conservative Groups' actions totalling Power at least its Resistance (x2 if Liberal), plus its position bonus if a rival controls it. Link to it.",
+"goal": "",
+"flavor": "The donation came with no strings attached, just ropes, a harness and a steering committee."
+},
+"gang-war": {
+"rules": "Spend your Illuminati's action. Give an Action token to your Criminal Groups without one: any number totalling Power 5 or less, or any single Group. Groups captured this turn or barred from tokens cannot be chosen.",
+"goal": "",
+"flavor": "Turf is expensive. Luckily, so is everything else they sell."
+},
+"george-the-janitor": {
+"rules": "Spend one of your Groups' action and choose a rival. He picks one of his hidden Plots. Without seeing it, you decide: he exposes that card, or he exposes all his other hidden Plots.",
+"goal": "",
+"flavor": "Nobody notices the janitor. The janitor notices everything, especially the shredder bin."
+},
+"giant-kudzu": {
+"rules": "Your turn only. Disaster: Attack to Destroy a Place, no action needed, at Power 30 against a Coastal Place, else 24. Not Instant: any Group may aid the defender, never the Kudzu. Success Devastates; beating the roll by 7+ destroys.",
+"goal": "",
+"flavor": "It was imported to stop erosion. It has since annexed several counties."
+},
+"good-polls": {
+"rules": "Name an alignment. Until your next turn starts, your Groups with that alignment have Power and Resistance tripled, for defense only. The tripling never counts for Goals.",
+"goal": "",
+"flavor": "Seventy percent approve, fifteen disapprove, and the rest were not asked the right way."
+},
+"grassroots-support": {
+"rules": "Spend the action of a Straight Group you control: its Power becomes 6. Link this to it. You may have only 1 Grassroots Support in play.",
+"goal": "",
+"flavor": "It began with ordinary folks, then acquired a slick website and a catering budget."
+},
+"gremlins": {
+"rules": "Choose one. A Computer Group loses its Action token, or, if it is acting in an attack, its action is cancelled. Or choose a Gadget Resource a rival controls; it returns to his hand.",
+"goal": "",
+"flavor": "Technicians blame sunspots. Sunspots blame technicians. Something in the vents is giggling."
+},
+"harmonica-virgins": {
+"rules": "One Magic Group you control gets +10 Power or Resistance. Boosting an action: play it as the action is announced; it lasts for that action. Defending: it lasts until end of turn and never counts for Goals.",
+"goal": "",
+"flavor": "Their music summons spirits, parts clouds and frightens every dog within ten miles."
+},
+"hat-trick": {
+"rules": "Play right after you use a Plot card. That Plot returns to your hand, and Hat Trick is discarded instead. Costs the action of one of your Groups with Power 3 or more.",
+"goal": "",
+"flavor": "The rabbit was never in the hat. The hat was never on the table."
+},
+"head-in-a-jar": {
+"rules": "Play right after your Personality is killed, unless it can never return. It comes back into your Power Structure with this attached. It cannot take control of new Groups, but may Attack to Destroy or aid. +10 against Assassinations.",
+"goal": "",
+"flavor": "His body retired. His opinions did not."
+},
+"hex": {
+"rules": "Not during a Privileged attack. Destroy a Magic Resource a rival controls; it is discarded. Costs the action of your Illuminati or of a Magic Group with Power 3 or more.",
+"goal": "",
+"flavor": "The curse arrived by certified mail. The amulet signed for it, then crumbled."
+},
+"hidden-influence": {
+"rules": "Spend your Illuminati's action. Link this to any Group: its Global Power becomes equal to its Power.",
+"goal": "",
+"flavor": "They do not hold office. They simply hold the people who hold office."
+},
+"hit-and-run": {
+"rules": "Instant. Assassination: Instant Attack to Destroy any Personality at Power 10, no action needed. One of your Fanatic Groups may spend its action to add its Power.",
+"goal": "",
+"flavor": "The car was stolen. The driver was a stranger. The paperwork is already lost."
+},
+"hoax": {
+"rules": "Counter. Play right after anyone plays another Plot, for any purpose: cancel it and discard it with Hoax. Pay with actions of your Groups totalling Power 6 or more, and discard the top card of your Plot deck.",
+"goal": "",
+"flavor": "The evidence was faked, the witnesses were actors, and the retraction ran on page forty."
+},
+"hurricane": {
+"rules": "Instant. Attack to Destroy a Coastal Place, no action needed, at Power 20, or 16 against a Huge Place. Success Devastates it, but this attack never destroys it.",
+"goal": "",
+"flavor": "The storm was given a friendly name, which it did not live up to."
+},
+"i-lied": {
+"rules": "Not during an attack. Play as a deal you are in is agreed: with your acceptance, or secretly attached to your offer. You keep your side; the other player still delivers his. If this is countered, you deliver after all.",
+"goal": "",
+"flavor": "A handshake is binding, unless you crossed your fingers behind your back."
+},
+"impostor": {
+"rules": "Put a Personality from your hand that duplicates an Assassinated one into your Power Structure, under your control. Pay with the action of your Group sharing a non-Fanatic alignment with it. The original no longer counts as destroyed for Goals.",
+"goal": "",
+"flavor": "He answers to the name and signs the checks. Nobody has asked for dental records."
+},
+"infobahn": {
+"rules": "One Computer Group you control gets +10 Power or Resistance. Boosting an action: play it as the action is announced; it lasts for that action. Defending: it lasts until end of turn and never counts for Goals.",
+"goal": "",
+"flavor": "The information superhighway has no speed limits, no exits and no refunds."
+},
+"interference": {
+"rules": "During an attack. You may interfere on either side of a Privileged attack; others still cannot unless their own cards allow it. Playing this is free, but each Group that interferes spends its action.",
+"goal": "",
+"flavor": "Invitation only, they said. Nobody said anything about kicking the door in."
+},
+"jake-day": {
+"rules": "The target Group becomes Weird for good, losing Straight. Pay with your Illuminati's action, or Weird Groups' actions totalling Power at least its Resistance (x2 if Straight), plus its position bonus if a rival controls it. Link to it.",
+"goal": "",
+"flavor": "Once a year the town dresses strangely and forgets why, then forgets it forgot."
+},
+"jihad": {
+"rules": "One Fanatic Group you control gets +10 Power or Resistance. Boosting an action: play it as the action is announced; it lasts for that action. Defending: it lasts until end of turn and never counts for Goals.",
+"goal": "",
+"flavor": "The leadership declared the cause urgent and non-negotiable. The merchandise stand opens at six."
+},
+"just-say-no": {
+"rules": "One Straight Group you control gets +10 Power or Resistance. Boosting an action: play it as the action is announced; it lasts for that action. Defending: it lasts until end of turn and never counts for Goals.",
+"goal": "",
+"flavor": "The pamphlet was very persuasive. The pamphlet was also printed by a tobacco company."
+},
+"ketchup-is-a-vegetable": {
+"rules": "During an attack. Play as you declare an Attack to Destroy on a Government Group. The attack gets +5 and is Privileged.",
+"goal": "",
+"flavor": "The committee reviewed the nutrition data and declared the lunchroom a triumph of bookkeeping."
+},
+"kinder-and-gentler": {
+"rules": "The target Group becomes Peaceful for good, losing Violent. Pay with your Illuminati's action, or Peaceful Groups' actions totalling Power at least its Resistance (x2 if Violent), plus its position bonus if a rival controls it. Link to it.",
+"goal": "",
+"flavor": "The tanks are now painted pastel, and the generals attend a mandatory hug seminar."
+},
+"let-s-get-organized": {
+"rules": "Your turn only, outside attacks. Spend the action of your Group with fewer than 3 outgoing control arrows, or its master's. It gains 1 control arrow on a free side; tuck this under it. Only 1 per Group.",
+"goal": "",
+"flavor": "A new committee was formed to study the formation of committees."
+},
+"let-s-get-really-organized": {
+"rules": "Your turn only, outside attacks. Spend the action of a Group you control with 1 or 2 outgoing control arrows, or of its master. It now has 3 outgoing control arrows; link this to it.",
+"goal": "",
+"flavor": "The flowchart now needs its own flowchart, and a small staff to maintain it."
+},
+"let-s-you-and-him-fight": {
+"rules": "Spend your Illuminati's action and choose a rival. Take 2 Group cards at random from his hand; Resources count as Groups. Pick one for him to discard; the other goes back. If he holds only 1, he discards it.",
+"goal": "",
+"flavor": "A little misunderstanding, a little push, and suddenly nobody remembers who started it."
+},
+"liberal-agenda": {
+"rules": "The target Group becomes Liberal for good, losing Conservative. Pay with your Illuminati's action, or Liberal Groups' actions totalling Power at least its Resistance (x2 if Conservative), plus its position bonus if a rival controls it. Link to it.",
+"goal": "",
+"flavor": "First they changed the curriculum, then the menus, then the name of the town."
+},
+"logic-bomb": {
+"rules": "Spend the action of one of your Groups with Power 6 or more. Look at all of a rival's hidden Plots. You may take one of them; it is exposed in your hand.",
+"goal": "",
+"flavor": "The code slept for years, then woke up grumpy and went through every desk drawer."
+},
+"march-on-washington": {
+"rules": "Play with another Plot that needs actions. This stands in for one: an action of Power 6 or less, any alignment or attribute, never your Illuminati's. Also discard the top card of your Plot deck. Once per turn.",
+"goal": "",
+"flavor": "Half a million marched in the rain. The senators noticed and raised their umbrella budget."
+},
+"market-manipulation": {
+"rules": "Remove the Action tokens from any number of Bank Groups and, if you wish, from one Corporate Group. This is not an action.",
+"goal": "",
+"flavor": "The market went up, then down, and somehow the same people got rich both times."
+},
+"martial-law": {
+"rules": "One Government Group you control gets +10 Power or Resistance. Boosting an action: play it as the action is announced; it lasts for that action. Defending: it lasts until end of turn and never counts for Goals.",
+"goal": "",
+"flavor": "For your safety, curfew begins at six. For your convenience, the checkpoint serves coffee."
+},
+"martyrs": {
+"rules": "One Peaceful Group you control gets +10 Power or Resistance. Boosting an action: play it as the action is announced; it lasts for that action. Defending: it lasts until end of turn and never counts for Goals.",
+"goal": "",
+"flavor": "The movement mourned them nobly, photographed the vigil beautifully and mailed fundraising letters by morning."
+},
+"mass-murder": {
+"rules": "Remove the Action tokens from any Media Groups in play you choose; any of them acting in the current attack have that action cancelled. Pay with your Illuminati's action, or Media Groups' actions totalling Power 5 or more.",
+"goal": "",
+"flavor": "The broadcast was interrupted, the newsroom went dark, and the ratings have never been better."
+},
+"media-blitz": {
+"rules": "Spend a Media Group's action while you hold a Group card duplicating a destroyed Group, not an Assassinated Personality. You may play it normally, as if never destroyed; the original stops counting as destroyed for Goals.",
+"goal": "",
+"flavor": "The comeback tour was announced before the funeral had finished."
+},
+"media-connections": {
+"rules": "The chosen Group gains the Media attribute, and its Global Power becomes equal to its Power. Link this to it. Pay with actions of Media Groups totalling Power 6 or more.",
+"goal": "",
+"flavor": "He called in one favor. By dawn he had three talk shows and a documentary."
+},
+"messiah": {
+"rules": "Not during an attack. Link this to one of your Personalities: +4 Power and +4 Resistance, plus 2 more of each for every Church Group you control. Only 1 Messiah may be in play in the whole game.",
+"goal": "",
+"flavor": "He claimed he could walk on water, turned the claim into ratings and sold the rights."
+},
+"meteor-strike": {
+"rules": "Instant. Attack to Destroy any Place, of any size, at Power 16, no action needed. Success Devastates it; beating the roll by 5 or more destroys it.",
+"goal": "",
+"flavor": "The observatory saw it coming for weeks but waited for a better press slot."
+},
+"miracle-diet-plan": {
+"rules": "Not during an attack. Spend a Media Group's action. One Science Group you control makes its next action at triple Power. Also, one rival Group, not an Illuminati, loses its Action tokens.",
+"goal": "",
+"flavor": "Lose weight while you sleep. Lose money while you are awake."
+},
+"mistaken-identity": {
+"rules": "During an attack. Play against any Assassination, whoever made it: it fails automatically.",
+"goal": "",
+"flavor": "The target was reported dead. The target has since been reported playing golf."
+},
+"mob-influence": {
+"rules": "Spend the action of a Criminal Group you control: its Power becomes 6. Link this to it. You may have only 1 Mob Influence in play.",
+"goal": "",
+"flavor": "The offer was made politely. The alternatives were described in detail."
+},
+"monopoly": {
+"rules": "Spend the action of a Corporate Group you control: its Power becomes 6. Link this to it. You may have only 1 Monopoly in play.",
+"goal": "",
+"flavor": "Competition is healthy. That is why they bought all of it."
+},
+"mother-s-march": {
+"rules": "During an attack. Play right after an Attack to Destroy succeeds. The attacker rerolls at once at -4, and nobody may change the rerolled attack's strength. Costs the action of one of your Groups with Power 3 or more.",
+"goal": "",
+"flavor": "They brought strollers, placards and a collective glare that could stop traffic."
+},
+"murphy-s-law": {
+"rules": "During an attack. Play right after the attack dice are rolled: the roll counts as a 12. Spend every Action token on your Illuminati (at least 1).",
+"goal": "",
+"flavor": "The toast landed butter side down, the dice landed high, and the backup plan was shredded."
+},
+"mutual-betrayal": {
+"rules": "Spend one of your Groups' action and choose a rival. Look at all his hidden Plots. You may expose any number of them, but you must expose one of your own Plots for each.",
+"goal": "",
+"flavor": "We trusted each other completely, which is why we both hired detectives."
+},
+"nationalization": {
+"rules": "The target Group becomes Government for good, losing Corporate. Pay with your Illuminati's action, or Government Groups' actions totalling Power at least its Resistance (x2 if Corporate), plus its position bonus if a rival controls it. Link to it.",
+"goal": "",
+"flavor": "The factory now belongs to the people. The people are asked to stop touching it."
+},
+"never-surrender": {
+"rules": "Free move, any time, even while the target is under attack. Link this to a Fanatic Group of any player, or one a rival has just played from hand: its Resistance becomes 12.",
+"goal": "",
+"flavor": "They lost the war decades ago. Nobody has told them, and nobody wants to."
+},
+"new-blood": {
+"rules": "Spend the action of a Violent Group you control: its Power becomes 6. Link this to it. You may have only 1 New Blood in play.",
+"goal": "",
+"flavor": "The old guard retired. The new guard brought bigger guns."
+},
+"new-federal-budget": {
+"rules": "Spend your Illuminati's action. Give an Action token to your Government Groups without one: any number totalling Power 5 or less, or any single Group. Groups captured this turn or barred from tokens cannot be chosen.",
+"goal": "",
+"flavor": "The budget was balanced by moving the deficit into a different spreadsheet."
+},
+"nice-idea-it-s-mine-now": {
+"rules": "Your turn only. Spend your Illuminati's action and take a rival's exposed Goal card. It stays exposed in front of you and is now your Goal.",
+"goal": "",
+"flavor": "Imitation is flattering. Outright confiscation is far more efficient."
+},
+"nobel-peace-prize": {
+"rules": "Spend the action of a Peaceful Group you control: its Power becomes 6. Link this to it. You may have only 1 Nobel Peace Prize in play.",
+"goal": "",
+"flavor": "Awarded for peace, endowed by explosives, and polished by irony."
+},
+"nuclear-accident": {
+"rules": "Instant. Attack to Destroy any Place, no action needed, at Power 18 (Huge: 14). Success Devastates it; beating the roll by 5+ destroys it. Whenever this is played, the Nuclear Power Companies are left with no Action token.",
+"goal": "",
+"flavor": "The plant was perfectly safe right up until it glowed."
+},
+"opportunity-knocks": {
+"rules": "Counter. When a rival discards a Group they failed to take over from hand, attack it immediately, out of turn, to Control or Destroy at +5, using your current Action tokens and Plots. Others may aid. Then their turn resumes.",
+"goal": "",
+"flavor": "A botched recruitment leaves an unaffiliated organisation on the doorstep. Somebody should take it in."
+},
+"payoff": {
+"rules": "Counter. Play when a rival plays a duplicate of a Group you control. The rival discards that duplicate.",
+"goal": "",
+"flavor": "Whatever they offered your people, you offered double. Loyalty is just a number nobody else thought to beat."
+},
+"plague-of-demons": {
+"rules": "Disaster. Either spend a Magic Group's action: Instant Attack to Destroy a non-Huge Place, Power 10 plus that Group's Power. Success Devastates it; by 6+, destroys it. Or discard: +10 to an Attack to Destroy a Magic Group.",
+"goal": "",
+"flavor": "Claim status: gas leak. Adjuster's note: the gas leak had horns."
+},
+"pledge-drive": {
+"rules": "Any time. Spend your Illuminati's action to give an Action token to your tokenless Liberal Groups: any one, or several with total Power 5 or less. Not Groups captured this turn or barred from receiving tokens.",
+"goal": "",
+"flavor": "The tote bag is free. The obligation to march where you're pointed comes at no extra charge."
+},
+"poison": {
+"rules": "Assassination. Any time, no action needed: Instant Attack to Destroy any Personality at Power 8. One Criminal or Magic Group of yours may spend its action to add its Power. It counts as Magic only if a Magic Group joins.",
+"goal": "",
+"flavor": "Coroner's footnote: cause of death, the canapés. Manner of death, the host."
+},
+"power-corrupts": {
+"rules": "Any time. Target Group becomes Criminal for good; link this card to it. Pay with your Illuminati's action, or Criminal Groups' actions totalling at least its Resistance, plus its closeness bonus if a rival controls it.",
+"goal": "",
+"flavor": "Nobody sets out to be crooked. First a small favour, then a larger one, then the yacht."
+},
+"power-grab": {
+"rules": "Your turn only. Right after your automatic takeover, make one more automatic takeover of a Group or Resource. Your turn then ends at once: you still collect Action tokens, but take no further steps.",
+"goal": "",
+"flavor": "Why build an empire one brick at a time when you can pocket two bricks and sprint?"
+},
+"privatization": {
+"rules": "Any time. Target Group becomes Corporate for good, losing Government and any Dictatorship; link this card. Pay with your Illuminati's action, or Corporate Groups' actions totalling at least its Resistance (x2 if Government), plus closeness bonus if a rival's.",
+"goal": "",
+"flavor": "The ministry now has a mascot and a loyalty programme. Service has never cost more."
+},
+"privileged-attack": {
+"rules": "During an attack. Make your attack Privileged: only you and the target's owner, if any, may aid or oppose. Your Illuminati or a Secret Group of yours must join it or spend an Action token.",
+"goal": "",
+"flavor": "This meeting is by invitation only. The invitations were never sent. The meeting has already ended."
+},
+"pulitzer-prize": {
+"rules": "Any time. A Media Group you control gets +10 Power or +10 Resistance. For an action, play it at declaration; it lasts for that action only. On defense, it lasts until end of turn and never counts toward Goals.",
+"goal": "",
+"flavor": "The story was bold, meticulously sourced and entirely invented. The committee admired its courage."
+},
+"purge": {
+"rules": "Your turn only. Play as one Group's action. Illuminati: destroy every Agent in play that duplicates your Illuminati. Any other Group loses 1 Power and 1 Global Power, but rival duplicates no longer affect it; link this card to it.",
+"goal": "",
+"flavor": "The loyalty review found three moles and one confused intern. All were reassigned to oblivion."
+},
+"rain-of-frogs": {
+"rules": "Disaster. No action needed: Instant Attack to Destroy any Place of any size at Power 10, plus 4 for each Frog God its owner has in play. Success Devastates it; success by 7+ destroys it outright.",
+"goal": "",
+"flavor": "Forecast: scattered amphibians, heavy at times. Some arriving in formation."
+},
+"reach-out": {
+"rules": "Your turn only. At the end of your turn, spend your Illuminati's action. Remove every Action token from one rival's Power Structure, then from your own. Resources keep their tokens.",
+"goal": "",
+"flavor": "A friendly call to check on their plans. By the time they hung up, they had forgotten them."
+},
+"read-my-lips": {
+"rules": "Counter. Play after an Attack to Control or Attack to Destroy against one of your Personalities succeeds. That attack fails instead. Useless against Assassinations.",
+"goal": "",
+"flavor": "The promise was firm, sincere and televised. The reversal was scheduled for a slow news day."
+},
+"red-scare": {
+"rules": "Any time. Spend your Illuminati's action to give an Action token to your tokenless Conservative Groups: any one, or several with total Power 5 or less. Not Groups captured this turn or barred from receiving tokens.",
+"goal": "",
+"flavor": "Under every bed, a subversive. Under every subversive, a funding opportunity for the vigilant."
+},
+"reload": {
+"rules": "Any time. Spend your Illuminati's action to give an Action token to your tokenless Violent Groups: any one, or several with total Power 5 or less. Not Groups captured this turn or barred from receiving tokens.",
+"goal": "",
+"flavor": "Diplomacy failed at breakfast. By lunch, the negotiators had requested more ammunition."
+},
+"reorganization": {
+"rules": "Your turn only. Spend your Illuminati's action to rearrange your whole Power Structure as you like, moving your Groups to any legal positions.",
+"goal": "",
+"flavor": "The new org chart is bold, agile and synergistic. Nobody knows who reports to whom, by design."
+},
+"resistance-is-useless": {
+"rules": "Any time. One of your Media Groups spends its action. Until end of turn, the target Group has Resistance 0, with no bonus from abilities or its master's alignments. Its +5/+10 for closeness to its Illuminati still applies.",
+"goal": "",
+"flavor": "After three weeks of coverage, the board simply agreed it had always wanted to be acquired."
+},
+"revolution": {
+"rules": "During an attack. Play with any Attack to Control or Destroy on a Nation: +10, or +20 if it is a Dictatorship. A Group not taking part in the attack must spend its action.",
+"goal": "",
+"flavor": "The palace fell by noon. The new regime held a press conference by two, a parade by four."
+},
+"rewriting-history": {
+"rules": "Any time. Add, remove or reverse one alignment of a destroyed Group; this can change which destruction Goals it counts toward. Pay with your Illuminati's action, or Media Groups' actions totalling Power 8+.",
+"goal": "",
+"flavor": "The archives have been updated for accuracy. The previous accuracy has been filed somewhere unreachable."
+},
+"sabotage": {
+"rules": "Counter. A rival's automatic takeover from hand fails: the Group returns to their hand and they get no more automatic takeovers this turn. Pay with your Illuminati's action, or Groups totalling Power 6+, one sharing an alignment with it.",
+"goal": "",
+"flavor": "The keys were cut and the office furnished. Then someone swapped the address on the deed."
+},
+"save-the-whales": {
+"rules": "Any time. A Green Group you control gets +10 Power or +10 Resistance. For an action, play it at declaration; it lasts for that action only. On defense, it lasts until end of turn and never counts toward Goals.",
+"goal": "",
+"flavor": "The whales were saved. So was the donor list, which was cross-referenced and quietly sold."
+},
+"savings-loan-scam": {
+"rules": "Any time. Spend any one of your Groups' actions. Discard this card and draw 3 cards from your Plot deck.",
+"goal": "",
+"flavor": "Deposits were insured, loans were imaginary and the auditors were on a fact-finding cruise."
+},
+"scandal": {
+"rules": "Any time, but not during an attack. Spend the action of a Media Group with Power 2+. Choose a rival and one alignment that Media Group has: that rival's Groups with that alignment lose all Action tokens.",
+"goal": "",
+"flavor": "Sources close to the source confirm that sources have been confirmed. Resignations to follow."
+},
+"secrets-man-was-not-meant-to-know": {
+"rules": "Counter. Play right after any other Plot is played, for any purpose: cancel it and discard both cards. Pay by removing every Action token from your Illuminati (at least 1), or by discarding your top 2 Plot deck cards unseen.",
+"goal": "",
+"flavor": "The manuscript explained everything. Its last reader now alphabetises his socks by feel."
+},
+"seize-the-time": {
+"rules": "At the start of a rival's turn, spend your Illuminati's action to take a special turn instead; then theirs resumes unless someone won. Only your Groups get Action tokens. No drawing, no Plots. Not in round 1; once per game.",
+"goal": "",
+"flavor": "History waits for no one. You simply arranged for it to wait for everyone else."
+},
+"self-esteem": {
+"rules": "Any time. Use the action of one of your Liberal Groups to link this card to it. Its Power rises to 6 at once; a stronger Group keeps its Power. You may have only 1 Self Esteem in play.",
+"goal": "",
+"flavor": "After the weekend retreat, the committee stopped apologising and annexed the building next door."
+},
+"senate-investigating-committee": {
+"rules": "As another player's turn begins, spend a Power 5+ Government Group's action. That turn they may only draw cards and place Action tokens. Not against the Discordians. Once per game per target; a repeat fizzles and is discarded.",
+"goal": "",
+"flavor": "The hearings will continue until the witness remembers something or the cameras leave."
+},
+"slush-fund": {
+"rules": "Any time. A Conservative Group you control gets +10 Power or +10 Resistance. For an action, play it at declaration; it lasts for that action only. On defense, it lasts until end of turn and never counts toward Goals.",
+"goal": "",
+"flavor": "No receipts, no ledger, no questions. Just a very large envelope and a handshake that lingers."
+},
+"sniper": {
+"rules": "Assassination. Any time, no action needed: Instant Attack to Destroy any Personality at Power 10. One Government Group of yours may spend its action to join and add its Power.",
+"goal": "",
+"flavor": "Officially the rooftop was empty and the rifle was a telescope. No further comment."
+},
+"spasm-of-violence": {
+"rules": "During an attack. Play with one of your Assassinations plus a second Assassination card against the same target. Follow the main one's full text; the second adds only its Power, none of its other effects.",
+"goal": "",
+"flavor": "One attempt is a tragedy. Two at once is a coordination problem someone gets promoted for."
+},
+"stealing-the-plans": {
+"rules": "Counter. Right after another player discards a Plot, used or unused, take it into your hand. Costs the action of one of your Groups with Power 3+.",
+"goal": "",
+"flavor": "They spent months drafting the scheme. You spent five minutes with a photocopier and a borrowed badge."
+},
+"stock-split": {
+"rules": "Any time. A Corporate Group you control gets +10 Power or +10 Resistance. For an action, play it at declaration; it lasts for that action only. On defense, it lasts until end of turn and never counts toward Goals.",
+"goal": "",
+"flavor": "Shareholders now own twice as many shares of exactly the same thing. They were thrilled."
+},
+"straighten-up": {
+"rules": "Any time. Target Group becomes Straight for good, losing Weird; link this card. Pay with your Illuminati's action, or Straight Groups' actions totalling at least its Resistance (x2 if Weird), plus closeness bonus if a rival's.",
+"goal": "",
+"flavor": "Three sessions of posture coaching and a sensible briefcase. The subject no longer recalls being interesting."
+},
+"sucked-dry-and-cast-aside": {
+"rules": "During an attack. When one of your Groups (not your Illuminati) attacks, aids or opposes, its Power is multiplied by 4 for that action. Afterward it is destroyed, but counts toward no one's Goals.",
+"goal": "",
+"flavor": "The consultants extracted every last ounce of value, then billed the husk for their time."
+},
+"sweeping-reforms": {
+"rules": "Any time. Discard every New World Order in play. Pay with actions of Media Groups totalling Power 6+; other players' Media Groups may chip in if their owners agree.",
+"goal": "",
+"flavor": "The old order is swept away, replaced by a new one with more committees and better branding."
+},
+"sweepstakes-prize": {
+"rules": "Any time. Link this to one of your Personalities. It gets +4 on every direct Attack to Control it makes. You may have only 1 Sweepstakes Prize in play.",
+"goal": "",
+"flavor": "You may already be a winner. You are definitely already on a list."
+},
+"swiss-bank-account": {
+"rules": "During an attack. When your Illuminati makes a direct attack, it gets +10 Power for that attack. Never applies to Global Power.",
+"goal": "",
+"flavor": "Numbered, discreet and wonderfully forgetful, especially whenever the tax inspector calls."
+},
+"talisman-of-ahrimanes": {
+"rules": "Counter. After an Assassination is played, it fails automatically. Link this to the saved Personality: it gets +2 against later Attacks to Destroy, +10 against Assassinations. If it dies anyway, the Talisman goes too. Only 1 in play.",
+"goal": "",
+"flavor": "Carved by a forgotten cult, rediscovered in a pawn shop between a saxophone and a bowling trophy."
+},
+"tax-breaks": {
+"rules": "Any time. Spend your Illuminati's action to give an Action token to your tokenless Corporate Groups: any one, or several with total Power 5 or less. Not Groups captured this turn or barred from receiving tokens.",
+"goal": "",
+"flavor": "The loophole was drafted by the companies it benefits and praised by the lawmakers they fund."
+},
+"terrorist-nuke": {
+"rules": "Any time. A Violent Group you control gets +10 Power or +10 Resistance. For an action, play it at declaration; it lasts for that action only. On defense, it lasts until end of turn and never counts toward Goals.",
+"goal": "",
+"flavor": "The device was small, crude and possibly fake. The uncertainty was worth more than the uranium."
+},
+"the-auditor-from-hell": {
+"rules": "Any time. Spend the action of the Network, a Computer Group or a Bank Group. Look at all of one rival's hidden Plots, then take one of them or expose them all.",
+"goal": "",
+"flavor": "Every receipt since kindergarten. Every coffee. Every napkin. The auditor was thorough, and personally delighted."
+},
+"the-big-score": {
+"rules": "Any time. A Criminal Group you control gets +10 Power or +10 Resistance. For an action, play it at declaration; it lasts for that action only. On defense, it lasts until end of turn and never counts toward Goals.",
+"goal": "",
+"flavor": "One last job. It's always one last job. The pension plan here is remarkably flexible."
+},
+"the-big-sellout": {
+"rules": "Your turn only. Right after placing Action tokens, discard up to 10 Groups and Resources from your hand and the top of your Group deck. Each Group discarded gives 1 extra Action token to a different Group you control.",
+"goal": "",
+"flavor": "Everything must go: principles, allies, old friends. No refunds. Fire sale ends at dawn."
+},
+"the-first-thing-we-do-let-s-kill-all-the-lawyers": {
+"rules": "During an attack. +20 to any Attack to Destroy the Lawyers. Whoever plays this must read a mock legal disclaimer aloud; it has no game effect.",
+"goal": "",
+"flavor": "Counsel advises that this card is purely hypothetical. Counsel has stopped returning calls."
+},
+"the-internet-worm": {
+"rules": "Any time. Choose a rival: the top 3 cards of their Plot deck are discarded unseen. Pay with your Illuminati's action, or Computer Groups' actions totalling Power 3+.",
+"goal": "",
+"flavor": "It began as a harmless experiment. By Tuesday every server on Earth subscribed to its newsletter."
+},
+"the-oregon-crud": {
+"rules": "Disaster. Any time, no action needed: Instant Attack to Destroy any non-Huge Place at Power 24. Success Devastates it; success by 10 or more destroys it outright.",
+"goal": "",
+"flavor": "Scientists call it a fungal bloom. Residents stopped calling it anything after dark."
+},
+"the-second-bullet": {
+"rules": "During an attack. Right after your own Attack to Destroy fails its roll, your Groups that could have aided it and still hold Action tokens may spend them, adding their Power as needed to make it a success.",
+"goal": "",
+"flavor": "The inquiry ruled the first shot missed and the second a coincidence. The third was never discussed."
+},
+"the-stars-are-right": {
+"rules": "Your turn only. Spend your Illuminati's action, or actions of Magic Groups each with Power 4+, to put a Resource from your hand into play as an automatic takeover, with no roll.",
+"goal": "",
+"flavor": "The alignment comes once in a hundred millennia. Luckily it fell on a quiet Thursday."
+},
+"the-weak-link": {
+"rules": "Any time, except during a Privileged attack. Destroy a rival's Artifact or Gadget Resource and discard it. Pay with your Illuminati's action, or Science, Magic or Computer Groups' actions totalling Power 6+.",
+"goal": "",
+"flavor": "Every perfect machine has one bolt fitted by the cheapest subcontractor. You found him."
+},
+"the-weird-turn-pro": {
+"rules": "Any time. Use the action of one of your Weird Groups to link this card to it. Its Power rises to 4 at once; a stronger Group keeps its Power. Limit 1 in play per player.",
+"goal": "",
+"flavor": "The support group became a startup. The startup became a movement. The movement now sells merch."
+},
+"tidal-wave": {
+"rules": "Disaster. No action needed: Instant Attack to Destroy a Coastal Place at Power 20 if it is Huge, 24 otherwise. Success Devastates it; success by 11+ destroys it outright.",
+"goal": "",
+"flavor": "The resort promised ocean views from every room. The ocean took that literally."
+},
+"time-warp": {
+"rules": "Counter. Right after another player rolls a success, they must reroll and keep the new result, but they also draw a Group card.",
+"goal": "",
+"flavor": "Déjà vu is the universe checking its work. Today it found an error in your favour."
+},
+"tornado": {
+"rules": "Disaster. No action needed: Instant Attack to Destroy a non-Huge Place at Power 12. Success Devastates it; success by 5+ destroys it outright.",
+"goal": "",
+"flavor": "Forecast: light winds. The station's weather van was later found two counties over."
+},
+"unlucky-13": {
+"rules": "At the very start of a rival's turn, spend the action of one of your Magic Groups. Until that turn ends, the rival cannot draw Plot cards for any reason.",
+"goal": "",
+"flavor": "The elevator skipped a floor, the calendar skipped a day, and their luck skipped town."
+},
+"unmasked": {
+"rules": "Any time, not during an attack. Play with an Illuminati card from your hand: it replaces your Illuminati, with its own powers and Goal; discard the old one. Any Agents card you hold for the new Illuminati is lost.",
+"goal": "",
+"flavor": "Behind the mask was another mask, and behind that a very long list of demands."
+},
+"upheaval": {
+"rules": "Any time, but not during an attack or on your first turn. Spend your Illuminati's action: every player, you included, discards one Group from their Power Structure. Discarded, not destroyed, so none counts toward victory.",
+"goal": "",
+"flavor": "Everyone agreed something had to go. Everyone agreed it should be someone else's something."
+},
+"volcano": {
+"rules": "Disaster. No action needed: Instant Attack to Destroy a non-Huge Place at Power 18. Success Devastates it; success by 2+ destroys it outright.",
+"goal": "",
+"flavor": "The brochure called the mountain dormant. It was merely procrastinating."
+},
+"volunteer-aid": {
+"rules": "During an attack. When a Disaster strikes a Place, it gets +6 to defend. If it is still Devastated, it gets Relief automatically at the start of its owner's next turn. Costs no action.",
+"goal": "",
+"flavor": "The volunteers arrived with blankets, soup and a startling amount of branded merchandise."
+},
+"voodoo-economics": {
+"rules": "Your turn only. Right after placing Action tokens, spend your Illuminati's action to remove up to 10 top Plot deck cards from the game. Each gives 1 extra Action token to a different Group of yours. Once per game.",
+"goal": "",
+"flavor": "Wealth will trickle down any day now. The chart says so, read by candlelight."
+},
+"vultures": {
+"rules": "Counter. When a rival discards a Group they failed to take over from their hand, take that Group card from their discard pile into your hand.",
+"goal": "",
+"flavor": "They circle the halls of power, patient and well-fed, waiting for someone's ambitions to expire."
+},
+"whispering-campaign": {
+"rules": "During an attack. Spend one of your Media Groups' action: your Attack to Destroy gets +15 against a Personality, +10 against any other Group. Not with Assassinations or Disasters. A Personality destroyed this way can never return to play.",
+"goal": "",
+"flavor": "Nobody said anything, exactly. An eyebrow was raised at exactly the right dinner party."
+},
+"withering-curse": {
+"rules": "Assassination. Any time, no action needed: Instant Attack to Destroy any Personality at Power 10. One Magic Group of yours may spend its action to add its Power. The attack counts as Magic.",
+"goal": "",
+"flavor": "He felt fine at breakfast. By dinner, his portrait looked healthier than he did."
+},
+"world-cup-victory": {
+"rules": "Any time. A Nation Group you control gets +10 Power or +10 Resistance. For an action, play it at declaration; it lasts for that action only. On defense, it lasts until end of turn and never counts toward Goals.",
+"goal": "",
+"flavor": "The team won on penalties. The ruling party awarded itself a medal and a tax holiday."
+},
+"angel-s-feather": {
+"rules": "Link to a Peaceful Group. If that Group fails an Attack to Control, reroll it. If any attack on a Peaceful Group you control succeeds, reroll it. The reroll stands.",
+"goal": "",
+"flavor": "Lot 44: one feather, provenance celestial, recovered from a windowsill. Handle only with gloves."
+},
+"ark-of-the-covenant": {
+"rules": "On your turn, secretly note one of your Groups under this card. If it is destroyed, reveal it: its destroyer is destroyed too (an Illuminati's owner loses a Group of their choice instead), counting for your Goals. Then note another.",
+"goal": "",
+"flavor": "Crate 9 of 9. Do not open. Do not touch. Do not ask about Gerald."
+},
+"bigfoot": {
+"rules": "Bigfoot has its own action: spend it to cancel an action taken by a Media Group. You also get +3 on every attempt to control a Green Group.",
+"goal": "",
+"flavor": "Exhibit 7: one plaster footprint, size 23, and an unsigned modelling release."
+},
+"book-of-kells": {
+"rules": "Choose one. Unlinked: your Illuminati gets +1 Power and +1 Global Power. Linked to a Magic Group: that Group may take 2 actions per turn, but neither may be an Attack to Destroy.",
+"goal": "",
+"flavor": "Illuminated manuscript, gold leaf throughout. The marginal doodles appear to be troop movements."
+},
+"center-for-weird-studies": {
+"rules": "Once in each of your turns, discard a Plot to give a new Action token to one of your Groups or Resources that has already acted. A Group still can't add its Power to one attack twice.",
+"goal": "",
+"flavor": "Campus facility, founding date disputed. Departments: psychic houseplants, spontaneous combustion, unmarked vans."
+},
+"clipper-chip": {
+"rules": "Every Government Group in your Power Structure gets +2 Power, and you are wholly immune to the Phone Phreaks. If you ever control no Government Group, discard this. Limit 1 per player.",
+"goal": "",
+"flavor": "Standard-issue listening device. Listens only to criminals, defined as whoever it is listening to."
+},
+"crystal-skull": {
+"rules": "Each time you draw a Plot, look at the top 3 cards of your Plot deck and keep the one you want. Put each of the others on the top or bottom of the deck before your next draw.",
+"goal": "",
+"flavor": "Carved quartz, origin disputed. Gazes into the future with an air of mild disappointment."
+},
+"cyborg-soldiers": {
+"rules": "Link to a Violent Group: its Power is doubled. The Soldiers are lost along with that Group.",
+"goal": "",
+"flavor": "Half man, half machine, fully covered by an extended warranty nobody has ever claimed."
+},
+"death-mask": {
+"rules": "Link to a Magic Group. Once the dice have been rolled, it may spend its action to join the attack, provided it was eligible to join normally. If its Power changes the outcome, the new result applies.",
+"goal": "",
+"flavor": "Plaster cast of a sorcerer who died laughing. Chuckles softly whenever somebody rolls badly."
+},
+"earthquake-projector": {
+"rules": "Has its own action, usable once per turn: add +2 to any Attack to Destroy a Place, or to any Disaster.",
+"goal": "",
+"flavor": "Patent pending. Liability pending. Tested once, on the building that housed the patent office."
+},
+"eliza": {
+"rules": "Link to the Network or a Computer Group: it gets 1 extra action per turn. If that extra action ever rolls 11 or 12, Eliza crashes: discard her and reveal all your hidden Plots. Limit 1 per Group.",
+"goal": "",
+"flavor": "Therapy software, version 1.0. Asks how that makes you feel, then forwards the answer."
+},
+"flying-saucer": {
+"rules": "Linked to a Personality: it gets +10 against Attacks to Destroy, Assassinations included, and the Saucer is captured or destroyed with it. Unlinked: once per turn, discard your top Plot deck card for an extra automatic Resource takeover.",
+"goal": "",
+"flavor": "Recovered craft, one careful owner, low mileage. Tractor beam sold separately."
+},
+"hallucinations": {
+"rules": "Has its own action, usable once per turn: either cancel the action of any Personality, or add +3 to any attempt to destroy a Personality.",
+"goal": "",
+"flavor": "Evidence bag 12: one sugar cube, unlabelled. The cabinet meeting it attended is still under review."
+},
+"hammer-of-thor": {
+"rules": "Has its own action, usable once per turn: give +2 Power to any Government or Violent Group when it makes an attack, or when it defends against an Attack to Destroy.",
+"goal": "",
+"flavor": "Only the worthy can lift it. The worthy turn out to be mostly defence contractors."
+},
+"hidden-city": {
+"rules": "While you control it, your Illuminati gets +2 Power and +2 Global Power. Any Disaster may target it: it defends as a non-Huge, non-Coastal Place of Power 10 and can never be Devastated. If destroyed, anyone may play another.",
+"goal": "",
+"flavor": "Not on any map. Not visible from orbit. The post still arrives on Tuesdays."
+},
+"hitler-s-brain": {
+"rules": "Each time you destroy a Group, choose: draw 1 extra Plot, or turn all your exposed Plots face down again. While you hold this Resource, you cannot take control of Peaceful Groups.",
+"goal": "",
+"flavor": "Specimen jar, sealed and labelled DO NOT FEED. Still drafting speeches nobody asked for."
+},
+"immortality-serum": {
+"rules": "Link to a Personality you control, or seize one as it is played (even from a rival's hand) without rolling. It can never be killed, even with its Place, and gets +5 against normal Attacks to Destroy. Link survives capture.",
+"goal": "",
+"flavor": "Batch 1 of 1. Side effects include eternal life, mild nausea and endless re-election campaigns."
+},
+"loch-ness-monster": {
+"rules": "Nessie has its own action. Spend it to cancel an action by a Coastal Place, to add +4 to an Attack to Destroy a Coastal Place, or to add +4 to a Disaster against one.",
+"goal": "",
+"flavor": "Shy, ancient and fiercely litigious. Clear photographs are answered by her solicitors."
+},
+"mercenaries": {
+"rules": "Once per turn, the Mercenaries may spend their own action to add +4 to an Attack to Destroy or +1 to an Attack to Control.",
+"goal": "",
+"flavor": "Hired muscle, sold by the hour. No cheques, no refunds, no loyalty clause."
+},
+"midas-mill": {
+"rules": "Choose one. Unlinked: your Illuminati gets +2 Power and +2 Global Power. Or link the Mill to any Coastal Group: its Global Power becomes equal to its Power.",
+"goal": "",
+"flavor": "Grinds salt, gold and stock options. Off switch not located; shareholders forbid further searching."
+},
+"necronomicon": {
+"rules": "Link to a Magic or Violent Group: its Power is doubled. If it ever rolls 11 or 12, it is destroyed and this card stays, unlinked. The loss counts toward your victory only for a Servants of Cthulhu player.",
+"goal": "",
+"flavor": "Bound in something that was probably leather. Margin notes stop abruptly mid-sentence."
+},
+"orbital-mind-control-lasers": {
+"rules": "Any time except in a Privileged attack, spend the Lasers' action to add, remove or reverse one alignment of a Group in play. It lasts until the current player's turn ends.",
+"goal": "",
+"flavor": "Coverage: the whole planet. Beam setting: gentle persuasion. Side effect: sudden enthusiasm for new policies."
+},
+"perpetual-motion-machine": {
+"rules": "Link to a Group. That Group receives 1 extra Action token at the start of every turn.",
+"goal": "",
+"flavor": "Violates three laws of physics, two patents and one sternly worded university letter."
+},
+"principia-discordia": {
+"rules": "Count the Weird Groups you control, itself included: each Weird Group in your Power Structure adds that number to its Resistance. Five Weird Groups means +5 each.",
+"goal": "",
+"flavor": "Holy text, first edition, written by accident. Every copy is misquoted, as intended."
+},
+"rogue-boomer": {
+"rules": "You get +5 on your Attacks to Control a Nation. Or, once, add +10 to your own attempt to destroy a Place, or to any Disaster; then discard it.",
+"goal": "",
+"flavor": "Missile submarine, crew of 140, owner of record unclear. Currently taking offers."
+},
+"shroud-of-turin": {
+"rules": "Each time you draw from your Plot or Group deck, first peek at its top card if you like. Reject it and take the bottom card, unseen, instead.",
+"goal": "",
+"flavor": "Linen, provenance hotly disputed. The gift shop stocks it in three sizes."
+},
+"soulburner": {
+"rules": "If a rival captures a Group of yours: take 1 Plot from their deck, or reveal their hidden Plots. If a rival destroys one: take 2 Plots from their deck, or reveal their hidden Plots and choose one they discard.",
+"goal": "",
+"flavor": "Engine runs on grievance. Output: an enemy's plans, served warm."
+},
+"spear-of-longinus": {
+"rules": "As often as you like, with no action: +1 to any player's Attack to Destroy or any Disaster, once per attack. An attack it helps counts as Magic, so defences against Magic may apply.",
+"goal": "",
+"flavor": "Legend says its holder rules the world. Its current holder rules a regional storage unit."
+},
+"suicide-squad": {
+"rules": "Any time except in a Privileged attack, target a rival's Resource and roll one die. 1: the target is destroyed; the Squad survives. 2-5: both are destroyed. 6: only the Squad is. Destroyed cards are discarded.",
+"goal": "",
+"flavor": "Personnel file: enthusiasm high, life-insurance premiums higher, return rate negligible."
+},
+"the-bronze-head": {
+"rules": "When a Group card you played from your hand fails its takeover, return it to your hand instead of discarding it.",
+"goal": "",
+"flavor": "Oracle, cast bronze. Answers every question truthfully, cryptically and, regrettably, in rhyme."
+},
+"the-frog-god": {
+"rules": "You may interfere on either side of a Privileged attack; other players still can't without special cards. It costs the Frog God's action, and each of your interfering Groups spends its action too.",
+"goal": "",
+"flavor": "Idol, jade, one careful owner. Croaks in an ancient tongue, mostly about flies."
+},
+"the-holy-grail": {
+"rules": "Secretly note one Place under this card; it can't be changed. If an attack would destroy or Devastate that Place, reveal the note: the attack fails, and the Grail keeps guarding it. If that Place is captured, discard the Grail.",
+"goal": "",
+"flavor": "Sought for centuries. Found behind the breakfast cereal."
+},
+"the-library-at-alexandria": {
+"rules": "You get +5 on your attempts to take control of a Computer, Science or Magic Group.",
+"goal": "",
+"flavor": "Never burned after all. Simply relocated, with a much stricter late-return policy."
+},
+"warehouse-23": {
+"rules": "When played, you may fetch an Artifact or Gadget from hand or deck: free automatic takeover. Resources may hide face down beneath it, unusable, unseen by rivals. Expose any time, permanently, to use at once. Hidden cards share its fate.",
+"goal": "",
+"flavor": "Aisle 40, next to the ark, behind the thing we agreed never to open again."
+},
+"weather-satellite": {
+"rules": "It has 2 Action tokens but uses only 1 per attack. Spend one to give a Tornado, Hurricane or Rain of Frogs +10 or -4, or any other Attack to Destroy (Disasters included) on a non-Space Place +4 or -2.",
+"goal": "",
+"flavor": "Forecasts accurate to the minute, since the forecaster also makes the weather."
+},
+"xanadu": {
+"rules": "Duplicates of your Groups add no bonus when played in attacks to control or destroy your Groups.",
+"goal": "",
+"flavor": "Pleasure dome, sacred river, strict policy: no visitors, no photos, no copycats."
+},
+"the-great-pyramid": {
+"rules": "Each rival shows you the first Plot they draw each turn; no notes allowed. Tornadoes and Hurricanes cannot affect the Great Pyramid.",
+"goal": "",
+"flavor": "Forty centuries on the job and still the best-kept filing system on Earth. Tours hourly, no flash."
+},
+"pyramid-marketing-schemes": {
+"rules": "This Group gets +1 Power and +2 Resistance for each Fanatic Group in your Power Structure.",
+"goal": "",
+"flavor": "Recruit three friends and become a diamond director. Recruit none and become a cautionary tale."
+},
+"trading-card-games": {
+"rules": "Any time during your turn, you may discard this Group and put another Group from your hand in exactly its place in your Power Structure, with no roll.",
+"goal": "",
+"flavor": "Collect them all, trade them all, then argue about the rules for a decade. Welcome to the club."
+}
+}

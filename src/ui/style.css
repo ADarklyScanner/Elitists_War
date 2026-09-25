@@ -710,3 +710,9 @@ html.rb-open, html.rb-open body { overflow: hidden; }
 .deal-banner { border-left: 3px solid var(--brass); background: var(--brass-soft); padding: 6px 10px; border-radius: 4px; margin-bottom: 8px; }
 .deal-banner p { margin: 0 0 6px; }
 .hud-btn.alert { border-color: var(--brass); color: var(--brass); }
+
+/* Card face text in the details popup: rules on parchment, flavour in italics. */
+.face-rules { background: var(--parch); color: var(--parch-ink); border-radius: 5px; padding: 7px 9px; font-size: 14.5px; line-height: 1.35; margin: 6px 0; }
+.face-goal { font-size: 14px; margin: 4px 0; color: var(--gilt-hi); }
+.face-flavor { font-style: italic; color: var(--muted); font-size: 14px; margin: 4px 0 6px; }
+.face-exact summary { cursor: pointer; font-size: 12.5px; color: var(--brass); }

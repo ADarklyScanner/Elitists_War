@@ -14,6 +14,7 @@ import {
 import { attachRect, rectOf, ensureLayout, type Rect } from '../engine/geometry';
 import { applyDealAnswer, chooseAction, computerDealAnswer, successChance } from '../ai/ai';
 import { suggestBots, type TableLevel } from './botMix';
+import { cardFace } from './cardFace';
 import { mirrorName, styleById, STYLES, WILD_CARDS } from '../ai/personas';
 import { foldGame, habitsIn, habitsReport, MIN_GAMES, mirrorSeats, normalizeProfile, observeHuman, type PlayProfile, type ProfileSummary } from '../ai/profile';
 import { RULES_PANEL_LINKS, sectionById } from './rulebook';
@@ -976,7 +977,7 @@ function handCard(s: GameState, iid: string): string {
       <span class="kind">${isPlot ? esc(d.subtype === 'Plot' ? 'Plot' : d.subtype) : d.type === 'Resource' ? 'Resource' : esc(d.subtype)}</span>
       <span class="name">${esc(d.name)}</span>
       ${tutorial() && isPlot && plotTiming(d.id, d.subtype, true) ? `<span class="timing">${esc(plotTiming(d.id, d.subtype, true))}</span>` : ''}
-      ${isPlot || d.type === 'Resource' ? `<span class="txt">${esc(d.modifier ?? d.text)}</span>` : `
+      ${isPlot || d.type === 'Resource' ? `<span class="txt">${esc(cardFace(d.id)?.rules || (d.modifier ?? d.text))}</span>` : `
         <span class="aligns">${(d.alignments ?? []).map(chip).join('')}</span>
         <span class="stats"><span class="pw">${d.power}${d.globalPower ? `<small>/${d.globalPower}</small>` : ''}</span><span class="rs">${d.resistance}</span></span>`}
     </button>`;
@@ -1520,6 +1521,15 @@ function abilityButtons(s: GameState, card: string): string {
   return `<div class="label">Special abilities</div><div class="opts">${opts.map((o, i) => `<button data-abil="${i}">${esc(o.label)}</button>`).join('')}</div>`;
 }
 
+/** A card's face: its rules text, an Illuminati's Special Goal, and flavour; the engine's exact wording on request. */
+function faceBlock(cardId: string, engineText: string): string {
+  const f = cardFace(cardId);
+  if (!f) return `<p class="small">${esc(engineText)}</p>`;
+  return `${f.rules ? `<p class="face-rules">${esc(f.rules)}</p>` : ''}${f.goal ? `<p class="face-goal"><b>Special Goal:</b> ${esc(f.goal)}</p>` : ''}
+    ${f.flavor ? `<p class="face-flavor">${esc(f.flavor)}</p>` : ''}
+    <details class="face-exact"><summary>Exact rules wording</summary><p class="small">${esc(engineText)}</p></details>`;
+}
+
 function renderInspect(s: GameState): string {
   const iid = ui.inspect;
   if (!iid || !s.cards[iid]) return '';
@@ -1539,7 +1549,7 @@ function renderInspect(s: GameState): string {
   return `<div class="panel inspect popover">
     <button class="close" data-act="closeInspect" aria-label="Close">×</button>
     <div class="label">${esc(d.subtype)}</div><h3>${esc(d.name)}</h3>${stats}
-    <p class="small">${esc(d.text)}</p>
+    ${faceBlock(d.id, d.text)}
     ${d.type === 'Plot' ? `<p class="small"><span class="timing">${esc(plotTiming(d.id, d.subtype))}</span></p>` : ''}
     ${tutorial() && whyNot(s, iid) ? `<p class="why">${esc(whyNot(s, iid)!)}</p>` : ''}
     ${pending.length ? `<p class="small warn">Not active yet in this version: ${esc(pending.join('; '))}.</p>` : ''}
