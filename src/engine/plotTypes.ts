@@ -20,6 +20,12 @@ export interface PlotHandler {
    * return a live effect. Non-attack Plots do their work in `resolve`, after the counter window.
    */
   apply: (s: GameState, player: string, play: PlotPlay, ctx?: AttackCtx) => PlotEffect | void;
+  /**
+   * Attack Plots: is the play still legal now, after later plays changed the Groups involved? (Checked
+   * after every play in the attack and before it resolves; a Plot made illegal returns to its owner's
+   * hand, exposed.) Only the lasting requirements belong here, not the costs or the moment of playing.
+   */
+  stillLegal?: (s: GameState, player: string, play: PlotPlay, ctx: AttackCtx) => string | null;
   /** Non-attack Plots: take effect once nobody counters them. */
   resolve?: (s: GameState, player: string, play: PlotPlay) => void;
   /** Undo anything `apply` did when the Plot is cancelled (costs normally stay paid). */
@@ -49,4 +55,13 @@ export function registerPlots(table: Record<string, PlotHandler>) {
 export const GOALS: Record<string, (s: GameState, player: string) => string | null> = {};
 export function registerGoals(table: Record<string, (s: GameState, player: string) => string | null>) {
   Object.assign(GOALS, table);
+}
+
+/**
+ * How far a player is toward a Goal card, from 0 to 1 (1 = met). Lets a computer player pursue a Goal
+ * card it holds instead of only noticing when it is met. Goal cards without an entry count as 0.
+ */
+export const GOAL_PROGRESS: Record<string, (s: GameState, player: string) => number> = {};
+export function registerGoalProgress(table: Record<string, (s: GameState, player: string) => number>) {
+  Object.assign(GOAL_PROGRESS, table);
 }

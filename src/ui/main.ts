@@ -202,8 +202,8 @@ function loadLevel(): AiLevel {
 }
 const LEVELS: [AiLevel, string, string][] = [
   ['easy', 'Easy', 'Takes only safe-looking attacks, skips clever card play, and sometimes slips up.'],
-  ['normal', 'Normal', 'Plays solidly: weighs its attacks and cards, and defends what matters.'],
-  ['hard', 'Hard', 'Counts all the help it can bring to each attack, plays every takeover out, and fights hardest when a win is close.'],
+  ['normal', 'Normal', 'Plays solidly: weighs its attacks and cards, defends what matters, and gangs up on anyone about to win.'],
+  ['hard', 'Hard', 'Counts all the help it can bring to each attack, joins other fights to hold the leader back, cashes in every spare token, and fights hardest when a win is close.'],
 ];
 
 /** Deck styles anyone can pick: each is a pair of card backs with a table felt to match. Purely looks. */

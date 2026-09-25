@@ -134,6 +134,8 @@ export interface PlayedPlot {
   effect: PlotEffect;
   ability?: string;        // set when this entry is an activated ability of a card, not a Plot
   partOf?: string;         // an extra effect of another entry (that Plot's iid): cancelled along with it
+  /** Made illegal before it resolved (its Group no longer qualifies, a new immunity): it no longer counts. */
+  voided?: boolean;
 }
 
 export interface AttackCtx {
@@ -165,6 +167,14 @@ export interface AttackCtx {
   usedAgents?: boolean;
   barred?: string[];       // players a card has barred from interfering in this attack (Multinational Oil Companies)
   strengthLock?: { attack: number; defense: number; by: string }; // strength fixed by a card (Mothers' March) unless that card is cancelled
+  /**
+   * Why the attacking action is no longer legal (a new immunity, a changed alignment…), re-checked after
+   * every play. While set the attack counts as cancelled; if it is still set when the attack resolves,
+   * the attack does not happen. A later play may make it legal again (then it is cleared).
+   */
+  illegal?: string;
+  /** Aiding or opposing Groups whose action has become illegal (a new immunity): they no longer count. */
+  illegalGroups?: string[];
 }
 
 /** An open response window: everyone may act; closes when all players have passed in a row. */

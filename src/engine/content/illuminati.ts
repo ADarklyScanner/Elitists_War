@@ -62,7 +62,7 @@ registerHooks({
   'bermuda-triangle': {
     // Free reorganization at the end of the turn: once it starts, no more attacks this turn.
     actions: [{
-      id: 'reorganize', label: 'Start the end-of-turn reorganization (free moves, no more attacks this turn)', timing: ['main'], usesToken: false, oncePerTurn: true, ai: 'never',
+      id: 'reorganize', label: 'Start the end-of-turn reorganization (free moves, no more attacks this turn)', timing: ['main'], usesToken: false, oncePerTurn: true, ai: 'reorganize',
       check: (s, pl) => (s.turnFlags.freeMoves === pl ? 'You can already move your Groups freely.' : null),
       apply(s, pl, self) {
         s.turnFlags.freeMoves = pl;

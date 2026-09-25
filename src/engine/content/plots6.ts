@@ -2,7 +2,7 @@
 // Plot cards that need the event/choice/target engine features (batch 1).
 import type { Alignment, GameEvent, GameState, PlotPlay } from '../types';
 import type { PlotHandler } from '../plotTypes';
-import { registerGoals, registerPlots } from '../plotTypes';
+import { registerGoalProgress, registerGoals, registerPlots } from '../plotTypes';
 import { goalCheck, registerChoice, registerHooks, sumHooks } from '../hooks';
 import { cardName, def } from '../cards';
 import { abilitiesOf } from '../abilities';
@@ -140,6 +140,15 @@ registerGoals({
       && (p.eliminated || puppets(s, p.illuminati).length === 0)
       && (p.lastPuppetTakenBy === pl || (p.lastPuppetHelpers ?? []).includes(pl)));
     return down.length >= 2 ? `helped bring down ${down.map((p) => p.name).join(' and ')}` : null;
+  },
+});
+registerGoalProgress({
+  // Rivals already knocked out with this player's help, and how few Groups the others have left.
+  'fratricide': (s, pl) => {
+    const rivals = s.players.filter((p) => p.id !== pl);
+    const down = rivals.filter((p) => (p.eliminated || puppets(s, p.illuminati).length === 0) && (p.lastPuppetTakenBy === pl || (p.lastPuppetHelpers ?? []).includes(pl))).length;
+    const weak = rivals.filter((p) => !p.eliminated && puppets(s, p.illuminati).length > 0).map((p) => 1 / (1 + puppets(s, p.illuminati).length)).sort((a, b) => b - a);
+    return Math.min(1, (down + (down < 2 ? weak[0] ?? 0 : 0) * 0.5) / 2);
   },
 });
 

@@ -44,8 +44,13 @@ export interface ActivatedAbility {
    * the player using it; everyone else only sees that the ability was used.
    */
   secret?: boolean;
-  /** Hint for the computer player. */
-  ai?: 'boostAttack' | 'boostDefense' | 'cancelAttacker' | 'draw' | 'never';
+  /**
+   * Hint for the computer player: a role it plays in attacks, 'draw', 'reorganize' (starts free moves:
+   * used by the computer's reorganizer), 'free' (costs no token and is not once per turn, but limits
+   * itself, so the computer may weigh it like any other move), or 'never'. Without a hint, main-phase
+   * uses that spend a token or come once per turn are weighed by look-ahead.
+   */
+  ai?: 'boostAttack' | 'boostDefense' | 'cancelAttacker' | 'draw' | 'reorganize' | 'free' | 'never';
 }
 
 export interface CardHooks {

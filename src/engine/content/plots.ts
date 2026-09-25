@@ -62,6 +62,13 @@ function plusTen(match: Match): PlotHandler {
       }
       return null;
     },
+    // The Group must still qualify when the attack resolves (a Violent attacker made Peaceful loses its Terrorist Nuke).
+    stillLegal(s, pl, play, ctx) {
+      const t = play.target;
+      if (!own(s, pl, t) || !isGroup(s, t) || !matches(s, t!, match)) return `${t && s.cards[t] ? def(s, t).name : 'The Group'} is no longer a ${describe(match)} Group of yours.`;
+      if ((play.mode ?? 'power') === 'power') return ctx.attacker === t || ctx.aid.some((a) => a.iid === t) ? null : `${def(s, t!).name} no longer takes part in the attack.`;
+      return ctx.target === t || ctx.oppose.some((o) => o.iid === t) ? null : `${def(s, t!).name} no longer takes part in the defense.`;
+    },
     apply(s, pl, play, ctx) {
       if (!ctx) return;
       const entry = { player: pl, plot: play.card, forGroup: play.target, amount: 10, label: def(s, play.card).name };
@@ -234,6 +241,7 @@ function privilegedPlot(bonus: number, check: (s: GameState, pl: string, ctx: At
       if (sameCardInAttack(s, pl, play, ctx)) return 'Already played in this attack.';
       return check(s, pl, ctx);
     },
+    stillLegal: (s, pl, _play, ctx) => check(s, pl, ctx),
     apply(s, pl, play, ctx): PlotEffect {
       if (bonus) ctx!.attackBonus.push({ player: pl, plot: play.card, amount: bonus, label: def(s, play.card).name });
       return { t: 'privileged' };
