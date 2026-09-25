@@ -376,7 +376,7 @@ registerPlots({
       for (const g of play.payWith) if (bulletPower(s, ctx, g) === null) return `${def(s, g).name} could not have aided this attack.`;
       const r = finalRoll(ctx);
       if (r >= 11) return 'A roll of 11 or 12 always fails.';
-      if (attackStrength(s, ctx).strength + bulletTotal(s, ctx, play.payWith) < r) return 'Those Groups do not add enough Power to make the attack succeed.';
+      if (attackStrength(s, ctx).strength + bulletTotal(s, ctx, play.payWith) < r) return 'The Power of those Groups falls short of turning the roll into a success.';
       return null;
     },
     apply(s, pl, play, ctx) {

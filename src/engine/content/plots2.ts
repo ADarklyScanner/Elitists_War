@@ -336,7 +336,7 @@ registerPlots({
     needs: { target: 'place', mode: ['disaster', 'boost'] },
     check(s, _pl, play, ctx) {
       if (play.mode === 'boost') {
-        if (!ctx || ctx.type !== 'destroy' || !MONSTER_PREY.includes(s.cards[ctx.target].cardId)) return 'The +10 only helps an attack to destroy the Robot Sea Monsters or the Nuclear Power Companies.';
+        if (!ctx || ctx.type !== 'destroy' || !MONSTER_PREY.includes(s.cards[ctx.target].cardId)) return 'This +10 applies only when the target of an Attack to Destroy is the Robot Sea Monsters or the Nuclear Power Companies.';
         return null;
       }
       if (ctx) return 'Launch the Atomic Monster when no attack is in progress.';

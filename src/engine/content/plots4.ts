@@ -197,7 +197,7 @@ registerPlots({
     check(s, pl, play, ctx) {
       if (ctx) return 'Messiah cannot be played during an attack.';
       if (!own(s, pl, play.target) || def(s, play.target!).subtype !== 'Personality') return 'Choose a Personality you control.';
-      if (Object.values(s.cards).some((c) => c.cardId === 'messiah' && c.zone === 'table' && c.linkedTo)) return 'Only one Messiah can be in play at a time.';
+      if (Object.values(s.cards).some((c) => c.cardId === 'messiah' && c.zone === 'table' && c.linkedTo)) return 'The game allows just one Messiah on the table, and one is already there.';
       return null;
     },
     apply() {},
