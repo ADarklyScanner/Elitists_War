@@ -192,7 +192,7 @@ function styleHtml(): string {
   return `<h2>Deck style</h2>
   <p class="muted small">Each deck comes with a table to match. Only changes how your game looks; other players choose their own.</p>
   <div class="style-grid">${BACKS.map(([id, name]) => `<button class="style-pick backs-${id} ${cur === id ? 'on' : ''}" data-style-backs="${id}" aria-pressed="${cur === id}">
-    <span class="pair"><span class="cardback plot"></span><span class="cardback group"></span></span><span class="swatch"></span><b>${name}</b></button>`).join('')}</div>`;
+    <span class="mini-table"><span class="cardback plot"></span><span class="cardback group"></span></span><b>${name}</b></button>`).join('')}</div>`;
 }
 
 /** The computer players you set up, each with its own difficulty. Remembered between games. */
