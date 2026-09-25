@@ -25,7 +25,7 @@ registerAbilities({
   ],
   'wall-street': [],
   'wargamers': [
-    { kind: 'attackBonus', on: 'both', target: { attributes: ['Computer'] }, value: 2, scope: 'direct' },
+    { kind: 'attackBonus', on: 'both', target: { attributes: ['Computer'] }, value: 2, scope: 'any' },
   ],
   'w-i-t-c-h': [],
   'al-gore': [
@@ -59,10 +59,10 @@ registerAbilities({
     { kind: 'attackBonus', on: 'control', target: { names: ['cfl-aio'] }, value: 6, scope: 'direct' },
   ],
   'manuel-noriega': [
-    { kind: 'attackBonus', on: 'control', target: { names: ['international-cocaine-smugglers'] }, value: 6, scope: 'direct' },
+    { kind: 'attackBonus', on: 'control', target: { names: ['international-cocaine-smugglers'] }, value: 6, scope: 'any' },
   ],
   'margaret-thatcher': [
-    { kind: 'attackBonus', on: 'control', target: { names: ['england'] }, value: 10, scope: 'direct' },
+    { kind: 'attackBonus', on: 'control', target: { names: ['england'] }, value: 10, scope: 'any' },
   ],
   'media-sensation': [],
   'nancy-reagan': [
@@ -97,14 +97,14 @@ registerAbilities({
   ],
   'france': [],
   'germany': [
-    { kind: 'attackBonus', on: 'control', target: { attributes: ['Science'] }, value: 2, scope: 'direct' },
+    { kind: 'attackBonus', on: 'control', target: { attributes: ['Science'] }, value: 2, scope: 'any' },
   ],
   'hawaii': [],
   'hollywood': [
     { kind: 'powerPer', per: { attributes: ['Media'], subtypes: ['Personality'] }, value: 2, global: true },
   ],
   'israel': [
-    { kind: 'attackBonus', on: 'control', target: { names: ['mossad'] }, value: 8, scope: 'direct' },
+    { kind: 'attackBonus', on: 'control', target: { names: ['mossad'] }, value: 8, scope: 'any' },
   ],
   'italy': [],
   'japan': [
@@ -113,7 +113,7 @@ registerAbilities({
   // Las Vegas' wager is scripted below.
   'las-vegas': [],
   'moonbase': [
-    { kind: 'attackBonus', on: 'both', target: { attributes: ['Space'] }, value: 4, scope: 'direct' },
+    { kind: 'attackBonus', on: 'both', target: { attributes: ['Space'] }, value: 4, scope: 'any' },
   ],
   'new-york': [],
   'orbit-one': [],
@@ -123,7 +123,7 @@ registerAbilities({
     { kind: 'attackBonus', on: 'both', target: { attributes: ['Communist'] }, value: 2, scope: 'any' },
   ],
   'silicon-valley': [
-    { kind: 'attackBonus', on: 'control', target: { attributes: ['Computer'] }, value: 4, scope: 'direct' },
+    { kind: 'attackBonus', on: 'control', target: { attributes: ['Computer'] }, value: 4, scope: 'any' },
   ],
   'stonehenge': [
     { kind: 'structureImmune', from: { attributes: ['Magic'] } },
@@ -251,7 +251,8 @@ function subsets<T>(xs: T[]): T[][] {
 /** Linked Personalities of Moonbase that are still in play or in a hand. */
 const moonbaseLinks = (s: GameState, self: string) => ((s.cards[self].data?.linked as string[] | undefined) ?? []);
 
-const moonbaseDisasters = disasterImmunity(['nuclear-accident', 'meteor-strike'], null);
+// Moonbase: only Earthquake and Meteor Strike can reach it (Orbit One's errata list does not apply here).
+const moonbaseDisasters = disasterImmunity(['earthquake', 'meteor-strike'], null);
 
 /** Plots that count as Magic (spells, or their banner asks for a Magic action). */
 const MAGIC_PLOTS = new Set([
@@ -311,6 +312,38 @@ function plotHider(opts: { name: string; swap: boolean; beyondLimit: boolean; go
     }],
   };
 }
+/**
+ * France and Italy: as a free action (no Action token needed or spent), add this Place's Power to the
+ * defense of one of your own Groups with the given alignment, once per attack.
+ */
+function freeDefense(name: string, al: Alignment): CardHooks {
+  return {
+    // Its Power is used once: after defending for free it cannot also oppose with a token.
+    forbidJoin: (_s, self, ctx, group, as) => as === 'oppose' && group === self && usedThisAttack(ctx, self, 'defend'),
+    actions: [{
+      id: 'defend',
+      label: `Defend one of your ${al} Groups with ${name}'s Power (free action)`,
+      timing: ['attack'],
+      usesToken: false,
+      ai: 'boostDefense',
+      check(s, pl, self, _p, ctx) {
+        if (!ctx || ctx.instant) return 'Use this during an attack on one of your Groups.';
+        const t = ctx.target;
+        if (!ownGroup(s, self, t) || s.cards[t].controller !== pl || !hasAlign(s, t, al)) return `The target must be a ${al} Group you control.`;
+        if (t === self) return `${name} defends itself in the usual way.`;
+        if (ctx.attacker === self || [...ctx.aid, ...ctx.oppose].some((c) => c.iid === self)) return `${name} is already part of this attack.`;
+        if (usedThisAttack(ctx, self, 'defend')) return `${name} has already defended in this attack.`;
+        // R014: only Secret Groups, or the target's own master and puppets, may defend a Secret Group.
+        if (hasAttr(s, t, 'Secret') && !hasAttr(s, self, 'Secret') && s.cards[t].master !== self && s.cards[self].master !== t) return `${name} cannot defend a Secret Group.`;
+        return null;
+      },
+      apply(s, pl, self, _p, ctx) {
+        ctx!.defenseBonus.push({ player: pl, plot: abilityEntry(s, self, 'defend'), forGroup: self, amount: power(s, self), label: `${name} defends` });
+      },
+    }],
+  };
+}
+
 /** Texas: the hidden Plot is lost if Texas is captured or destroyed. */
 function loseHidden(s: GameState, self: string) {
   const d = s.cards[self].data, iid = d?.hidden as string | undefined, who = d?.hider as string | undefined;
@@ -423,8 +456,10 @@ registerHooks({
     extraTokens: (s, self, iid) => (iid === self ? puppets(s, self).filter((g) => hasAttr(s, g, 'Media')).length : 0),
     onDestroy(s, self, victim, by) {
       if (victim !== self) return;
-      const n = power(s, self);
-      if (n > 0) { drawPlot(s, player(s, by), n); log(s, `${player(s, by).name} draws ${n} Plot${n === 1 ? '' : 's'} for destroying Bjorne.`, by); }
+      // One Plot, plus one more for each point of his Power at that moment.
+      const n = 1 + Math.max(0, power(s, self));
+      drawPlot(s, player(s, by), n);
+      log(s, `${player(s, by).name} draws ${n} Plot${n === 1 ? '' : 's'} for destroying Bjorne.`, by);
     },
   },
 
@@ -445,6 +480,17 @@ registerHooks({
 
   'texas': {
     ...plotHider({ name: 'Texas', swap: true, beyondLimit: true, goals: false }),
+    // The hidden Plot may only be used for something involving Texas: aimed at Texas, played in an
+    // attack Texas makes, aids, opposes or is the target of, or answering a Plot aimed at Texas.
+    forbidUse(s, self, pl, card, target, ctx) {
+      const d = s.cards[self].data;
+      if (d?.hidden !== card || d?.hider !== pl) return null;
+      if (target === self) return null;
+      if (ctx && [ctx.attacker, ctx.target, ...ctx.aid.map((c) => c.iid), ...ctx.oppose.map((c) => c.iid)].includes(self)) return null;
+      const answered = target ? [...(ctx?.plays ?? []), ...(s.window?.plays ?? [])].find((p) => p.iid === target) : undefined;
+      if (answered?.play.target === self) return null;
+      return 'The Plot hidden beneath Texas can only be used for something involving Texas.';
+    },
     onDestroy(s, self, victim) { if (victim === self) loseHidden(s, self); },
     onCapture(s, self) {
       const who = s.cards[self].data?.hider as string | undefined;
@@ -650,12 +696,8 @@ registerHooks({
     }],
   },
 
-  'france': {
-    mayJoin: (s, self, ctx, group, as) => as === 'oppose' && group === self && ownGroup(s, self, ctx.target) && hasAlign(s, ctx.target, 'Liberal'),
-  },
-  'italy': {
-    mayJoin: (s, self, ctx, group, as) => as === 'oppose' && group === self && ownGroup(s, self, ctx.target) && hasAlign(s, ctx.target, 'Weird'),
-  },
+  'france': freeDefense('France', 'Liberal'),
+  'italy': freeDefense('Italy', 'Weird'),
 
   'germany': {
     // Remember the tokens it saved; if any, it still receives another one this turn.

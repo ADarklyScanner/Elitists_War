@@ -67,22 +67,23 @@ registerAbilities({
   'republicans': [],
   'rifkinites': [
     { kind: 'attackBonus', on: 'control', target: { attributes: ['Green'] }, value: 6, scope: 'direct' },
-    { kind: 'attackBonus', on: 'destroy', target: { alignments: ['Corporate'] }, value: 2, scope: 'direct' },
-    { kind: 'attackBonus', on: 'destroy', target: { attributes: ['Science'] }, value: 2, scope: 'direct' },
-    { kind: 'attackBonus', on: 'destroy', target: { attributes: ['Space'] }, value: 2, scope: 'direct' },
-    { kind: 'attackBonus', on: 'destroy', target: { attributes: ['Computer'] }, value: 2, scope: 'direct' },
+    // +2 per matching category on any attempt to destroy (they add up: a Corporate Space target gets +4).
+    { kind: 'attackBonus', on: 'destroy', target: { alignments: ['Corporate'] }, value: 2, scope: 'any' },
+    { kind: 'attackBonus', on: 'destroy', target: { attributes: ['Science'] }, value: 2, scope: 'any' },
+    { kind: 'attackBonus', on: 'destroy', target: { attributes: ['Space'] }, value: 2, scope: 'any' },
+    { kind: 'attackBonus', on: 'destroy', target: { attributes: ['Computer'] }, value: 2, scope: 'any' },
   ],
   'robot-sea-monsters': [
     { kind: 'attackBonus', on: 'destroy', target: { names: ['japan', 'california'] }, value: 10, scope: 'direct' },
   ],
   'rosicrucians': [],
   'saturday-morning-cartoons': [
-    { kind: 'attackBonus', on: 'control', target: { alignments: ['Violent'] }, value: 2, scope: 'direct' },
+    { kind: 'attackBonus', on: 'control', target: { alignments: ['Violent'] }, value: 2, scope: 'any' },
   ],
   'savings-and-loans': [],
   'science-fiction-fans': [
-    { kind: 'attackBonus', on: 'both', target: { attributes: ['Computer'] }, value: 2, scope: 'direct' },
-    { kind: 'attackBonus', on: 'control', target: { alignments: ['Weird'] }, value: 2, scope: 'direct' },
+    { kind: 'attackBonus', on: 'both', target: { attributes: ['Computer'] }, value: 2, scope: 'any' },
+    { kind: 'attackBonus', on: 'control', target: { alignments: ['Weird'] }, value: 2, scope: 'any' },
   ],
   'secret-service': [
     // +10 whenever any of your attacks tries to destroy a Government Personality (Assassinations: see the hook).
@@ -101,7 +102,7 @@ registerAbilities({
     { kind: 'attackBonus', on: 'control', target: { names: ['science-fiction-fans', 'trekkies', 'wargamers', 'comic-books', 'trading-card-games'] }, value: 6, scope: 'direct' },
   ],
   'society-for-creative-anarchism': [
-    { kind: 'attackBonus', on: 'destroy', target: { alignments: ['Straight'] }, value: 4, scope: 'direct' },
+    { kind: 'attackBonus', on: 'destroy', target: { alignments: ['Straight'] }, value: 4, scope: 'any' },
   ],
   'south-american-nazis': [
     { kind: 'attackBonus', on: 'control', target: { alignments: ['Weird'], attributes: ['Science'] }, value: 6, scope: 'direct' },
@@ -122,8 +123,10 @@ registerAbilities({
     { kind: 'attackBonus', on: 'destroy', target: { alignments: ['Criminal'] }, value: 4, scope: 'direct', replacesAlignmentPenalty: true },
     { kind: 'attackBonus', on: 'both', target: { alignments: ['Criminal'] }, value: 2, scope: 'any' },
   ],
+  // +4 to destroy whenever their Power is used, whether they make the attack or aid it.
   'the-men-in-black': [
     { kind: 'attackBonus', on: 'destroy', value: 4, scope: 'direct' },
+    { kind: 'aidBonus', on: 'destroy', value: 4 },
   ],
   'tobacco-companies': [
     { kind: 'attackBonus', on: 'control', target: { alignments: ['Government'] }, value: 8, scope: 'direct', replacesAlignmentPenalty: true },
@@ -138,7 +141,7 @@ registerAbilities({
   ],
   'underground-newspapers': [],
   'united-nations': [
-    { kind: 'attackBonus', on: 'control', target: { attributes: ['Nation'] }, value: 6, scope: 'direct' },
+    { kind: 'attackBonus', on: 'control', target: { attributes: ['Nation'] }, value: 6, scope: 'any' },
   ],
   'urban-gangs': [
     { kind: 'attackBonus', on: 'destroy', value: 2, scope: 'any' },
@@ -147,8 +150,8 @@ registerAbilities({
     { kind: 'attackBonus', on: 'control', target: { subtypes: ['Personality'] }, value: 4, scope: 'direct' },
   ],
   'video-games': [
-    { kind: 'attackBonus', on: 'control', target: { names: ['convenience-stores'] }, value: 3, scope: 'direct' },
-    { kind: 'attackBonus', on: 'control', target: { attributes: ['Computer'] }, value: 3, scope: 'direct' },
+    { kind: 'attackBonus', on: 'control', target: { names: ['convenience-stores'] }, value: 3, scope: 'any' },
+    { kind: 'attackBonus', on: 'control', target: { attributes: ['Computer'] }, value: 3, scope: 'any' },
   ],
 });
 
@@ -559,23 +562,31 @@ registerHooks({
       const t = ctx.target;
       const ok = hasAlign(s, t, 'Corporate', 'Government') || (def(s, t).subtype === 'Place' && hasAttr(s, t, 'Coastal'));
       if (!ok) return 0;
+      // "Any attempt": every attack its controller makes, whichever Group leads it.
+      if (ctx.attackerPlayer !== controllerOf2(s, self)) return 0;
       if (ctx.disaster) {
         const card = ctx.instantCard ? s.cards[ctx.instantCard]?.cardId : undefined;
-        return ctx.attackerPlayer === controllerOf2(s, self) && !SPACE_DISASTERS.includes(card ?? '') ? 4 : 0;
+        return !SPACE_DISASTERS.includes(card ?? '') ? 4 : 0;
       }
-      return leads(ctx, self) ? 4 : 0;
+      if (ctx.instant || !ctx.attacker) return 0;
+      // Leading against Japan or California, its direct +10 applies instead: the larger bonus wins, they do not add.
+      if (ctx.attacker === self && ['japan', 'california'].includes(s.cards[t].cardId)) return 0;
+      return 4;
     },
   },
 
   'savings-and-loans': {
-    attackMod: (s, self, ctx, side) => side === 'attack' && leads(ctx, self) && ctx.type === 'control' &&
+    // "Any attempt": any takeover its controller makes, whichever Group leads it.
+    attackMod: (s, self, ctx, side) => side === 'attack' && !ctx.instant && !!ctx.attacker && ctx.attackerPlayer === controllerOf2(s, self) && ctx.type === 'control' &&
       (hasAlign(s, ctx.target, 'Corporate', 'Government') || hasAttr(s, ctx.target, 'Bank')) ? 3 : 0,
     actions: [cancelAction('Cancel the action of a Bank, Corporate or Government Group', (s, g) => hasAlign(s, g, 'Corporate', 'Government') || hasAttr(s, g, 'Bank'))],
   },
 
   'science-fiction-fans': {
+    // Their master gets +6 in all on these attacks: the "any attempt" +2 above (which every attack of yours
+    // gets) plus 4 here. The two do not add up to 8; the larger bonus applies.
     attackMod: (s, self, ctx, side) => side === 'attack' && !ctx.instant && !!ctx.attacker && ctx.attacker === s.cards[self].master &&
-      sameOwner(s, self, ctx.attacker) && hasAttr(s, ctx.target, 'Computer') ? 6 : 0,
+      sameOwner(s, self, ctx.attacker) && hasAttr(s, ctx.target, 'Computer') ? 4 : 0,
   },
 
   'secret-service': {
@@ -641,8 +652,10 @@ registerHooks({
 
   'the-men-in-black': {
     // Destroyed Groups never return in this engine; the mark keeps them out of any later recovery effect.
+    // It works whether they made the attack or aided it, as long as their action was not cancelled.
     onAttackEnd(s, self, ctx) {
-      if (ctx.attacker !== self || ctx.type !== 'destroy' || ctx.result !== 'success' || s.cards[ctx.target].zone !== 'destroyed') return;
+      if (ctx.instant || !attackingGroups(ctx).includes(self) || cancelledGroups(ctx).has(self)) return;
+      if (ctx.type !== 'destroy' || ctx.result !== 'success' || s.cards[ctx.target].zone !== 'destroyed') return;
       s.cards[ctx.target].data = { ...s.cards[ctx.target].data, removedFromGame: true };
       log(s, `${cardName(s, ctx.target)} is removed from the game permanently.`, ctx.attackerPlayer);
     },
@@ -653,7 +666,10 @@ registerHooks({
   },
 
   'trekkies': {
-    attackMod: (s, self, ctx, side) => side === 'attack' && ctx.target === self && ctx.type === 'control' && !ctx.instant && !!ctx.attacker && hasAttr(s, ctx.attacker, 'Media') ? 4 : 0,
+    // Media attackers get +4 to take them over. As a target hook it also works while the Trekkies are
+    // attacked from their owner's hand. Ignored when the attacker is Secret (R014).
+    asTarget: (s, self, ctx, side) => side === 'attack' && ctx.target === self && ctx.type === 'control' && !ctx.instant && !!ctx.attacker
+      && !cancelledGroups(ctx).has(ctx.attacker) && hasAttr(s, ctx.attacker, 'Media') && !hasAttr(s, ctx.attacker, 'Secret') ? 4 : 0,
   },
 
   'tv-preachers': {

@@ -890,19 +890,19 @@ describe('Spear of Longinus', () => {
 
 describe('Suicide Squad', () => {
   const seedFor = (face: number) => { for (let k = 0; ; k++) { const t = { rng: k } as GameState; if (rollDie(t) === face) return k; } };
-  it('1: the target is destroyed and the Squad survives; 6: only the Squad dies', () => {
+  it('1: the target is destroyed and the Squad survives; 6: only the Squad dies (destroyed cards are discarded)', () => {
     let s = scenario();
     const r = give(s, 'p1', 'suicide-squad', { resource: true });
     const t = give(s, 'p2', 'bigfoot', { resource: true });
     s.rng = seedFor(1);
     const s1 = use(s, 'p1', r, 'strike', { target: t });
-    expect([s1.cards[t].zone, s1.cards[r].zone]).toEqual(['destroyed', 'resources']);
+    expect([s1.cards[t].zone, s1.cards[r].zone]).toEqual(['discard', 'resources']);
     s.rng = seedFor(6);
     const s6 = use(s, 'p1', r, 'strike', { target: t });
-    expect([s6.cards[t].zone, s6.cards[r].zone]).toEqual(['resources', 'destroyed']);
+    expect([s6.cards[t].zone, s6.cards[r].zone]).toEqual(['resources', 'discard']);
     s.rng = seedFor(3);
     const s3 = use(s, 'p1', r, 'strike', { target: t });
-    expect([s3.cards[t].zone, s3.cards[r].zone]).toEqual(['destroyed', 'destroyed']);
+    expect([s3.cards[t].zone, s3.cards[r].zone]).toEqual(['discard', 'discard']);
   });
   it('only against a rival\'s Resource', () => {
     const s = scenario();
@@ -1071,5 +1071,35 @@ describe('Xanadu', () => {
     const x = give(s, 'p2', 'xanadu', { resource: true });
     expect(x).toBeTruthy();
     expect(() => act(s, 'p1', { type: 'agent', card: dup, as: 'aid' })).toThrow(/no bonus/);
+  });
+});
+
+describe('audit fixes (D)', () => {
+  it('Warehouse 23 fetches every printed Gadget or Artifact, wherever the data records its type', () => {
+    // Flying Saucer, Eliza and Weather Satellite: the data does not say Gadget/Artifact yet (fix pending);
+    // Cyborg Soldiers, Earthquake Projector and The Frog God: the type is in the notes.
+    for (const id of ['flying-saucer', 'eliza', 'weather-satellite', 'cyborg-soldiers', 'earthquake-projector', 'the-frog-god']) {
+      let s = scenario();
+      const w = give(s, 'p1', 'warehouse-23', { hand: true });
+      const r = give(s, 'p1', id, { hand: true });
+      s = act(s, 'p1', { type: 'playResource', card: w });
+      s = use(s, 'p1', w, 'fetch', { target: r });
+      expect(s.cards[r].zone, id).toBe('resources');
+    }
+  });
+
+  it('Suicide Squad discards what it destroys, so a Unique Resource may come back later', () => {
+    const seedFor = (face: number) => { for (let k = 0; ; k++) { const t = { rng: k } as GameState; if (rollDie(t) === face) return k; } };
+    const s = scenario();
+    const r = give(s, 'p1', 'suicide-squad', { resource: true });
+    const t = give(s, 'p2', 'warehouse-23', { resource: true });
+    s.rng = seedFor(1);
+    const s1 = use(s, 'p1', r, 'strike', { target: t });
+    expect(s1.cards[t].zone).toBe('discard');
+    expect(s1.players[1].discard).toContain(t);
+    expect(canEnterPlay(s1, t, 'p2')).toBe(true);
+    s.rng = seedFor(4);
+    const s4 = use(s, 'p1', r, 'strike', { target: t });
+    expect(s4.players[0].discard).toContain(r);
   });
 });

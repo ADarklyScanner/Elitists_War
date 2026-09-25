@@ -477,12 +477,12 @@ describe('Science Fiction Fans', () => {
     const tgt = under(s, 'p2', 'video-games');
     expect(mod(act(s, 'p1', { type: 'attack', attackType: 'control', attacker: mafia, target: tgt }), 'Attack', 'science-fiction-fans')).toBe(6);
   });
-  it('no bonus for a Group that is not their master', () => {
+  it('a Group that is not their master gets only the "any attempt" +2', () => {
     const s = scenario();
     const mafia = under(s, 'p1', 'the-mafia');
     under(s, 'p1', 'science-fiction-fans', 'RIGHT');
     const tgt = under(s, 'p2', 'video-games');
-    expect(mod(act(s, 'p1', { type: 'attack', attackType: 'control', attacker: mafia, target: tgt }), 'Attack', 'science-fiction-fans')).toBe(0);
+    expect(mod(act(s, 'p1', { type: 'attack', attackType: 'control', attacker: mafia, target: tgt }), 'Attack', 'science-fiction-fans')).toBe(2);
   });
 });
 
@@ -1257,5 +1257,164 @@ describe('MI-5 negating an attempt to expose your Plots', () => {
     s = use(s, 'p1', nasa, 'transferToken', { target: fbi });
     expect(s.window?.event?.type).toBe('action'); // opened for the Supreme Court
     expect(() => use(s, 'p2', mi5, 'negateExpose')).toThrow(/reveal your hidden Plots/);
+  });
+});
+
+describe('audit fixes (D)', () => {
+  /** Run `fn` with a card's data patched to its printed value (the cards.json fix is pending), then restore it. */
+  function withData<T>(id: string, patch: Partial<(typeof CARDS)[string]>, fn: () => T): T {
+    const saved = { ...CARDS[id] };
+    Object.assign(CARDS[id], patch);
+    try { return fn(); } finally { Object.assign(CARDS[id], saved); }
+  }
+  const attack = (s: GameState, type: 'control' | 'destroy', attacker: string, target: string) =>
+    act(s, 'p1', { type: 'attack', attackType: type, attacker, target });
+
+  it('Rifkinites: +6 only when they lead a takeover of a Green Group', () => {
+    const s = scenario();
+    const rif = under(s, 'p1', 'rifkinites');
+    const mafia = under(s, 'p1', 'the-mafia', 'RIGHT');
+    const green = under(s, 'p2', 'underground-newspapers');
+    expect(mod(attack(s, 'control', rif, green), 'Attack', 'rifkinites')).toBe(6);
+    expect(mod(attack(s, 'control', mafia, green), 'Attack', 'rifkinites')).toBe(0);
+  });
+  it('Rifkinites: +2 per category to any attack of yours to destroy, whoever leads it', () => {
+    const s = scenario();
+    const rif = under(s, 'p1', 'rifkinites');
+    const mafia = under(s, 'p1', 'the-mafia', 'RIGHT');
+    const orbit = under(s, 'p2', 'orbit-one'); // Space, Science and Computer
+    const corp = under(s, 'p2', 'multinational-oil-companies', 'RIGHT');
+    expect(mod(attack(s, 'destroy', mafia, orbit), 'Attack', 'rifkinites')).toBe(6);
+    expect(mod(attack(s, 'destroy', rif, orbit), 'Attack', 'rifkinites')).toBe(6);
+    expect(mod(attack(s, 'destroy', mafia, corp), 'Attack', 'rifkinites')).toBe(2);
+    expect(mod(attack(s, 'control', mafia, corp), 'Attack', 'rifkinites')).toBe(0);
+  });
+  it('Rifkinites: no help to a rival\'s attack', () => {
+    const s = scenario();
+    under(s, 'p2', 'rifkinites', 'RIGHT');
+    const mafia = under(s, 'p1', 'the-mafia');
+    const orbit = under(s, 'p2', 'orbit-one');
+    expect(mod(attack(s, 'destroy', mafia, orbit), 'Attack', 'rifkinites')).toBe(0);
+  });
+
+  it('Robot Sea Monsters: +4 to any attack of yours to destroy a Corporate, Government or Coastal target', () => {
+    const s = scenario();
+    const rsm = under(s, 'p1', 'robot-sea-monsters');
+    const mafia = under(s, 'p1', 'the-mafia', 'RIGHT');
+    const hawaii = under(s, 'p2', 'hawaii');
+    const japan = under(s, 'p2', 'japan', 'RIGHT');
+    const straight = under(s, 'p2', 'dentists', 'LEFT');
+    expect(mod(attack(s, 'destroy', mafia, hawaii), 'Attack', 'robot-sea-monsters')).toBe(4);
+    expect(mod(attack(s, 'destroy', mafia, straight), 'Attack', 'robot-sea-monsters')).toBe(0);
+    expect(mod(attack(s, 'destroy', mafia, japan), 'Attack', 'robot-sea-monsters')).toBe(4);
+    // They are Secret: in an attack they lead, Group abilities are ignored (R014).
+    expect(mod(attack(s, 'destroy', rsm, hawaii), 'Attack', 'robot-sea-monsters')).toBe(0);
+  });
+  it('Robot Sea Monsters: nothing for a rival\'s attack', () => {
+    const s = scenario();
+    under(s, 'p2', 'robot-sea-monsters', 'RIGHT');
+    const mafia = under(s, 'p1', 'the-mafia');
+    const hawaii = under(s, 'p2', 'hawaii');
+    expect(mod(attack(s, 'destroy', mafia, hawaii), 'Attack', 'robot-sea-monsters')).toBe(0);
+  });
+
+  it('Saturday Morning Cartoons: +2 to any takeover of a Violent Group', () => {
+    const s = scenario();
+    under(s, 'p1', 'saturday-morning-cartoons');
+    const mafia = under(s, 'p1', 'the-mafia', 'RIGHT');
+    expect(mod(attack(s, 'control', mafia, under(s, 'p2', 'loan-sharks')), 'Attack', 'saturday-morning-cartoons')).toBe(2);
+    expect(mod(attack(s, 'control', mafia, under(s, 'p2', 'dentists', 'RIGHT')), 'Attack', 'saturday-morning-cartoons')).toBe(0);
+  });
+
+  it('Savings and Loans: +3 to a takeover led by another of your Groups, not to destroy', () => {
+    const s = scenario();
+    under(s, 'p1', 'savings-and-loans');
+    const mafia = under(s, 'p1', 'the-mafia', 'RIGHT');
+    const cia = under(s, 'p2', 'c-i-a');
+    expect(mod(attack(s, 'control', mafia, cia), 'Attack', 'savings-and-loans')).toBe(3);
+    expect(mod(attack(s, 'destroy', mafia, cia), 'Attack', 'savings-and-loans')).toBe(0);
+  });
+
+  it('Science Fiction Fans: +2 to any attack on a Computer Group and any takeover of a Weird one; their master gets +6, not +8', () => {
+    const s = scenario();
+    const mafia = under(s, 'p1', 'the-mafia');
+    const other = under(s, 'p1', 'loan-sharks', 'RIGHT');
+    give(s, 'p1', 'science-fiction-fans', { under: mafia, side: 'LEFT' });
+    const comp = under(s, 'p2', 'post-office');
+    const weird = under(s, 'p2', 'gay-activists', 'RIGHT');
+    expect(mod(attack(s, 'destroy', other, comp), 'Attack', 'science-fiction-fans')).toBe(2);
+    expect(mod(attack(s, 'control', other, weird), 'Attack', 'science-fiction-fans')).toBe(2);
+    expect(mod(attack(s, 'destroy', mafia, comp), 'Attack', 'science-fiction-fans')).toBe(6);
+  });
+
+  it('Society for Creative Anarchism: +4 to any attack of yours to destroy a Straight Group', () => {
+    const s = scenario();
+    under(s, 'p1', 'society-for-creative-anarchism');
+    const mafia = under(s, 'p1', 'the-mafia', 'RIGHT');
+    const dentists = under(s, 'p2', 'dentists');
+    expect(mod(attack(s, 'destroy', mafia, dentists), 'Attack', 'society-for-creative-anarchism')).toBe(4);
+    expect(mod(attack(s, 'control', mafia, dentists), 'Attack', 'society-for-creative-anarchism')).toBe(0);
+  });
+
+  it('United Nations: +6 to any takeover of a Nation', () => {
+    const s = scenario();
+    under(s, 'p1', 'united-nations');
+    const mafia = under(s, 'p1', 'the-mafia', 'RIGHT');
+    expect(mod(attack(s, 'control', mafia, under(s, 'p2', 'japan')), 'Attack', 'united-nations')).toBe(6);
+    expect(mod(attack(s, 'control', mafia, under(s, 'p2', 'hawaii', 'RIGHT')), 'Attack', 'united-nations')).toBe(0);
+  });
+
+  it('Video Games: +3 to any takeover of a Computer Group', () => {
+    const s = scenario();
+    under(s, 'p1', 'video-games');
+    const mafia = under(s, 'p1', 'the-mafia', 'RIGHT');
+    const comp = under(s, 'p2', 'hackers');
+    expect(mod(attack(s, 'control', mafia, comp), 'Attack', 'video-games')).toBe(3);
+    expect(mod(attack(s, 'destroy', mafia, comp), 'Attack', 'video-games')).toBe(0);
+  });
+
+  it('The Men in Black: +4 and permanent removal also when they aid the attack (data: Secret, fix pending)', () => {
+    withData('the-men-in-black', { attributes: ['Secret'] }, () => {
+      let s = scenario();
+      const mafia = under(s, 'p1', 'the-mafia');
+      const mib = under(s, 'p1', 'the-men-in-black', 'RIGHT');
+      const tgt = under(s, 'p2', 'loan-sharks');
+      s = attack(s, 'destroy', mafia, tgt);
+      s = act(s, 'p1', { type: 'aid', group: mib });
+      expect(attackStrength(s, s.attack!).lines).toContain(`Attack +4: ${CARDS['the-men-in-black'].name} ability`);
+      s.attack!.attackBonus.push({ player: 'p1', amount: 40, label: 'test' });
+      s = resolve(s, [2, 2]);
+      expect(s.cards[tgt].zone).toBe('destroyed');
+      expect(s.cards[tgt].data?.removedFromGame).toBe(true);
+    });
+  });
+  it('The Men in Black: no aid bonus to take over a Group', () => {
+    let s = scenario();
+    const mafia = under(s, 'p1', 'the-mafia');
+    const mib = under(s, 'p1', 'the-men-in-black', 'RIGHT');
+    s = attack(s, 'control', mafia, under(s, 'p2', 'loan-sharks'));
+    s = act(s, 'p1', { type: 'aid', group: mib });
+    expect(attackStrength(s, s.attack!).lines.some((l) => l.includes(`${CARDS['the-men-in-black'].name} ability`))).toBe(false);
+  });
+
+  it('Tobacco Companies: their +8 replaces the Corporate-Government penalty (data: Corporate, fix pending)', () => {
+    withData('tobacco-companies', { alignments: ['Straight', 'Corporate'] }, () => {
+      const s = scenario();
+      const tob = under(s, 'p1', 'tobacco-companies');
+      const t = attack(s, 'control', tob, under(s, 'p2', 'c-i-a'));
+      expect(mod(t, 'Attack', 'tobacco-companies')).toBe(8);
+      expect(attackStrength(t, t.attack!).lines.some((l) => l.endsWith(': alignments'))).toBe(false);
+    });
+  });
+
+  it('Trekkies: Media Groups get +4 to take them over from their owner\'s hand too', () => {
+    const s = scenario();
+    const media = under(s, 'p1', 'cable-tv');
+    const trek = give(s, 'p1', 'trekkies', { hand: true });
+    const t = attack(s, 'control', media, trek);
+    expect(t.attack!.fromHand).toBe(true);
+    expect(mod(t, 'Attack', 'trekkies')).toBe(4);
+    const mafia = under(s, 'p1', 'the-mafia', 'RIGHT');
+    expect(mod(attack(s, 'control', mafia, trek), 'Attack', 'trekkies')).toBe(0);
   });
 });
