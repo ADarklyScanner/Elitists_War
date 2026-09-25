@@ -9554,7 +9554,7 @@
   "duration": "For that attack",
   "modifier": "+5 to control a Nation; OR one-time +10 to destroy a Place or to a Disaster, then discard",
   "uniqueness": "No card-specific limit (base duplicate rules apply)",
-  "notes": "Card has no ACTION marker; bonus applies to 'any attempt' (not limited to your own).",
+  "notes": "Checked against the printed card: \"any attempt\" bonuses help only the holder's own attacks (rulebook glossary); the one-shot +10 applies to the holder's own attacks on a Place, or to aiding any Disaster.",
   "playRequirement": "Control bonus only vs Nations; destroy bonus only vs Places (or any Disaster)",
   "responseWindow": "Standard response window",
   "attackPower": null
