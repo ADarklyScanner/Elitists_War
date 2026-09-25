@@ -1006,9 +1006,14 @@ function immuneTo(s: GameState, target: string, attackerGroups: string[], ctx?: 
   if (attackerGroups.some((g) => anyHook(s, (h, self) => h.immune?.(s, self, target, g, ctx)))) return true;
   // A Group's own immunity (Ronald Reagan) protects it wherever it is attacked, in a hand too.
   if (abilitiesOf(s, target).some((a) => a.kind === 'selfImmune' && attackerGroups.some((g) => matches(s, g, a.from)))) return true;
-  const owner = controllerOf(s, target);
+  // Immunity for a whole Power Structure also covers its owner's hand, decks and discard pile.
+  const c = s.cards[target];
+  const offTable = ['hand', 'discard', 'plotDeck', 'groupDeck'].includes(c.zone);
+  const owner = controllerOf(s, target) ?? (offTable ? c.owner : undefined);
   if (!owner) return false;
-  const protectors = [target, ...structureCards(s, owner)];
+  // Nobody is immune to their own Groups (taking over a Group from your own hand).
+  if (attackerGroups.every((g) => controllerOf(s, g) === owner)) return false;
+  const protectors = offTable ? structureCards(s, owner) : [target, ...structureCards(s, owner)];
   for (const pr of protectors) {
     for (const a of abilitiesOf(s, pr)) {
       if (a.kind === 'structureImmune' && attackerGroups.some((g) => matches(s, g, a.from))) return true;

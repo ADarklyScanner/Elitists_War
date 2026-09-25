@@ -168,6 +168,9 @@ Engine choices, made so the game can be played on screens, in pieces and online:
 
 ## Fixed in this audit
 
+- Immunity for a whole Power Structure (Stonehenge, Vatican City, the Discordian Society and one other
+  Group) did not reach the owner's hand, decks and discard pile, as the rulebook's Immunity section says
+  it must; it now does. A player is still never immune to his own Groups.
 - An eliminated player's Resources stayed in play and kept working; they now leave play, or pass to a
   same-Illuminati faction that knocked him out (R049, R044).
 - The destroy-count Illuminati destroying its own last Group for its winning total was knocked out

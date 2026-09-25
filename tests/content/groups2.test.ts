@@ -1,6 +1,7 @@
 // Scripted parts of the Group cards in src/engine/content/groups2.ts.
 import { describe, expect, it } from 'vitest';
 import {
+  validateAttack,
   alignments, applyAction, attackStrength, canAid, canEnterPlay, canOppose, checkPlot, destroyGroup, discardCard, drawPlot,
   finalRoll, globalPower, handLimit, HOOKS, isPrivileged, openArrows, power, resistance, waitingFor, CARDS, type Action,
   type AttackCtx, type GameState,
@@ -966,6 +967,19 @@ describe('Russia and Switzerland attacked from hand', () => {
 });
 
 describe('Stonehenge: immune to Magic', () => {
+  it('covers your hand too, as any whole-structure immunity does, but never your own attacks', () => {
+    const s = scenario();
+    const v = put(s, 'p1', 'voudonistas'); // Magic
+    const inHand = give(s, 'p2', 'hillary-clinton', { hand: true });
+    const hit = { type: 'attack' as const, attackType: 'control' as const, attacker: v, target: inHand };
+    expect(validateAttack(s, 'p1', hit, { outOfTurn: true, anyHand: true })).toBeNull();
+    put(s, 'p2', 'stonehenge');
+    expect(validateAttack(s, 'p1', hit, { outOfTurn: true, anyHand: true })).toMatch(/immune/);
+    // p1's own Magic Group taking over from p1's own hand is unaffected by p1's own Stonehenge.
+    put(s, 'p1', 'stonehenge');
+    const mine = give(s, 'p1', 'dentists', { hand: true });
+    expect(validateAttack(s, 'p1', { ...hit, target: mine }, { outOfTurn: true }) ?? '').not.toMatch(/immune/);
+  });
   it('rivals cannot use Magic Plots against you', () => {
     const s = scenario();
     const v = put(s, 'p1', 'voudonistas');

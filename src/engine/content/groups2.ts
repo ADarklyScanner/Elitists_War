@@ -544,7 +544,9 @@ registerHooks({
       const me = controllerOf2(s, self);
       if (!me || pl === me || !isMagicCard(s, card)) return null;
       const t = target ? s.cards[target] : undefined;
-      const mine = !!t && t.controller === me && (t.zone === 'structure' || t.zone === 'resources' || t.zone === 'table');
+      // Covers your hand, decks and discard pile too, like any whole-structure immunity.
+      const mine = !!t && ((t.controller === me && (t.zone === 'structure' || t.zone === 'resources' || t.zone === 'table'))
+        || (t.owner === me && (t.zone === 'hand' || t.zone === 'discard' || t.zone === 'plotDeck' || t.zone === 'groupDeck')));
       return mine || (ctx?.targetPlayer === me && ctx.attackerPlayer !== me) ? `${player(s, me).name} controls Stonehenge and is immune to Magic.` : null;
     },
     // Bonuses that rivals' Magic cards give to an attack on you are cancelled.
