@@ -684,10 +684,8 @@ describe('Whispering Campaign', () => {
     const s = play(s0, 'p1', { card: sn, target: tgt });
     expect(() => play(s, 'p1', { card: c, payWith: [media] })).toThrow();
   });
-  // Mismatch: the printed card says a Personality removed this way is out of public life for good
-  // and can never come back into play. The engine only destroys it like any other Group, so Media
-  // Blitz can still bring a duplicate of that Personality back into play afterwards.
-  it.fails('a Personality it removes can never be brought back into play', () => {
+  // A Personality removed this way is gone for good: no card may bring it back into play.
+  it('a Personality it removes can never be brought back into play', () => {
     const { s0, att, media, tgt, c } = setup('bill-clinton');
     let s = act(s0, 'p1', { type: 'attack', attackType: 'destroy', attacker: att, target: tgt, plots: [{ card: c, payWith: [media] }] });
     s = finish(s, [1, 1]);
@@ -746,9 +744,8 @@ describe('Hurricane', () => {
     expect(s.cards[place].zone).toBe('structure');
     expect(s.cards[place].devastated).toBe(true);
   });
-  // Mismatch (unless the parallel fix has landed): the printed card can strike only a Coastal Place,
-  // but the handler accepts any Place, such as the inland Pentagon.
-  it.fails('refuses a Place that is not Coastal', () => {
+  // It can strike only a Coastal Place, never an inland one such as the Pentagon.
+  it('refuses a Place that is not Coastal', () => {
     const s = scenario();
     const inland = under(s, 'p2', 'pentagon');
     const a = give(s, 'p1', 'hurricane', { hand: true });
@@ -782,9 +779,8 @@ describe('Tidal Wave', () => {
     expect(by10.cards[place].devastated).toBe(true);
     expect(hit([1, 1]).cards[place].zone).toBe('destroyed'); // 13 - 2 = 11: destroyed
   });
-  // Mismatch (unless the parallel fix has landed): the printed card can strike only a Coastal Place,
-  // but the handler accepts any Place.
-  it.fails('refuses a Place that is not Coastal', () => {
+  // It can strike only a Coastal Place.
+  it('refuses a Place that is not Coastal', () => {
     const s = scenario();
     const inland = under(s, 'p2', 'pentagon');
     const a = give(s, 'p1', 'tidal-wave', { hand: true });
