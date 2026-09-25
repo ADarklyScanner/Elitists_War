@@ -15,3 +15,25 @@ A digital version of the INWO card game, built from the rules and card database 
 npm test               # rules tests + 60 computer-vs-computer games
 node tools/build.mjs   # builds dist/elitists-war.html (one self-contained page)
 ```
+
+## Text alerts (optional)
+
+Players can opt in from the online lobby with a mobile number. A text goes out only when:
+
+- a game they joined starts (the last seat fills);
+- their turn begins;
+- one of their Groups is the target of an Attack to Destroy.
+
+Nobody gets more than one text every 5 minutes; the database function `ew_claim_sms` enforces this
+atomically. Texts that fall inside the cooldown are dropped, not queued. The player who just moved is never texted.
+
+Texting is off until the `ew-game` Edge Function has these secrets (Supabase dashboard → Edge Functions → Secrets):
+
+| Secret | Value |
+| --- | --- |
+| `TWILIO_ACCOUNT_SID` | Twilio Account SID (`AC…`) |
+| `TWILIO_AUTH_TOKEN` | Twilio auth token |
+| `TWILIO_FROM` | A Twilio number in `+1…` form, or a Messaging Service SID (`MG…`) |
+| `EW_SITE_URL` | optional; link put in each text (defaults to the GitHub Pages site) |
+
+US numbers need A2P 10DLC registration, or a verified toll-free number, before carriers deliver texts. Twilio handles STOP replies automatically.
