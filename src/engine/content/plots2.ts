@@ -12,7 +12,9 @@ import { nwoColor } from '../nwo';
 import {
   attackCancelled, destroyGroup, discardCard, drawPlot, giveToken, goalAlignWeight, goalCount, goalNeeded, isCancelled,
   livePlayers, log, player, startInstantAttack, tokenBarred,
+  disasterTarget,
 } from '../game';
+import { exposableHand } from '../game';
 
 // ---------------------------------------------------------------- helpers (copied from plots.ts)
 
@@ -285,7 +287,7 @@ registerPlots({
     timing: ['attack'],
     needs: { pay: 'tokens', mode: ['magic', 'deck'] },
     check(s, pl, play, ctx) {
-      if (!ctx?.disaster || def(s, ctx.target).subtype !== 'Place') return 'Play this when a Place is struck by a Disaster.';
+      if (!ctx?.disaster || !disasterTarget(s, ctx.target)) return 'Play this when a Place is struck by a Disaster.';
       if (ctx.instantCard && ['earthquake', 'volcano'].includes(s.cards[ctx.instantCard].cardId)) return 'Air Magic does not help against an Earthquake or a Volcano.';
       if (play.mode === 'deck') return player(s, pl).plotDeck.length ? null : 'Your Plot deck is empty.';
       const err = spend(s, pl, play.payWith);
@@ -448,8 +450,9 @@ function agentRival(s: GameState, play: PlotPlay): string | undefined {
   if (t.zone === 'hand') return s.players.find((p) => p.hand.includes(t.iid))?.id;
   return t.zone === 'structure' ? t.controller : undefined;
 }
+/** A player's hidden Plots that other cards can reach (not one hidden beneath Texas or Fidel Castro). */
 function hidden(s: GameState, pl: string): string[] {
-  return player(s, pl).hand.filter((iid) => def(s, iid).type === 'Plot' && !s.cards[iid].exposed);
+  return exposableHand(s, pl, 'Plot');
 }
 
 function undo(s: GameState, play: PlotPlay) {

@@ -16,11 +16,13 @@ import {
   discardCard, drawPlot, giveToken, isCancelled, isPrivileged, liveEffects, log, moveSubtree, player, playResourceCard,
   protectedPlayer, tokenBarred,
 } from '../game';
+import { canExpose, exposeCards } from '../game';
 
 // ---------------------------------------------------------------- helpers
 
 const ctrl = (s: GameState, self: string) => controllerOf2(s, self);
-const active = (s: GameState, self: string) => s.cards[self]?.zone === 'resources' && !!s.cards[self].controller;
+/** In play and face up (a Resource face down under Warehouse 23 does nothing). */
+const active = (s: GameState, self: string) => s.cards[self]?.zone === 'resources' && !!s.cards[self].controller && !s.cards[self].hiddenUnder;
 const inPlay = (s: GameState, iid?: string) => !!iid && s.cards[iid]?.zone === 'structure';
 const isGroup = (s: GameState, iid?: string) => !!iid && def(s, iid).type === 'Group';
 const own = (s: GameState, pl: string, iid?: string) => inPlay(s, iid) && s.cards[iid!].controller === pl;
@@ -346,7 +348,7 @@ const T: Record<string, CardHooks> = {
   // The note is kept on the card (secret in the UI).
   'ark-of-the-covenant': {
     actions: [{
-      id: 'name', label: 'Secretly name one of your Groups', timing: ['main'], usesToken: false, needs: { target: 'ownGroup' }, ai: 'never',
+      id: 'name', label: 'Secretly name one of your Groups', timing: ['main'], usesToken: false, secret: true, needs: { target: 'ownGroup' }, ai: 'never',
       check: (s, pl, _self, p) => (own(s, pl, p.target) && isGroup(s, p.target) ? null : 'Name a Group in your Power Structure.'),
       apply(s, _pl, self, p) { s.cards[self].note = p.target; },
     }],
@@ -518,7 +520,7 @@ const T: Record<string, CardHooks> = {
       if (ctx.attacker !== at || naturalRoll(ctx) < 11 || s.cards[at].tokens > 0) return;
       const pl = ctrl(s, self)!;
       log(s, 'Eliza crashes! It is discarded and all hidden Plots of its controller are revealed.', pl);
-      for (const i of player(s, pl).hand) if (def(s, i).type === 'Plot') s.cards[i].exposed = true;
+      exposeCards(s, player(s, pl).hand.filter((i) => def(s, i).type === 'Plot'));
       discardCard(s, self);
     },
   },
@@ -579,12 +581,11 @@ const T: Record<string, CardHooks> = {
     }],
   },
 
-  // Once destroyed, any player may bring in another Hidden City.
-  // PENDING: Disasters cannot strike Hidden City, so it never defends as a Power 10 Place that cannot be
-  // Devastated. The Disaster Plots only accept a Place Group in a Power Structure, and the attack code
-  // cannot take a Resource as its target.
+  // Every Disaster card can target it (it lacks the Huge and Coastal attributes). All defenses treat it
+  // as a Power 10 Place; it never becomes Devastated; after its destruction anyone may play another copy.
   'hidden-city': {
     replaceableWhenDestroyed: true,
+    disasterTargetPower: 10,
     powerMod: (s, self, iid) => (isOwnIlluminati(s, self, iid) ? 2 : 0),
     globalMod: (s, self, iid) => (isOwnIlluminati(s, self, iid) ? 2 : 0),
   },
@@ -801,16 +802,16 @@ const T: Record<string, CardHooks> = {
         check(s, _pl, self, p) {
           const debt = debts(s, self)[0];
           if (!debt) return 'Only after a rival captures or destroys one of your Groups.';
-          if (debt.kind === 'destroy' && p.target && !player(s, debt.rival).hand.includes(p.target)) return 'Choose a Plot in that rival\'s hand.';
+          if (debt.kind === 'destroy' && p.target && (!player(s, debt.rival).hand.includes(p.target) || !canExpose(s, p.target))) return 'Choose a Plot in that rival\'s hand that is not hidden beneath a card.';
           return null;
         },
         apply(s, _pl, self, p) {
           const [debt, ...rest] = debts(s, self);
           data(s, self).pending = rest;
           const rival = player(s, debt.rival);
-          for (const i of rival.hand) if (def(s, i).type === 'Plot') s.cards[i].exposed = true;
+          const shown = exposeCards(s, rival.hand.filter((i) => def(s, i).type === 'Plot'));
           if (debt.kind === 'destroy') {
-            const victim = p.target ?? rival.hand.find((i) => def(s, i).type === 'Plot');
+            const victim = p.target ?? shown[0];
             if (victim && def(s, victim).type === 'Plot') discardCard(s, victim);
           }
         },
@@ -818,11 +819,11 @@ const T: Record<string, CardHooks> = {
     ],
   },
 
-  // Once the Spear helps an attack, the attacking Groups (leader and helpers) count as Magic for the
-  // rest of that attack, so defenses against Magic apply.
-  // PENDING: a Disaster has no attacking Group, so a Disaster helped by the Spear is not Magic
-  // (the engine checks Magic defenses only against attacking Groups).
+  // Once the Spear helps an attack, that attack is Magic for the rest of it, so defenses against Magic
+  // apply: the attacking Groups (leader and helpers) count as Magic, and so does a Disaster, which has
+  // no attacking Group (magicAttack).
   'spear-of-longinus': {
+    magicAttack: (_s, self, ctx) => ctx.plays.some((p) => p.ability === self && !isCancelled(ctx.plays, p.iid)),
     attributeMod(s, self, iid, current) {
       const ctx = s.attack;
       if (!ctx || current.includes('Magic') || !active(s, self) || !attackingGroups(ctx).includes(iid)) return current;
@@ -877,7 +878,7 @@ const T: Record<string, CardHooks> = {
 
   'the-holy-grail': {
     actions: [{
-      id: 'name', label: 'Secretly name a Place (cannot be changed)', timing: ['main'], usesToken: false, needs: { target: 'place' }, ai: 'never',
+      id: 'name', label: 'Secretly name a Place (cannot be changed)', timing: ['main'], usesToken: false, secret: true, needs: { target: 'place' }, ai: 'never',
       check: (s, _pl, self, p) => (s.cards[self].note ? 'The Grail already protects a Place.' : inPlay(s, p.target) && place(s, p.target) ? null : 'Name a Place in play.'),
       apply(s, _pl, self, p) { s.cards[self].note = p.target; },
     }],
@@ -904,12 +905,44 @@ const T: Record<string, CardHooks> = {
       side === 'attack' && active(s, self) && ctx.type === 'control' && !ctx.instant && ctx.attackerPlayer === ctrl(s, self) && is(s, ctx.target, { attributes: ['Science', 'Magic', 'Computer'] }) ? 5 : 0,
   },
 
-  // PENDING: hiding new Resources face down under Warehouse 23 (inactive until exposed, unseen and
-  // untouchable by rivals, captured or destroyed with it). The engine has no zone for a card that is in
-  // play but face down, and the online view only hides decks and hands.
+  // New Resources may be played face down under it (the usual once-per-turn Resource play, paid with an
+  // Illuminati action). A face-down Resource does nothing and only its controller knows what it is
+  // (`hiddenUnder`; the online view hides it from rivals, and rivals' cards cannot target it). Its
+  // controller may turn one face up at any time, and may then use it at once; it stays face up. The
+  // engine moves hidden cards with Warehouse 23 when it is captured, destroyed or discarded.
   'warehouse-23': {
     onEnterPlay(s, self) { data(s, self).enteredTurn = s.turn; },
     actions: [{
+      id: 'hide', label: 'Play a Resource face down under Warehouse 23', timing: ['main'], usesToken: false, secret: true,
+      needs: { target: 'handCard' }, ai: 'never',
+      check(s, pl, self, p) {
+        if (!active(s, self)) return 'Warehouse 23 must be face up in play.';
+        const t = p.target;
+        if (!t || !player(s, pl).hand.includes(t) || def(s, t).type !== 'Resource') return 'Choose a Resource card in your hand.';
+        if (s.turnFlags.resourcePlayed) return 'You can only play one Resource this way per turn.';
+        if (!canEnterPlay(s, t, pl)) return 'That Resource is Unique and already in play or destroyed.';
+        if (s.cards[player(s, pl).illuminati].tokens < 1) return 'Your Illuminati needs an Action token.';
+        return null;
+      },
+      apply(s, pl, self, p) {
+        s.cards[player(s, pl).illuminati].tokens--;
+        s.turnFlags.resourcePlayed = true;
+        playResourceCard(s, p.target!, pl, { hiddenUnder: self });
+      },
+    }, {
+      id: 'reveal', label: 'Turn a Resource in Warehouse 23 face up', timing: ['main', 'anytime', 'attack', 'roll'], usesToken: false,
+      needs: { target: 'resource' }, ai: 'never',
+      check(s, pl, self, p) {
+        const t = p.target ? s.cards[p.target] : undefined;
+        return t && t.hiddenUnder === self && t.controller === pl ? null : 'Choose a Resource face down under your Warehouse 23.';
+      },
+      apply(s, pl, self, p) {
+        const t = p.target!;
+        s.cards[t].hiddenUnder = undefined;
+        log(s, `${player(s, pl).name} turns ${cardName(s, t)} face up from ${cardName(s, self)}.`, pl);
+        hooksOf(s, t)?.onEnterPlay?.(s, t);
+      },
+    }, {
       id: 'fetch', label: 'Bring in an Artifact or Gadget from your hand or deck', timing: ['main'], usesToken: false, needs: { target: 'resource' }, ai: 'never',
       check(s, pl, self, p) {
         const d = data(s, self);

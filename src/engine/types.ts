@@ -73,6 +73,7 @@ export interface CardInstance {
   abilityTurns?: Record<string, number>; // activated abilities: turn last used
   note?: string;           // secret note written under a card (Ark of the Covenant, Holy Grail)
   data?: Record<string, unknown>; // card-specific memory for scripted cards
+  hiddenUnder?: string;    // Resources: face down under this card (Warehouse 23): inactive, unseen by rivals
 }
 
 export interface PlayerState {

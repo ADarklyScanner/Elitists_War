@@ -12,6 +12,7 @@ import {
   activePlayer, askChoice, discardCard, livePlayers, log, placeGroup, player, protectedPlayer, revealTo,
   startAttack, validateAttack,
 } from '../game';
+import { exposableHand, exposeCards } from '../game';
 
 // ---------------------------------------------------------------- helpers (as in plots.ts)
 
@@ -584,15 +585,16 @@ function auditee(s: GameState, pl: string, play: PlotPlay): string | undefined {
   const r = t ? s.players.find((p) => p.illuminati === t && !p.eliminated) : undefined;
   return r && r.id !== pl ? r.id : undefined;
 }
-const hiddenPlots = (s: GameState, r: string) => player(s, r).hand.filter((c) => def(s, c).type === 'Plot' && !s.cards[c].exposed);
+/** Hidden Plots that other cards can reach (not one hidden beneath Texas or Fidel Castro). */
+const hiddenPlots = (s: GameState, r: string) => exposableHand(s, r, 'Plot');
 
 registerChoice('auditor-from-hell', {
   resolve(s, pl, picked, data) {
     const r = data.rival as string;
     const hidden = hiddenPlots(s, r);
     if (picked[0] === 'reveal') {
-      for (const c of hidden) s.cards[c].exposed = true;
-      log(s, `The audit exposes ${player(s, r).name}'s Plots: ${hidden.map((c) => cardName(s, c)).join(', ') || 'none'}.`, pl);
+      const shown = exposeCards(s, hidden);
+      log(s, `The audit exposes ${player(s, r).name}'s Plots: ${shown.map((c) => cardName(s, c)).join(', ') || 'none'}.`, pl);
       return;
     }
     const c = picked[0];

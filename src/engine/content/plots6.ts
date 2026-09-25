@@ -13,7 +13,9 @@ import { shuffle } from '../rng';
 import {
   activePlayer, askChoice, canAttackPlayer, controllerOf2, discardCard, drawGroup, drawPlot, isCancelled, isSecret, log,
   player, playResourceCard, protectedPlayer, startCardAttack, startInstantAttack,
+  disasterTarget,
 } from '../game';
+import { exposableHand, exposeCards } from '../game';
 
 // ---------------------------------------------------------------- helpers
 
@@ -80,8 +82,8 @@ function rivalOf(s: GameState, pl: string, target?: string): string | undefined 
   return who && who !== pl && !player(s, who).eliminated ? who : undefined;
 }
 
-/** A player's Plot cards in hand that are not exposed. */
-const hiddenPlots = (s: GameState, pl: string) => player(s, pl).hand.filter((c) => def(s, c).type === 'Plot' && !s.cards[c].exposed);
+/** A player's Plot cards in hand that are not exposed and that other cards can reach (not beneath Texas). */
+const hiddenPlots = (s: GameState, pl: string) => exposableHand(s, pl, 'Plot');
 
 /** Turn number of `pl`'s next turn, taking turns in seat order among players still in the game. */
 function nextTurnOf(s: GameState, pl: string): number {
@@ -118,7 +120,7 @@ function cardDisaster(powerOf: (s: GameState, place: string) => number, disaster
     needs: { target: 'place' },
     check(s, pl, play) {
       if (s.phase !== 'main' || activePlayer(s).id !== pl || s.window || s.attack) return 'Play this as an attack in your own turn.';
-      if (!inPlay(s, play.target) || def(s, play.target!).subtype !== 'Place') return 'Choose a Place in play.';
+      if (!disasterTarget(s, play.target)) return 'Choose a Place in play.';
       return canAttackPlayer(s, pl, s.cards[play.target!].controller);
     },
     apply(s, pl, play) {
@@ -329,7 +331,7 @@ registerPlots({
   'earth-magic': {
     timing: ['attack'],
     check(_s, _pl, _play, ctx) {
-      if (!ctx?.disaster || def(_s, ctx.target).subtype !== 'Place') return 'Play this while a Disaster strikes a Place.';
+      if (!ctx?.disaster || !disasterTarget(_s, ctx.target)) return 'Play this while a Disaster strikes a Place.';
       return null;
     },
     apply(s, pl, play, ctx) {
@@ -546,8 +548,8 @@ registerChoice('george-decide', {
     const card = data.picked as string;
     const list = picked[0] === 'picked' ? [card] : hiddenPlots(s, r).filter((c) => c !== card);
     const shown = list.filter((c) => player(s, r).hand.includes(c));
-    for (const c of shown) s.cards[c].exposed = true;
-    log(s, `${player(s, r).name} must show ${shown.map((c) => cardName(s, c)).join(', ') || 'nothing'}.`, pl);
+    const exposed = exposeCards(s, shown);
+    log(s, `${player(s, r).name} must show ${exposed.map((c) => cardName(s, c)).join(', ') || 'nothing'}.`, pl);
   },
   // The computer exposes the larger set.
   ai: (_s, _pl, options) => [options[1].label.endsWith('(0)') || options[1].label.endsWith('(1)') ? 'picked' : 'others'],

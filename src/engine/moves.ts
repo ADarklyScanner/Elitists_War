@@ -7,7 +7,7 @@ import { openArrows, structureCards } from './geometry';
 import { alignments, power } from './stats';
 import { PLOTS } from './plotTypes';
 import { HOOKS } from './hooks';
-import { checkAbility, resourcesOf } from './game';
+import { checkAbility, disasterTarget, resourcesOf } from './game';
 
 const ALIGNMENTS: Alignment[] = ['Government', 'Corporate', 'Liberal', 'Conservative', 'Peaceful', 'Violent', 'Straight', 'Weird', 'Criminal', 'Fanatic'];
 
@@ -87,6 +87,8 @@ export function targetPool(s: GameState, pl: string, kind: string, exclude?: str
   let out: string[];
   switch (kind) {
     case 'resource': out = cards.filter((c) => c.zone === 'resources').map((c) => c.iid); break;
+    // Disasters may also strike a Resource that defends as a Place (Hidden City).
+    case 'place': out = cards.filter((c) => (c.zone === 'structure' && def(s, c.iid).type === 'Group') || (c.zone === 'resources' && disasterTarget(s, c.iid))).map((c) => c.iid); break;
     case 'handCard': out = [...me.hand]; break;
     case 'handGroup': out = me.hand.filter((i) => def(s, i).type === 'Group'); break;
     case 'handPlot': out = me.hand.filter((i) => def(s, i).type === 'Plot'); break;

@@ -11,6 +11,7 @@ import {
   attackCancelled, canEnterPlay, cancelledGroups, controllerOf2, destroyGroup, discardCard, drawPlot, isPrivileged, log,
   placeGroup, player, revealTo,
 } from '../game';
+import { magicByCard } from '../hooks';
 
 /** Government Groups of the United States (Bill Clinton's +3; the data has no U.S. attribute). */
 const US_GOVERNMENT = [
@@ -283,6 +284,7 @@ function plotHider(opts: { name: string; swap: boolean; beyondLimit: boolean; go
       timing: ['main'],
       usesToken: false,
       needs: { target: 'handPlot' },
+      secret: true,
       ai: 'never',
       check(s, pl, self, p) {
         const c = p.target ? s.cards[p.target] : undefined;
@@ -425,7 +427,7 @@ registerHooks({
       const gone = cancelledGroups(ctx);
       const magicGroup = attackingGroups(ctx).some((g) => !gone.has(g) && hasAttr(s, g, 'Magic'));
       const magicCard = !!ctx.instantCard && MAGIC_DESTROYERS.includes(s.cards[ctx.instantCard]?.cardId);
-      return !(magicGroup || magicCard);
+      return !(magicGroup || magicCard || magicByCard(s, ctx));
     },
     // Magic Artifacts linked to him cannot be taken or lost while he lives.
     protectResource: (s, self, r) => s.cards[r].linkedTo === self && resourceKinds(s, r).includes('Magic') && resourceKinds(s, r).includes('Artifact'),

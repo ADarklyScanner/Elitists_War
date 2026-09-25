@@ -10,6 +10,8 @@ import {
   askChoice, attackCancelled, canAid, canOppose, cancelledGroups, controllerOf2, discardCard, drawGroup, drawPlot, isCancelled,
   isPrivileged, livePlayers, log, moveSubtree, player, protectedPlayer, raiseEvent, revealTo, tokenBarred,
 } from '../game';
+import { exposableHand, exposeCards } from '../game';
+import { magicByCard } from '../hooks';
 
 registerAbilities({
   'madison-avenue': [
@@ -189,7 +191,7 @@ function pickRandom<T>(s: GameState, list: T[], n: number): T[] {
 
 /** "As an action, expose two random hidden [Plot|Group] cards of a rival". */
 function exposeTwo(kind: 'Plot' | 'Group'): ActivatedAbility {
-  const hidden = (s: GameState, rival: string) => player(s, rival).hand.filter((c) => def(s, c).type === kind && !s.cards[c].exposed);
+  const hidden = (s: GameState, rival: string) => exposableHand(s, rival, kind);
   return {
     id: 'expose', label: `Expose two random hidden ${kind} cards of a rival`, timing: ['anytime'], usesToken: true, ai: 'never',
     check(s, pl, _self, p) {
@@ -199,8 +201,7 @@ function exposeTwo(kind: 'Plot' | 'Group'): ActivatedAbility {
     },
     apply(s, pl, _self, p) {
       const rival = rivalFor(s, pl, p)!;
-      const shown = pickRandom(s, hidden(s, rival), 2);
-      for (const c of shown) s.cards[c].exposed = true;
+      const shown = exposeCards(s, pickRandom(s, hidden(s, rival), 2));
       log(s, `${player(s, rival).name} must expose ${shown.map((c) => cardName(s, c)).join(' and ')}.`, pl);
     },
   };
@@ -208,7 +209,7 @@ function exposeTwo(kind: 'Plot' | 'Group'): ActivatedAbility {
 
 /** "On your turn, freely look at two random hidden [Plot|Group] cards of a rival" (only you see them). */
 function inspectTwo(kind: 'Plot' | 'Group'): ActivatedAbility {
-  const hidden = (s: GameState, rival: string) => player(s, rival).hand.filter((c) => def(s, c).type === kind && !s.cards[c].exposed);
+  const hidden = (s: GameState, rival: string) => exposableHand(s, rival, kind);
   return {
     id: 'inspect', label: `Look at two random hidden ${kind} cards of a rival`, timing: ['main'], usesToken: false, oncePerTurn: true, ai: 'never',
     needs: { target: 'rival' },
@@ -725,7 +726,7 @@ const MAGIC_PLOTS = ['withering-curse', 'plague-of-demons'];
 function magicAttack(s: GameState, ctx?: AttackCtx): boolean {
   if (!ctx) return false;
   const gone = cancelledGroups(ctx);
-  if (attackingGroups(ctx).some((g) => !gone.has(g) && hasAttr(s, g, 'Magic'))) return true;
+  if (attackingGroups(ctx).some((g) => !gone.has(g) && hasAttr(s, g, 'Magic')) || magicByCard(s, ctx)) return true;
   return !!ctx.instantCard && MAGIC_PLOTS.includes(s.cards[ctx.instantCard]?.cardId);
 }
 

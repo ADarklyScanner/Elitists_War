@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { MemoryStore } from '../src/server/memoryStore';
 import { joinTable, newTable, setOrders, submit, tick, viewFor } from '../src/server/service';
-import { waitingFor } from '../src/engine';
+import { applyAction, openArrows, waitingFor, type Action, type GameState } from '../src/engine';
+import { give, scenario } from './helpers';
 
 describe('online play service', () => {
   it('starts a game once a friend joins with the invite code, and hides each hand from the other player', async () => {
@@ -83,5 +84,62 @@ describe('deleting and leaving games', () => {
     await expect(deleteOrLeave(store, t.id, 'cat')).rejects.toThrow(/created this game/);
     expect(await deleteOrLeave(store, t.id, 'ann')).toBe('deleted');
     expect(await store.get(t.id)).toBeUndefined();
+  });
+});
+
+describe('viewFor keeps hidden cards hidden', () => {
+  const act = (s: GameState, pl: string, a: Action) => applyAction(s, pl, a);
+  const use = (s: GameState, pl: string, card: string, ability: string, params: Record<string, unknown> = {}) =>
+    act(s, pl, { type: 'useAbility', card, ability, params });
+  const illOf = (s: GameState, pl: string) => s.players.find((p) => p.id === pl)!.illuminati;
+  const put = (s: GameState, pl: string, cardId: string) => give(s, pl, cardId, { under: illOf(s, pl), side: openArrows(s, illOf(s, pl))[0] });
+  const text = (v: GameState) => JSON.stringify(v.log);
+
+  it('a Plot hidden beneath Texas is a card back to rivals, even if marked exposed or seen before', () => {
+    let s = scenario();
+    const tx = put(s, 'p2', 'texas');
+    const x = give(s, 'p2', 'volcano', { hand: true });
+    s.active = 1;
+    s = use(s, 'p2', tx, 'hide', { target: x });
+    s.active = 0;
+    s.cards[x].exposed = true;
+    s.players[0].known = [x];
+    const rival = viewFor(s, 'p1');
+    expect(rival.cards[x].cardId).toBe('hidden-plot');
+    expect(text(rival)).not.toMatch(/Volcano/);
+    expect(viewFor(s, 'p2').cards[x].cardId).toBe('volcano');
+  });
+
+  it('a Resource face down under Warehouse 23 is a card back to rivals only', () => {
+    let s = scenario();
+    const wh = give(s, 'p1', 'warehouse-23', { resource: true });
+    const hc = give(s, 'p1', 'hidden-city', { hand: true });
+    s = use(s, 'p1', wh, 'hide', { target: hc });
+    const rival = viewFor(s, 'p2');
+    expect(rival.cards[hc]).toMatchObject({ cardId: 'hidden-resource', zone: 'resources', controller: 'p1', hiddenUnder: wh });
+    expect(text(rival)).not.toMatch(/Hidden City/);
+    const mine = viewFor(s, 'p1');
+    expect(mine.cards[hc].cardId).toBe('hidden-city');
+    expect(text(mine)).toMatch(/Hidden City/);
+    // Once turned face up, everyone sees it.
+    s = use(s, 'p1', wh, 'reveal', { target: hc });
+    expect(viewFor(s, 'p2').cards[hc].cardId).toBe('hidden-city');
+  });
+
+  it('the Place named by the Holy Grail stays secret from rivals, in the log and on the card', () => {
+    let s = scenario();
+    const r = give(s, 'p1', 'the-holy-grail', { resource: true });
+    const hawaii = put(s, 'p2', 'hawaii');
+    s = use(s, 'p1', r, 'name', { target: hawaii });
+    const rival = viewFor(s, 'p2');
+    expect(rival.cards[r].note).toBe('(secret)');
+    expect(text(rival)).not.toMatch(/Hawaii/);
+    const mine = viewFor(s, 'p1');
+    expect(mine.cards[r].note).toBe(hawaii);
+    expect(text(mine)).toMatch(/Hawaii/);
+    // Still secret after the Grail leaves play.
+    Object.assign(s.cards[r], { zone: 'discard', controller: undefined });
+    expect(viewFor(s, 'p2').cards[r].note).toBe('(secret)');
+    expect(viewFor(s, 'p1').cards[r].note).toBe(hawaii);
   });
 });
