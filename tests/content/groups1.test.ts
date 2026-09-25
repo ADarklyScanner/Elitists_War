@@ -2,8 +2,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   alignments, applyAction, attackStrength, canAid, canOppose, checkPlot, createGame, currentOutcome, drawPlot, globalPower, isPrivileged,
-  power, resistance, startInstantAttack, tokenBarred, waitingFor, HOOKS, CARDS, type Action, type GameState,
+  power, resistance, startInstantAttack, tokenBarred, waitingFor, GOALS, GROUP_ABILITIES, HOOKS, CARDS, type Action, type GameState,
 } from '../../src/engine';
+import { goalAlignWeight, player as playerOf } from '../../src/engine/game';
 import { randomDeck } from '../../src/engine/decks';
 import { roll2d6 } from '../../src/engine/rng';
 import { give, scenario } from '../helpers';
@@ -990,5 +991,122 @@ describe('Vampires', () => {
     const b = setup('ninjas');
     expect(b.s.cards[b.bjorne].zone).toBe('destroyed');
     expect(b.s.cards[b.bjorne].data?.removedFromGame).toBe(true);
+  });
+});
+
+/** Sum of the attack lines with this exact label (e.g. 'alignments'). */
+const labelled = (s: GameState, label: string) => attackStrength(s, s.attack!).lines
+  .filter((l) => l.startsWith('Attack') && l.endsWith(`: ${label}`))
+  .reduce((n, l) => n + Number(l.match(/[+-]\d+/)![0]), 0);
+const control = (s: GameState, attacker: string, target: string) => act(s, 'p1', { type: 'attack', attackType: 'control', attacker, target });
+const destroy = (s: GameState, attacker: string, target: string) => act(s, 'p1', { type: 'attack', attackType: 'destroy', attacker, target });
+
+describe('Secret Service: any attempt to destroy a Government Personality', () => {
+  it('gives +10 even when another of your Groups makes the attack', () => {
+    const s = scenario();
+    under(s, 'p1', 'secret-service');
+    const mafia = under(s, 'p1', 'the-mafia', 'RIGHT');
+    expect(mod(destroy(s, mafia, under(s, 'p2', 'bill-clinton')), 'Attack', 'secret-service')).toBe(10);
+  });
+  it('a Government Organization gets no bonus, only the usual -4 for the shared alignment', () => {
+    const s = scenario();
+    const ss = under(s, 'p1', 'secret-service');
+    const next = destroy(s, ss, under(s, 'p2', 'fbi'));
+    expect(mod(next, 'Attack', 'secret-service')).toBe(0);
+    expect(labelled(next, 'alignments')).toBe(-4);
+  });
+});
+
+describe('S.M.O.F.: control bonuses', () => {
+  it('+2 to any attempt to control a Weird Group, even when it does not attack', () => {
+    const s = scenario();
+    under(s, 'p1', 's-m-o-f');
+    const mafia = under(s, 'p1', 'the-mafia', 'RIGHT');
+    expect(mod(control(s, mafia, under(s, 'p2', 'trekkies')), 'Attack', 's-m-o-f')).toBe(2);
+  });
+  it('+6 in all when it takes over one of the named fandoms itself', () => {
+    for (const id of ['science-fiction-fans', 'trekkies', 'wargamers', 'comic-books', 'trading-card-games']) {
+      const s = scenario();
+      const smof = under(s, 'p1', 's-m-o-f');
+      expect(mod(control(s, smof, under(s, 'p2', id)), 'Attack', 's-m-o-f'), id).toBe(6);
+    }
+  });
+  it('other Weird Groups get only the +2, and non-Weird Groups nothing', () => {
+    const s = scenario();
+    const smof = under(s, 'p1', 's-m-o-f');
+    expect(mod(control(s, smof, under(s, 'p2', 'punk-rockers')), 'Attack', 's-m-o-f')).toBe(2);
+    const s2 = scenario();
+    const smof2 = under(s2, 'p1', 's-m-o-f');
+    expect(mod(control(s2, smof2, under(s2, 'p2', 'loan-sharks')), 'Attack', 's-m-o-f')).toBe(0);
+  });
+});
+
+describe('Tabloids: Convenience Stores', () => {
+  it('has a +3 takeover bonus against Convenience Stores, a card missing from this set', () => {
+    expect(GROUP_ABILITIES['tabloids']).toContainEqual(
+      { kind: 'attackBonus', on: 'control', target: { names: ['convenience-stores'] }, value: 3, scope: 'any' });
+    expect(CARDS['convenience-stores']).toBeUndefined();
+    expect(GROUP_ABILITIES['tabloids'].some((a) => a.kind === 'pending')).toBe(false);
+  });
+  it('gives nothing against other Groups', () => {
+    const s = scenario();
+    const tab = under(s, 'p1', 'tabloids');
+    expect(mod(control(s, tab, under(s, 'p2', 'punk-rockers')), 'Attack', 'tabloids')).toBe(0);
+  });
+});
+
+describe('Telephone Psychics', () => {
+  it('+6 to take over the Reagans, the Tabloids or a Media Group of Power 1 or 2', () => {
+    for (const id of ['ronald-reagan', 'nancy-reagan', 'tabloids', 'punk-rockers', 'girlie-magazines']) {
+      const s = scenario();
+      const tp = under(s, 'p1', 'telephone-psychics');
+      expect(mod(control(s, tp, under(s, 'p2', id)), 'Attack', 'telephone-psychics'), id).toBe(6);
+    }
+  });
+  it('not against stronger Media Groups, nor when it does not lead a takeover', () => {
+    const s = scenario();
+    const tp = under(s, 'p1', 'telephone-psychics');
+    expect(mod(control(s, tp, under(s, 'p2', 'big-media')), 'Attack', 'telephone-psychics')).toBe(0);
+    const s2 = scenario();
+    const tp2 = under(s2, 'p1', 'telephone-psychics');
+    const punks = under(s2, 'p2', 'punk-rockers');
+    s2.cards[punks].mods.push({ source: 'test', kind: 'power', value: 2, until: 'permanent' });
+    expect(mod(control(s2, tp2, punks), 'Attack', 'telephone-psychics')).toBe(0);
+    const s3 = scenario();
+    under(s3, 'p1', 'telephone-psychics');
+    const mafia = under(s3, 'p1', 'the-mafia', 'RIGHT');
+    expect(mod(control(s3, mafia, under(s3, 'p2', 'punk-rockers')), 'Attack', 'telephone-psychics')).toBe(0);
+    const s4 = scenario();
+    const tp4 = under(s4, 'p1', 'telephone-psychics');
+    expect(mod(destroy(s4, tp4, under(s4, 'p2', 'punk-rockers')), 'Attack', 'telephone-psychics')).toBe(0);
+  });
+});
+
+describe('Triliberal Commission', () => {
+  function withDestroyed(ids: string[]) {
+    const s = scenario();
+    for (const id of ids) {
+      const g = give(s, 'p2', id, { hand: true });
+      hand(s, 'p2').splice(hand(s, 'p2').indexOf(g), 1);
+      s.cards[g].zone = 'destroyed';
+      playerOf(s, 'p1').destroyedCredit.push(g);
+    }
+    return s;
+  }
+  const CONSERVATIVE = ['kkk', 'gun-lobby', 'moral-minority', 'congressional-wives', 'nephews-of-god'];
+  it('counts as two Liberal Groups for a Goal card', () => {
+    const s = withDestroyed(CONSERVATIVE);
+    under(s, 'p1', 'triliberal-commission');
+    under(s, 'p1', 'feminists', 'RIGHT');
+    expect(GOALS['power-to-the-people'](s, 'p1')).toMatch(/3 Liberal/);
+  });
+  it('ordinary Liberal Groups count once, and it counts once for anything but Liberal', () => {
+    const s = withDestroyed(CONSERVATIVE);
+    under(s, 'p1', 'democrats');
+    under(s, 'p1', 'feminists', 'RIGHT');
+    expect(GOALS['power-to-the-people'](s, 'p1')).toBeNull();
+    const tri = under(s, 'p1', 'triliberal-commission', 'LEFT');
+    expect(goalAlignWeight(s, tri, 'Straight')).toBe(1);
+    expect(goalAlignWeight(s, tri, 'Liberal')).toBe(2);
   });
 });

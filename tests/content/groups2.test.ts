@@ -5,7 +5,7 @@ import {
   finalRoll, globalPower, handLimit, HOOKS, isPrivileged, openArrows, power, resistance, waitingFor, CARDS, type Action,
   type AttackCtx, type GameState,
 } from '../../src/engine';
-import { rollDie } from '../../src/engine/rng';
+import { roll2d6, rollDie } from '../../src/engine/rng';
 import { give, scenario } from '../helpers';
 
 const act = (s: GameState, pl: string, a: Action) => applyAction(s, pl, a);
@@ -974,5 +974,60 @@ describe('The Great Pyramid: rivals show you their first Plot draw', () => {
     s.turn++;
     const [next] = drawPlot(s, p2, 1);
     expect(p1.known).toContain(next);
+  });
+});
+
+describe('Las Vegas', () => {
+  /** p1 controls Las Vegas; the next 2d6 roll is one that `want` accepts. */
+  function withRoll(want: (n: number) => boolean) {
+    const s = scenario();
+    const lv = put(s, 'p1', 'las-vegas');
+    for (let r = 1; r < 5000; r++) {
+      s.rng = r;
+      const [a, b] = roll2d6(structuredClone(s));
+      if (want(a + b)) return { s, lv, n: a + b };
+    }
+    throw new Error('no seed');
+  }
+  const deck = (s: GameState, pl: string) => s.players.find((p) => p.id === pl)!.plotDeck;
+
+  it('on 7 or more the house wins and takes the bet off the top of the rival\'s Plot deck', () => {
+    const { s, lv, n } = withRoll((x) => x >= 7);
+    const top = deck(s, 'p2').slice(0, 3);
+    const mine = deck(s, 'p1').length;
+    const next = use(s, 'p1', lv, 'bet', { target: ill(s, 'p2'), mode: '3' });
+    expect(hand(next, 'p1')).toEqual(top);
+    expect(next.cards[top[0]].zone).toBe('hand');
+    expect(deck(next, 'p1').length).toBe(mine);
+    expect(hand(next, 'p2')).toEqual([]);
+    expect(next.cards[lv].tokens).toBe(0);
+    expect(next.log.some((l) => l.text.includes(`= ${n}.`))).toBe(true);
+  });
+  it('on 6 or less the rival wins and takes the bet off the top of your Plot deck', () => {
+    const { s, lv, n } = withRoll((x) => x <= 6);
+    const top = deck(s, 'p1').slice(0, 2);
+    const next = use(s, 'p1', lv, 'bet', { target: ill(s, 'p2'), mode: '2' });
+    expect(hand(next, 'p2')).toEqual(top);
+    expect(hand(next, 'p1')).toEqual([]);
+    expect(next.log.some((l) => l.text.includes(`= ${n}.`))).toBe(true);
+  });
+  it('a short deck gives only what it has', () => {
+    const { s, lv } = withRoll((x) => x >= 7);
+    const p2 = s.players.find((p) => p.id === 'p2')!;
+    p2.plotDeck = p2.plotDeck.slice(0, 1);
+    const next = use(s, 'p1', lv, 'bet', { target: ill(s, 'p2'), mode: '3' });
+    expect(hand(next, 'p1').length).toBe(1);
+  });
+  it('the bet is 1 to 3 Plots with a rival, and needs Las Vegas\' action', () => {
+    const { s, lv } = withRoll(() => true);
+    expect(() => use(s, 'p1', lv, 'bet', { target: ill(s, 'p2'), mode: '4' })).toThrow(/1, 2 or 3/);
+    expect(() => use(s, 'p1', lv, 'bet', { target: ill(s, 'p1'), mode: '1' })).toThrow(/rival/);
+    s.cards[lv].tokens = 0;
+    expect(() => use(s, 'p1', lv, 'bet', { target: ill(s, 'p2'), mode: '1' })).toThrow();
+  });
+  it('not against a player who has not finished a first turn', () => {
+    const { s, lv } = withRoll(() => true);
+    s.players[1].turnsTaken = 0;
+    expect(() => use(s, 'p1', lv, 'bet', { target: ill(s, 'p2'), mode: '1' })).toThrow(/first turn/);
   });
 });

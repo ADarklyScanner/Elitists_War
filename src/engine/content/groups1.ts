@@ -88,16 +88,20 @@ registerAbilities({
     { kind: 'attackBonus', on: 'control', target: { alignments: ['Weird'] }, value: 2, scope: 'direct' },
   ],
   'secret-service': [
-    { kind: 'attackBonus', on: 'destroy', target: { alignments: ['Government'], subtypes: ['Personality'] }, value: 10, scope: 'direct' },
-    { kind: 'pending', note: 'Direct-destruction modifier vs other Government groups (value missing from card data); +10 on Assassinations is encoded' },
+    // +10 whenever any of your attacks tries to destroy a Government Personality (Assassinations: see the hook).
+    // Its -4 when it directly attacks to destroy another Government Group is just the usual penalty for a
+    // shared alignment, which attackStrength already applies.
+    { kind: 'attackBonus', on: 'destroy', target: { alignments: ['Government'], subtypes: ['Personality'] }, value: 10, scope: 'any' },
   ],
   'secular-humanists': [],
   'semiconscious-liberation-army': [
     { kind: 'attackBonus', on: 'destroy', value: 3, scope: 'any' },
   ],
   's-m-o-f': [
-    { kind: 'attackBonus', on: 'control', target: { alignments: ['Weird'] }, value: 2, scope: 'direct' },
-    { kind: 'pending', note: 'Additional +4 direct vs specified fandom groups (list missing from card data); removing a rival Weird token is encoded' },
+    { kind: 'attackBonus', on: 'control', target: { alignments: ['Weird'] }, value: 2, scope: 'any' },
+    // A further +4 when it leads the takeover of one of these fandoms (all Weird). The leader gets the larger
+    // of its direct and "any attempt" totals, so the direct entry carries both: 2 + 4.
+    { kind: 'attackBonus', on: 'control', target: { names: ['science-fiction-fans', 'trekkies', 'wargamers', 'comic-books', 'trading-card-games'] }, value: 6, scope: 'direct' },
   ],
   'society-for-creative-anarchism': [
     { kind: 'attackBonus', on: 'destroy', target: { alignments: ['Straight'] }, value: 4, scope: 'direct' },
@@ -113,12 +117,11 @@ registerAbilities({
   ],
   'survivalists': [],
   'tabloids': [
-    { kind: 'pending', note: '+3 involving Convenience Stores (that card and the exact bonus are missing from the card data); attacking Secret Groups is encoded' },
+    // +3 on any attempt to take over Convenience Stores, a card outside this set: it never matches here.
+    { kind: 'attackBonus', on: 'control', target: { names: ['convenience-stores'] }, value: 3, scope: 'any' },
   ],
-  'telephone-psychics': [
-    { kind: 'attackBonus', on: 'control', target: { names: ['ronald-reagan', 'nancy-reagan', 'tabloids'] }, value: 6, scope: 'direct' },
-    { kind: 'pending', note: '+6 direct control also vs qualifying low-Power Media groups (Power threshold missing from card data)' },
-  ],
+  // Telephone Psychics' +6 is scripted below (it depends on the target's current Power).
+  'telephone-psychics': [],
   'templars': [],
   'the-mafia': [
     { kind: 'attackBonus', on: 'destroy', target: { alignments: ['Criminal'] }, value: 4, scope: 'direct', replacesAlignmentPenalty: true },
@@ -133,9 +136,8 @@ registerAbilities({
   'trekkies': [
     { kind: 'attackBonus', on: 'control', target: { attributes: ['Media'] }, value: 4, scope: 'direct' },
   ],
-  'triliberal-commission': [
-    { kind: 'pending', note: 'Counts double as Liberal for Goal cards only: Goal conditions count matching Groups one each, and no hook lets one Group count twice for an alignment' },
-  ],
+  // Counts as two Liberal Groups for Goal cards (not the Basic Goal): scripted below.
+  'triliberal-commission': [],
   'tv-preachers': [
     { kind: 'attackBonus', on: 'control', target: { allAlignments: ['Straight', 'Fanatic'] }, value: 6, scope: 'direct', replacesAlignmentPenalty: true },
   ],
@@ -903,6 +905,22 @@ registerHooks({
       return ctx.attacker === self && !ctx.instant && secret === ctx.target && !attackCancelled(ctx);
     },
     mayJoin: (s, self, ctx) => ctx.attacker === self && !ctx.instant && hasAttr(s, ctx.target, 'Secret'),
+  },
+
+  'telephone-psychics': {
+    // Leading a takeover of either Reagan, the Tabloids or a weak (Power 1-2) Media Group: +6.
+    attackMod(s, self, ctx, side) {
+      if (side !== 'attack' || ctx.type !== 'control' || !leads(ctx, self) || cancelledGroups(ctx).has(self)) return 0;
+      const t = ctx.target;
+      if (['ronald-reagan', 'nancy-reagan', 'tabloids'].includes(s.cards[t].cardId)) return 6;
+      const p = power(s, t);
+      return isGroup(s, t) && hasAttr(s, t, 'Media') && p >= 1 && p <= 2 ? 6 : 0;
+    },
+  },
+
+  'triliberal-commission': {
+    // Goal cards count it as two Liberal Groups, whether it is controlled or destroyed.
+    goalAlignWeight: (_s, _iid, alignment) => (alignment === 'Liberal' ? 2 : 1),
   },
 
   'vampires': {

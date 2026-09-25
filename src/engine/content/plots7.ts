@@ -137,7 +137,7 @@ registerPlots({
     },
   },
 
-  // 'i-lied' is not encoded: this version has no sales, trades or deals between players.
+  // 'i-lied' is not encoded: it only answers a sale or trade agreed between players (letting you back out of your side), and this version has no deals between players.
 
   // One of your Groups with fewer than 3 outgoing arrows gains one more (mode = the side as seen on the table).
   'let-s-get-organized': {

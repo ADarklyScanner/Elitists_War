@@ -1,15 +1,15 @@
 import type { Alignment, AttackCtx, GameState } from '../types';
 import { attackingGroups, abilitiesOf, matches, registerAbilities } from '../abilities';
 import { type ActivatedAbility, type CardHooks, HOOKS, activeHookCards, hooksOf, registerHooks } from '../hooks';
-import { def } from '../cards';
+import { cardName, def } from '../cards';
 import { alignments, attributes, countControlled, globalPower, isOpposite, power } from '../stats';
 import { NWO_EFFECTS } from '../nwo';
 import { puppets, sideOf, structureCards } from '../geometry';
 import { resourceKinds } from './plots3';
-import { rollDie } from '../rng';
+import { roll2d6, rollDie } from '../rng';
 import {
   attackCancelled, canEnterPlay, cancelledGroups, controllerOf2, destroyGroup, discardCard, drawPlot, isPrivileged, log,
-  placeGroup, player, revealTo,
+  livePlayers, placeGroup, player, protectedPlayer, revealTo,
 } from '../game';
 
 /** Government Groups of the United States (Bill Clinton's +3; the data has no U.S. attribute). */
@@ -109,9 +109,8 @@ registerAbilities({
   'japan': [
     { kind: 'attackBonus', on: 'control', target: { attributes: ['Science', 'Computer'] }, value: 6, scope: 'direct' },
   ],
-  'las-vegas': [
-    { kind: 'pending', note: 'Action: wager 1-3 Plots against a rival in a 2d6 gamble. The card data does not give the dice results or which cards change hands, so the gamble cannot be played yet' },
-  ],
+  // Las Vegas' wager is scripted below.
+  'las-vegas': [],
   'moonbase': [
     { kind: 'attackBonus', on: 'both', target: { attributes: ['Space'] }, value: 4, scope: 'direct' },
   ],
@@ -149,6 +148,15 @@ const hasAlign = (s: GameState, iid: string, a: Alignment) => alignments(s, iid)
 /** Another Group in play controlled by the same player as `self`. */
 const ownGroup = (s: GameState, self: string, iid: string) =>
   inStructure(s, iid) && isGroup(s, iid) && s.cards[iid].controller === controllerOf2(s, self);
+/** The rival Las Vegas gambles with: the target names him (his Illuminati or any of his cards), or the only rival. */
+function vegasRival(s: GameState, pl: string, p: { target?: string }): string | undefined {
+  const rivals = livePlayers(s).map((x) => x.id).filter((id) => id !== pl);
+  const c = p.target ? s.cards[p.target] : undefined;
+  const who = c ? c.controller ?? c.owner : undefined;
+  if (who && rivals.includes(who)) return who;
+  return !p.target && rivals.length === 1 ? rivals[0] : undefined;
+}
+
 /** Groups spending an action in this attack (leader, aiders, opposers), minus cancelled ones. */
 function actingGroups(ctx: AttackCtx): string[] {
   const gone = cancelledGroups(ctx);
@@ -688,6 +696,39 @@ registerHooks({
       apply(s, pl, self, p, ctx) {
         (p.mode === 'aid' ? ctx!.attackBonus : ctx!.defenseBonus).push({ player: pl, plot: abilityEntry(s, self, 'interfere'), forGroup: self, amount: power(s, self), label: 'Israel interferes' });
         return isPrivileged(ctx!) ? { t: 'unprivilege' } : undefined;
+      },
+    }],
+  },
+
+  'las-vegas': {
+    // The house game: wager 1-3 Plots with a rival (target = the rival's Illuminati, mode = how many).
+    // 2d6: 7 or more and the house wins, taking that many cards off the top of the rival's Plot deck;
+    // 6 or less and the rival takes them off the top of yours. A short deck gives what it has.
+    actions: [{
+      id: 'bet', label: 'Gamble 1 to 3 Plot cards with a rival on a roll of two dice', timing: ['anytime'], usesToken: true, ai: 'never',
+      needs: { target: 'rival', modes: ['1', '2', '3'] },
+      check(s, pl, _self, p) {
+        const r = vegasRival(s, pl, p);
+        if (!r) return 'Choose the rival to gamble with.';
+        if (protectedPlayer(s, pl, r)) return 'That player has not finished a first turn yet.';
+        if (!['1', '2', '3'].includes(p.mode ?? '')) return 'Choose how many Plot cards to bet: 1, 2 or 3.';
+        return null;
+      },
+      apply(s, pl, self, p) {
+        const r = vegasRival(s, pl, p)!;
+        const n = Number(p.mode);
+        const dice = roll2d6(s);
+        const total = dice[0] + dice[1];
+        const [winner, loser] = total >= 7 ? [pl, r] : [r, pl];
+        const from = player(s, loser).plotDeck;
+        let got = 0;
+        for (; got < n && from.length; got++) {
+          const c = from.shift()!;
+          Object.assign(s.cards[c], { zone: 'hand', exposed: false });
+          player(s, winner).hand.push(c);
+        }
+        log(s, `${cardName(s, self)}: ${player(s, pl).name} bets ${n} Plot card${n === 1 ? '' : 's'} with ${player(s, r).name} and rolls ${dice[0]}+${dice[1]} = ${total}. `
+          + `${total >= 7 ? 'The house wins' : `${player(s, r).name} beats the house`}: ${player(s, winner).name} takes ${got} from the top of ${player(s, loser).name}'s Plot deck.`, pl);
       },
     }],
   },
