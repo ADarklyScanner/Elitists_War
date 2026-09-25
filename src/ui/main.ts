@@ -1399,7 +1399,7 @@ function renderStart() {
   app.querySelector<HTMLElement>('[data-act="start"]')!.onclick = () => newGame(pick, (ui as Ui & { quick?: boolean }).quick ?? false);
   app.querySelectorAll<HTMLElement>('[data-load]').forEach((b) => b.onclick = () => {
     const sv = loadSaves()[b.dataset.load!];
-    if (sv) { ui.game = sv.state; ui.sel = { kind: 'none' }; ui.inspect = undefined; render(); schedule(); }
+    if (sv) { ui.game = sv.state; ui.sel = { kind: 'none' }; ui.inspect = undefined; foldFinished(sv.state); render(); schedule(); }
   });
   app.querySelectorAll<HTMLElement>('[data-del]').forEach((b) => b.onclick = () => { deleteSave(b.dataset.del!); renderStart(); });
 }
