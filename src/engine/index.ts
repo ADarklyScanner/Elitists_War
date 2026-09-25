@@ -22,4 +22,5 @@ export { PLOTS, GOALS, registerGoals, registerPlots } from './plotTypes';
 export * from './hooks';
 export { NWO_EFFECTS } from './nwo';
 export * from './moves';
+export * from './deals';
 export { randomDeck, ILLUMINATI, PLAYABLE_PLOTS } from './decks';

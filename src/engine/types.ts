@@ -248,6 +248,7 @@ export interface GameState {
     freeMovesOnce?: boolean;    // the free moves are one reorganization: they end at the player's next other step (Elders of Zion)
     noDraws?: boolean;          // skip this turn's normal draws (An Offer You Can't Refuse)
     redoTakeover?: boolean;     // the automatic takeover was undone: offer it again (Botched Contact)
+    dealOffers?: string[];      // players who made a deal offer this turn (computer players make one at most)
   };
   events?: GameEvent[];       // queued events waiting for their response window
   continuation?: string;      // what to do when the current event window closes
@@ -263,8 +264,51 @@ export interface GameState {
   log: LogEntry[];
   winners?: string[];
   setup?: { picks: Record<string, string | undefined>; banned: string[]; setAside: string[] };
+  /** Deal offers waiting for an answer (R040, R022). Each is seen only by its two players. */
+  deals?: Deal[];
+  /** Agreed deals whose I Lied is still waiting to resolve: the liar's side is held back until then. */
+  dealWaits?: DealWait[];
+  dealCounter?: number;
   /** How each person has played this game so far (counters kept by src/ai/profile.ts; people only). */
   habits?: Record<string, Record<string, unknown>>;
+}
+
+// ---------------- Deals, trades and gifts (R040, R022, R038) ----------------
+
+/** A Group in play changing hands, with its puppets, onto an open arrow of the receiver's structure. */
+export interface DealGroup {
+  group: string;
+  onto?: string;           // the receiver's card it will hang from (chosen by the receiver)
+  side?: Side;             // which arrow of `onto`
+  payWith?: string;        // the token paying for the move: the Group, its old or new master, or either Illuminati
+}
+
+/** What one player hands over in a deal. */
+export interface DealSide {
+  cards?: string[];        // cards from hand (Plots, hidden or exposed, Groups, Resources)
+  resources?: string[];    // Resources in play
+  groups?: DealGroup[];    // Groups in play
+  anyPlots?: number;       // asked for only: Plots from hand of the giver's choice
+  anyCards?: number;       // asked for only: Group or Resource cards from hand of the giver's choice
+}
+
+export interface Deal {
+  id: string;
+  from: string;            // who offered it
+  to: string;              // who is asked to accept
+  turn: number;            // the turn it was offered in: an offer lapses when that turn ends
+  give: DealSide;          // what the offer hands over
+  get: DealSide;           // what it asks for in return (empty for a gift)
+  note?: string;           // a promise about the future: shown, never enforced
+  lie?: string;            // the offerer's I Lied, played as soon as the deal is agreed (secret from the other player)
+  counterOf?: string;      // the offer this one answers
+}
+
+/** An agreed deal held up by I Lied: each liar's side is delivered only if his I Lied is cancelled. */
+export interface DealWait {
+  id: string;
+  deal: Deal;              // with every choice filled in
+  lies: { player: string; card: string; state: 'waiting' | 'playing' | 'kept' | 'cancelled' }[];
 }
 
 // ---------------- Actions a player can submit ----------------
@@ -303,6 +347,10 @@ export type Action =
   | { type: 'chooseLead'; card: string }
   | { type: 'choose'; ids: string[] }
   | { type: 'callOff' }
-  | { type: 'setAutoPass'; value: boolean };
+  | { type: 'setAutoPass'; value: boolean }
+  | { type: 'offerDeal'; to: string; give: DealSide; get: DealSide; note?: string; lie?: string; counterOf?: string }
+  /** Accept (filling in the choices the offer leaves to you) or decline an offer made to you. */
+  | { type: 'respondDeal'; deal: string; accept: boolean; choose?: string[]; groups?: DealGroup[]; lie?: string }
+  | { type: 'cancelDeal'; deal: string };
 
 export class RuleError extends Error {}
