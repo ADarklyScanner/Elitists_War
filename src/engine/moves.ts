@@ -7,7 +7,7 @@ import { openArrows, structureCards } from './geometry';
 import { alignments, attributes, power } from './stats';
 import { PLOTS } from './plotTypes';
 import { HOOKS } from './hooks';
-import { announcedAction, announcedActors, checkAbility, disasterTarget, resourcesOf } from './game';
+import { announcedAction, announcedActors, checkAbility, disasterTarget, resourcesOf, MARCH_ON_WASHINGTON } from './game';
 
 const ALIGNMENTS: Alignment[] = ['Government', 'Corporate', 'Liberal', 'Conservative', 'Peaceful', 'Violent', 'Straight', 'Weird', 'Criminal', 'Fanatic'];
 
@@ -72,9 +72,12 @@ export function plotOptions(s: GameState, pl: string, card: string, declaring?: 
     if (d.id === 'sweeping-reforms') pays.push(sharedMediaPayers(s, pl));
     for (const mode of modes) for (const alignment of aligns) for (const helper of helpers) {
       let found = false;
-      for (const payWith of pays) {
+      // Without a legal way to pay, March on Washington may stand in for one of the actions.
+      const march = needs.pay === 'tokens' ? marchCard(s, pl, card) : undefined;
+      const tries: { payWith?: string[]; march?: string }[] = [...pays.map((payWith) => ({ payWith })), ...(march ? [[], ...pays].map((payWith) => ({ payWith, march })) : [])];
+      for (const { payWith, march: m } of tries) {
         if (found) break;
-        const play: PlotPlay = { card, target, mode, alignment, helper, payWith, targets: targetList };
+        const play: PlotPlay = { card, target, mode, alignment, helper, payWith, targets: targetList, ...(m ? { march: m } : {}) };
         if (declaring) {
           const probe = structuredClone(s);
           probe.attack = { id: -1, type: declaring.attackType, instant: false, attacker: declaring.attacker, attackerPlayer: pl, target: declaring.target, targetPlayer: probe.cards[declaring.target].controller, fromHand: probe.cards[declaring.target].zone === 'hand', privileged: false, aid: [], oppose: [], attackBonus: [], defenseBonus: [], plays: [] };
@@ -89,6 +92,13 @@ export function plotOptions(s: GameState, pl: string, card: string, declaring?: 
     }
   }
   return out;
+}
+
+/** A March on Washington in hand that could stand in for an action of another Plot. */
+function marchCard(s: GameState, pl: string, card: string): string | undefined {
+  const me = player(s, pl);
+  if (s.cards[card].cardId === MARCH_ON_WASHINGTON || s.cards[me.illuminati].data?.marchTurn === s.turn || !me.plotDeck.length) return undefined;
+  return me.hand.find((c) => c !== card && s.cards[c].cardId === MARCH_ON_WASHINGTON);
 }
 
 /** Candidate targets of a given kind for a Plot or ability. */
@@ -135,6 +145,7 @@ export function describePlay(s: GameState, p: PlotPlay): string {
   if (p.helper) parts.push(`with ${cardName(s, p.helper)}`);
   if (p.targets?.length) parts.push(`tokens for ${p.targets.map((g) => cardName(s, g)).join(', ')}`);
   if (p.payWith?.length) parts.push(`paid by ${p.payWith.map((g) => cardName(s, g)).join(', ')}`);
+  if (p.march) parts.push('March on Washington stands in for one action');
   return parts.filter(Boolean).join(' · ') || 'Play';
 }
 

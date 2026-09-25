@@ -133,6 +133,34 @@ describe('Ark of the Covenant', () => {
     expect(s.cards[sharks].zone).toBe('structure');
     expect(s.players[0].destroyedCredit).toContain(mafia);
   });
+  it('an Assassination is directed by the Illuminati: its player chooses a Group to lose', () => {
+    let s = scenario();
+    const r = give(s, 'p1', 'ark-of-the-covenant', { resource: true });
+    const nancy = give(s, 'p1', 'nancy-reagan', { under: ill(s, 0), side: 'BOTTOM' });
+    const mafia = give(s, 'p2', 'the-mafia', { under: ill(s, 1), side: 'BOTTOM' });
+    const sharks = give(s, 'p2', 'loan-sharks', { under: ill(s, 1), side: 'TOP' });
+    const bomb = give(s, 'p2', 'car-bomb', { hand: true });
+    s = use(s, 'p1', r, 'name', { target: nancy });
+    s.active = 1;
+    s = act(s, 'p2', { type: 'playPlot', play: { card: bomb, target: nancy, helper: mafia } });
+    s = resolve(s, [1, 1]);
+    expect(s.cards[nancy].zone).toBe('destroyed');
+    expect(s.prompt?.kind).toBe('choose');
+    expect(s.prompt!.player).toBe('p2');
+    expect(s.prompt!.choice!.options.map((o) => o.id).sort()).toEqual([mafia, sharks].sort());
+    s = choose(s, 'p2', [sharks]);
+    expect(s.cards[sharks].zone).toBe('destroyed');
+    expect(s.players[0].destroyedCredit).toContain(sharks);
+  });
+  it('a Plot that destroys the named Group directly counts as its player\'s Illuminati too', () => {
+    const s = scenario();
+    const r = give(s, 'p1', 'ark-of-the-covenant', { resource: true });
+    const batf = give(s, 'p1', 'b-a-t-f', { under: ill(s, 0), side: 'BOTTOM' });
+    give(s, 'p2', 'the-mafia', { under: ill(s, 1), side: 'BOTTOM' });
+    s.cards[r].note = batf;
+    destroyGroup(s, batf, 'p2');
+    expect(s.prompt?.player).toBe('p2');
+  });
   it('can only name your own Group', () => {
     const s = scenario();
     const r = give(s, 'p1', 'ark-of-the-covenant', { resource: true });

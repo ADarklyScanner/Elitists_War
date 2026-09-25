@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  advance, applyAction, attackStrength, attributes, startInstantAttack, destroyGroup, discardCard, globalPower, outSides, power, validateAttack, waitingFor,
+  advance, applyAction, attackStrength, plotOptions, attributes, startInstantAttack, destroyGroup, discardCard, globalPower, outSides, power, validateAttack, waitingFor,
   type Action, type GameState, type PlotPlay,
 } from '../../src/engine';
 import { checkInvariants, give, scenario } from '../helpers';
@@ -123,34 +123,56 @@ describe('Let\'s Get REALLY Organized', () => {
 describe('March on Washington', () => {
   function setup() {
     const s = scenario();
-    const big = give(s, 'p1', 'big-media', { under: ill(s, 'p1'), side: 'BOTTOM' });
     const holly = give(s, 'p1', 'hollywood', { under: ill(s, 'p1'), side: 'TOP' });
     const target = give(s, 'p2', 'fbi', { under: ill(s, 'p2'), side: 'BOTTOM' });
     const mc = give(s, 'p1', 'media-connections', { hand: true });
     const mow = give(s, 'p1', 'march-on-washington', { hand: true });
-    return { s, big, holly, target, mc, mow };
+    return { s, holly, target, mc, mow };
   }
-  it('gives back the action of a paying Group of Power 6 or less; costs the top Plot of your deck', () => {
-    const { s: s0, big, holly, target, mc, mow } = setup();
+  it('stands in for a missing action of Power 6 or less; costs the top Plot of your deck', () => {
+    const { s: s0, holly, target, mc, mow } = setup();
+    // Hollywood (Power 3) alone is short of the 6 Media Power Media Connections needs.
+    expect(() => play(s0, 'p1', { card: mc, target, payWith: [holly] })).toThrow(/6 Power/);
     const deck = P(s0, 'p1').plotDeck.length;
-    let s = play(s0, 'p1', { card: mc, target, payWith: [big, holly] });
-    s = play(s, 'p1', { card: mow, target: mc, targets: [holly] });
-    expect(s.cards[holly].tokens).toBe(1);
-    expect(s.cards[big].tokens).toBe(0);
+    const top = P(s0, 'p1').plotDeck[0];
+    let s = play(s0, 'p1', { card: mc, target, payWith: [holly], march: mow });
+    expect(s.cards[holly].tokens).toBe(0);
+    expect(s.cards[mow].zone).toBe('discard');
+    expect(s.cards[top].zone).toBe('discard');
     expect(P(s, 'p1').plotDeck.length).toBe(deck - 1);
     s = drain(s);
     expect(s.cards[mc].linkedTo).toBe(target);
-    expect(s.cards[mow].zone).toBe('discard');
     checkInvariants(s);
   });
-  it('only once per turn, and only for a Group that paid', () => {
-    const { s: s0, big, holly, target, mc, mow } = setup();
-    let s = play(s0, 'p1', { card: mc, target, payWith: [big, holly] });
-    const other = give(s, 'p1', 'loan-sharks', { under: ill(s, 'p1'), side: 'LEFT' });
-    s.cards[other].tokens = 0;
-    expect(() => play(s, 'p1', { card: mow, target: mc, targets: [other] })).toThrow(/paid/);
+  it('needs no Group of the right kind at all', () => {
+    const { s: s0, target, mc, mow } = setup();
+    const s = drain(play(s0, 'p1', { card: mc, target, payWith: [], march: mow }));
+    expect(s.cards[mc].linkedTo).toBe(target);
+    expect(s.cards[ill(s, 'p1')].tokens).toBe(1);
+  });
+  it('never replaces an Illuminati action', () => {
+    const { s, holly, mow } = setup();
+    // Reorganization is paid for only by the Illuminati.
+    const reorg = give(s, 'p1', 'reorganization', { hand: true });
+    expect(() => play(s, 'p1', { card: reorg, march: mow })).toThrow(/stands in/);
+    // Nor for a Group's own action spent on a Plot that changes that Group (Purge).
+    const purge = give(s, 'p1', 'purge', { hand: true });
+    expect(() => play(s, 'p1', { card: purge, payWith: [holly], march: mow })).toThrow(/stands in/);
+    // Not on its own.
+    expect(() => play(s, 'p1', { card: mow })).toThrow(/together with a Plot/);
+  });
+  it('only once per turn, and only while your Plot deck has a card', () => {
+    const { s, holly, target, mc, mow } = setup();
     s.cards[ill(s, 'p1')].data = { marchTurn: s.turn };
-    expect(() => play(s, 'p1', { card: mow, target: mc, targets: [holly] })).toThrow(/once per turn/);
+    expect(() => play(s, 'p1', { card: mc, target, payWith: [holly], march: mow })).toThrow(/once per turn/);
+    s.cards[ill(s, 'p1')].data = {};
+    P(s, 'p1').plotDeck = [];
+    expect(() => play(s, 'p1', { card: mc, target, payWith: [holly], march: mow })).toThrow(/Plot deck/);
+  });
+  it('is offered as a way to play a Plot that could not be paid for otherwise', () => {
+    const { s, target, mc, mow } = setup();
+    const opts = plotOptions(s, 'p1', mc).filter((o) => (o.action as { play: PlotPlay }).play.target === target);
+    expect(opts.some((o) => (o.action as { play: PlotPlay }).play.march === mow)).toBe(true);
   });
 });
 
@@ -178,39 +200,53 @@ describe('Media Connections', () => {
 });
 
 describe('Opportunity Knocks', () => {
-  /** p1 fails to take over Big Media from hand; p2 holds Opportunity Knocks. */
-  function setup() {
+  /** p1 fails to take over Big Media from hand and ends the turn (discarding it); p2 holds Opportunity Knocks. */
+  function setup(endTurn = true) {
     const s0 = scenario();
     const weak = give(s0, 'p1', 'l-4-society', { under: ill(s0, 'p1'), side: 'BOTTOM' });
     const big = give(s0, 'p1', 'big-media', { hand: true });
     const mafia = give(s0, 'p2', 'the-mafia', { under: ill(s0, 'p2'), side: 'BOTTOM' });
     const ok = give(s0, 'p2', 'opportunity-knocks', { hand: true });
     let s = act(s0, 'p1', { type: 'attack', attackType: 'control', attacker: weak, target: big });
-    for (let i = 0; i < 10 && s.attack; i++) s = act(s, waitingFor(s)[0], { type: 'pass' });
+    for (let i = 0; i < 10 && (s.attack || s.window); i++) s = act(s, waitingFor(s)[0], { type: 'pass' });
+    if (endTurn) s = act(s, 'p1', { type: 'endTurn' });
     return { s, big, mafia, ok };
   }
-  it('lets a rival attack the failed Group out of turn at +5, then the turn goes on', () => {
+  it('not while the rival may still retry: only once the failed Group is discarded', () => {
+    const { s, big, mafia, ok } = setup(false);
+    expect(s.cards[big].zone).toBe('hand');
+    expect(s.cards[big].failedTakeoverTurn).toBe(s.turn);
+    expect(() => play(s, 'p2', { card: ok, mode: 'control', helper: mafia })).toThrow();
+  });
+  it('lets a rival attack the discarded Group out of turn at +5, then the turn goes on', () => {
     const { s: s0, big, mafia, ok } = setup();
-    expect(s0.window?.kind).toBe('event');
-    expect(s0.window?.event?.type).toBe('failedTakeover');
+    expect(s0.cards[big].zone).toBe('discard');
+    expect(s0.window?.kind).toBe('endOfTurn');
     let s = play(s0, 'p2', { card: ok, mode: 'control', helper: mafia });
     s = act(s, 'p1', { type: 'pass' }); // the Plot resolves and the attack begins
     expect(s.attack?.attackerPlayer).toBe('p2');
     expect(s.attack?.attackBonus.some((b) => b.amount === 5)).toBe(true);
-    s = drain(s, [1, 1]);
+    for (let i = 0; i < 20 && s.attack; i++) {
+      if (s.window?.kind === 'roll' && s.attack.roll) s.attack.roll = [1, 1];
+      s = act(s, waitingFor(s)[0], { type: 'pass' });
+    }
     expect(s.cards[big].zone).toBe('structure');
     expect(s.cards[big].controller).toBe('p2');
-    expect(s.window).toBeUndefined();
+    expect(P(s, 'p1').discard).not.toContain(big);
+    expect(s.window?.kind).toBe('endOfTurn');
     expect(s.players[s.active].id).toBe('p1');
-    expect(s.phase).toBe('main');
     checkInvariants(s);
   });
   it('can destroy the Group instead', () => {
     const { s: s0, big, mafia, ok } = setup();
     let s = play(s0, 'p2', { card: ok, mode: 'destroy', helper: mafia });
     s = act(s, 'p1', { type: 'pass' });
-    s = drain(s, [1, 1]);
+    for (let i = 0; i < 20 && s.attack; i++) {
+      if (s.window?.kind === 'roll' && s.attack.roll) s.attack.roll = [1, 1];
+      s = act(s, waitingFor(s)[0], { type: 'pass' });
+    }
     expect(s.cards[big].zone).toBe('destroyed');
+    expect(P(s, 'p1').discard).not.toContain(big);
     expect(P(s, 'p2').destroyedCredit).toContain(big);
     checkInvariants(s);
   });
@@ -238,6 +274,23 @@ describe('Purge', () => {
     s.active = 1;
     s = act(s, 'p2', { type: 'attack', attackType: 'destroy', attacker: att, target: big });
     expect(() => act(s, 'p2', { type: 'agent', card: dup, as: 'aid' })).toThrow(/immune to agents/);
+  });
+  it('may be played during an attack in your turn, and takes effect at once', () => {
+    const s0 = scenario();
+    const big = give(s0, 'p1', 'big-media', { under: ill(s0, 'p1'), side: 'BOTTOM' });
+    const mafia = give(s0, 'p1', 'the-mafia', { under: ill(s0, 'p1'), side: 'TOP' });
+    const tgt = give(s0, 'p2', 'fbi', { under: ill(s0, 'p2'), side: 'BOTTOM' });
+    const card = give(s0, 'p1', 'purge', { hand: true });
+    let s = act(s0, 'p1', { type: 'attack', attackType: 'destroy', attacker: mafia, target: tgt });
+    s = play(s, 'p1', { card, payWith: [big] });
+    expect(s.attack).toBeDefined();
+    expect(power(s, big)).toBe(3);
+    expect(s.cards[card].linkedTo).toBe(big);
+    expect(s.cards[big].data?.noAgents).toBe(true);
+    // Still only in your own turn.
+    const other = give(s, 'p2', 'purge', { hand: true });
+    const g2 = give(s, 'p2', 'loan-sharks', { under: ill(s, 'p2'), side: 'TOP' });
+    expect(() => play(s, 'p2', { card: other, payWith: [g2] })).toThrow(/own turn/);
   });
   it('the Illuminati purges Agents of itself; with none in play it cannot be used', () => {
     const s0 = scenario();
@@ -489,6 +542,15 @@ describe('Unmasked!', () => {
     const card = give(s, 'p1', 'unmasked', { hand: true });
     expect(() => play(s, 'p1', { card, target: grp })).toThrow(/Illuminati card/);
   });
+  it('waits until no attack is under way (the engine never swaps an Illuminati mid-attack)', () => {
+    const s0 = scenario();
+    const mafia = give(s0, 'p1', 'the-mafia', { under: ill(s0, 'p1'), side: 'BOTTOM' });
+    const tgt = give(s0, 'p2', 'fbi', { under: ill(s0, 'p2'), side: 'BOTTOM' });
+    const neu = give(s0, 'p1', 'gnomes-of-zurich', { hand: true });
+    const card = give(s0, 'p1', 'unmasked', { hand: true });
+    const s = act(s0, 'p1', { type: 'attack', attackType: 'destroy', attacker: mafia, target: tgt });
+    expect(() => play(s, 'p1', { card, target: neu })).toThrow(/wait until the attack is over/);
+  });
 });
 
 describe('Upheaval!', () => {
@@ -512,14 +574,27 @@ describe('Upheaval!', () => {
     expect(P(s, 'p1').destroyedCredit.length + P(s, 'p2').destroyedCredit.length).toBe(0);
     checkInvariants(s);
   });
-  it('costs the Illuminati\'s action and not in the first round', () => {
+  it('costs the Illuminati\'s action and not on your own first turn', () => {
     const s = scenario();
     const card = give(s, 'p1', 'upheaval', { hand: true });
-    s.round = 1;
-    expect(() => play(s, 'p1', { card })).toThrow(/first round/);
-    s.round = 3;
+    P(s, 'p1').turnsTaken = 0;
+    expect(() => play(s, 'p1', { card })).toThrow(/first turn/);
+    P(s, 'p1').turnsTaken = 1;
     s.cards[ill(s, 'p1')].tokens = 0;
     expect(() => play(s, 'p1', { card })).toThrow(/Illuminati/);
+  });
+  it('may be played in the first round once your own first turn is over, and hits players still in theirs', () => {
+    const s0 = scenario();
+    s0.round = 1;
+    P(s0, 'p2').turnsTaken = 0; // p2 has not had a turn yet: cards that affect all players still reach him
+    give(s0, 'p1', 'loan-sharks', { under: ill(s0, 'p1'), side: 'BOTTOM' });
+    const b = give(s0, 'p2', 'the-mafia', { under: ill(s0, 'p2'), side: 'BOTTOM' });
+    const card = give(s0, 'p1', 'upheaval', { hand: true });
+    let s = playAndResolve(s0, 'p1', { card });
+    s = act(s, 'p1', { type: 'choose', ids: [s.prompt!.choice!.options[0].id] });
+    expect(s.prompt?.player).toBe('p2');
+    s = act(s, 'p2', { type: 'choose', ids: [b] });
+    expect(s.cards[b].zone).toBe('discard');
   });
 });
 

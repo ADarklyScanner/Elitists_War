@@ -10,7 +10,7 @@ import { alignments, power } from '../stats';
 import { SIDES, openArrows, outSides, puppets, rotate, structureCards, subtree } from '../geometry';
 import {
   activePlayer, askChoice, discardCard, livePlayers, log, placeGroup, player, protectedPlayer, revealTo,
-  startAttack, validateAttack,
+  startAttack, validateAttack, failedDiscard,
 } from '../game';
 import { exposableHand, exposeCards } from '../game';
 
@@ -195,36 +195,13 @@ registerPlots({
     },
   },
 
-  // Right after your own Plot that cost actions: one paying Group of Power 6 or less (not the Illuminati)
-  // gets its action back. Costs the top card of your Plot deck; once per turn.
-  // target = the Plot just played; targets = [the Group whose action is replaced].
+  // Never played on its own: it goes along with another Plot that requires actions and stands in for
+  // one of them (Power 6 or less, any alignment or attribute, never the Illuminati). See `play.march`
+  // and the March on Washington section of game.ts.
   'march-on-washington': {
-    timing: ['counter'],
-    needs: { target: 'plot', targets: true },
-    check(s, pl, play, ctx) {
-      const plays = s.window?.kind === 'plot' ? s.window.plays ?? [] : ctx?.plays ?? [];
-      const pp = plays.find((x) => x.iid === play.target);
-      if (!pp || pp.player !== pl || pp.ability || pp.iid === play.card || !s.cards[pp.iid] || def(s, pp.iid).type !== 'Plot') return 'Play this together with one of your own Plots that required actions.';
-      const g = play.targets?.[0];
-      if (!g || !(pp.play.payWith ?? []).includes(g)) return 'Choose a Group whose action paid for that Plot.';
-      if (g === illum(s, pl)) return 'It never replaces an Illuminati action.';
-      if (!own(s, pl, g)) return 'That Group is no longer yours.';
-      if (power(s, g) > 6) return 'It only replaces the action of a Group with Power 6 or less.';
-      if (plays.some((x) => x.iid !== play.card && s.cards[x.iid]?.cardId === 'march-on-washington' && x.play.target === pp.iid)) return 'That Plot already had an action replaced.';
-      if (s.cards[illum(s, pl)].data?.marchTurn === s.turn) return 'You may use March on Washington only once per turn.';
-      if (!player(s, pl).plotDeck.length) return 'You must discard the top card of your Plot deck, and it is empty.';
-      return null;
-    },
-    apply(s, pl, play) {
-      const p = player(s, pl);
-      const ill = s.cards[p.illuminati];
-      ill.data = { ...ill.data, marchTurn: s.turn };
-      const top = p.plotDeck.shift()!;
-      s.cards[top].zone = 'hand'; p.hand.push(top); discardCard(s, top);
-      const g = play.targets![0];
-      s.cards[g].tokens++;
-      log(s, `The march stands in for ${cardName(s, g)}, which keeps its action; the top card of the Plot deck is discarded.`, pl);
-    },
+    timing: ['anytime', 'counter'],
+    check: () => 'Play March on Washington together with a Plot that requires actions: choose it as a stand-in for one of them.',
+    apply() {},
   },
 
   // Any Group becomes Media and its Global Power equals its Power (linked). Media Groups with 6+ Power pay.
@@ -244,61 +221,53 @@ registerPlots({
     resolve: (s, _pl, play) => connect(s, play),
   },
 
-  // After a rival's takeover of a Group from his hand fails: one out-of-turn attack on it at +5.
-  // mode = 'control' | 'destroy'; helper = your attacking Group.
+  // When a rival discards a Group he played from his hand and failed to take over (the engine discards it
+  // as he ends his turn, R003): one out-of-turn attack on it at +5, to control or destroy it.
+  // target = that Group in his discard pile (found automatically when omitted); mode = 'control' | 'destroy';
+  // helper = your attacking Group.
   'opportunity-knocks': {
-    timing: ['event'],
-    events: ['failedTakeover'],
-    needs: { mode: ['control', 'destroy'], helper: true },
-    check(s, pl, play) {
-      const e = eventOf(s, play);
-      const g = e?.card;
-      if (e?.type !== 'failedTakeover' || !g || !e.player || e.player === pl) return 'Play this right after a rival fails to take over a Group from their hand.';
-      if (!player(s, e.player).hand.includes(g) || s.cards[g].zone !== 'hand') return 'That Group is no longer in their hand.';
-      if (protectedPlayer(s, pl, e.player)) return 'That player has not finished a first turn yet.';
+    timing: ['anytime'],
+    needs: { target: 'discardPile', mode: ['control', 'destroy'], helper: true },
+    check(s, pl, play, ctx) {
+      if (ctx || s.attack) return 'Play this when no attack is under way.';
+      const g = failedDiscard(s, pl, play);
+      if (!g) return 'Play this after a rival discards a Group he failed to take over from his hand.';
+      if (protectedPlayer(s, pl, s.cards[g].owner)) return 'That player has not finished a first turn yet.';
       if (!play.helper) return 'Choose the Group that makes the attack.';
       return validateAttack(s, pl, knock(s, play, g), { outOfTurn: true, anyHand: true });
     },
-    apply: (s, _pl, play) => stashEvent(s, play),
+    apply: (s, pl, play) => {
+      const g = failedDiscard(s, pl, play);
+      s.cards[play.card].data = { ...s.cards[play.card].data, knockTarget: g };
+    },
     resolve(s, pl, play) {
-      const g = eventOf(s, play)?.card;
-      if (!g) return;
+      const g = s.cards[play.card].data?.knockTarget as string | undefined;
+      if (!g || s.cards[g].zone !== 'discard') { log(s, 'The opportunity is lost: the Group is no longer in the discard pile.', pl); return; }
       const a = knock(s, play, g);
       const why = s.attack ? 'another attack is under way' : validateAttack(s, pl, a, { outOfTurn: true, anyHand: true });
       if (why) { log(s, `The opportunity is lost: ${why}`, pl); return; }
+      s.cards[g].failedTakeoverTurn = undefined;
       startAttack(s, pl, a, { outOfTurn: true, anyHand: true });
       s.attack!.attackBonus.push({ player: pl, amount: 5, label: 'Opportunity Knocks' });
     },
   },
 
-  // Your Illuminati's action: Agents of your Illuminati in play are destroyed. Any other Group's action:
-  // it loses 1 Power and 1 Global Power but rivals can never use agents against it (linked).
+  // Any time during your turn (in an attack too). Your Illuminati's action: Agents of your Illuminati
+  // in play are destroyed. Any other Group's action: it loses 1 Power and 1 Global Power but rivals can
+  // never use agents against it (linked).
   'purge': {
     timing: ['anytime'],
     needs: { pay: 'tokens' },
-    check(s, pl, play, ctx) {
+    check(s, pl, play) {
       if (activePlayer(s).id !== pl) return 'Play this during your own turn.';
       const err = oneActor(s, pl, play.payWith, (g) => g === illum(s, pl) || isGroup(s, g), 'the Group using it');
       if (err) return err;
-      if (play.payWith![0] === illum(s, pl)) {
-        if (!purgeAgents(s, pl).length) return 'There are no Agents of your Illuminati in play to purge.';
-      } else if (ctx) return 'A Group purges itself outside attacks.';
+      if (play.payWith![0] === illum(s, pl) && !purgeAgents(s, pl).length) return 'There are no Agents of your Illuminati in play to purge.';
       return null;
     },
-    apply(s, _pl, play) { pay(s, play.payWith); },
-    resolve(s, pl, play) {
-      const g = play.payWith![0];
-      if (g === illum(s, pl)) {
-        const agents = purgeAgents(s, pl);
-        for (const a of agents) Object.assign(s.cards[a], { zone: 'destroyed', controller: undefined, master: undefined, linkedTo: undefined, x: undefined, y: undefined, tokens: 0 });
-        log(s, `${agents.length} Agent card${agents.length === 1 ? ' is' : 's are'} purged.`, pl);
-        return;
-      }
-      if (!own(s, pl, g)) return;
-      s.cards[g].data = { ...s.cards[g].data, noAgents: true };
-      s.cards[play.card].linkedTo = g;
-      log(s, `${cardName(s, g)} purges its ranks: weaker, but safe from rival agents.`, pl);
-    },
+    // During an attack there is no counter window: the purge happens at once.
+    apply(s, pl, play, ctx) { pay(s, play.payWith); if (ctx) purgeNow(s, pl, play); },
+    resolve: (s, pl, play) => purgeNow(s, pl, play),
   },
 
   // Your Illuminati's action: move your Groups freely (without paying) for the rest of this turn.
@@ -480,7 +449,7 @@ registerPlots({
     timing: ['anytime'],
     needs: { target: 'handCard' },
     check(s, pl, play, ctx) {
-      if (ctx) return 'Unmasked! cannot be played during an attack in this version.';
+      if (ctx || s.attack) return 'Unmasked! has to wait until the attack is over.';
       const t = play.target;
       if (!t || !player(s, pl).hand.includes(t) || def(s, t).type !== 'Illuminati') return 'Choose an Illuminati card from your hand.';
       return null;
@@ -508,12 +477,14 @@ registerPlots({
   },
 
   // Your Illuminati's action: every player discards one Group of his choice from his Power Structure
-  // (discarded, not destroyed). Errata: not in the first round.
+  // (discarded, not destroyed). Errata: not on your first turn. It affects all players, so players still
+  // in their first turn are not protected (R001). The engine never takes Groups out of play in the
+  // middle of an attack, so it waits until no attack is under way (RULES_COMPLIANCE.md).
   'upheaval': {
     timing: ['anytime'],
     check(s, pl, _play, ctx) {
-      if (ctx) return 'Upheaval! cannot be played during an attack.';
-      if (s.round === 1) return 'Not during the first round of the game.';
+      if (ctx || s.attack) return 'Upheaval! has to wait until the attack is over.';
+      if (player(s, pl).turnsTaken === 0) return 'Upheaval! cannot be used on your first turn.';
       return illuminatiAction(s, pl);
     },
     apply(s, pl) { s.cards[illum(s, pl)].tokens--; },
@@ -568,6 +539,20 @@ function connect(s: GameState, play: PlotPlay) {
   if (!inPlay(s, t)) return;
   s.cards[play.card].linkedTo = t;
   log(s, `${cardName(s, t)} gets Media connections.`);
+}
+
+function purgeNow(s: GameState, pl: string, play: PlotPlay) {
+  const g = play.payWith![0];
+  if (g === illum(s, pl)) {
+    const agents = purgeAgents(s, pl);
+    for (const a of agents) Object.assign(s.cards[a], { zone: 'destroyed', controller: undefined, master: undefined, linkedTo: undefined, x: undefined, y: undefined, tokens: 0 });
+    log(s, `${agents.length} Agent card${agents.length === 1 ? ' is' : 's are'} purged.`, pl);
+    return;
+  }
+  if (!own(s, pl, g)) return;
+  s.cards[g].data = { ...s.cards[g].data, noAgents: true };
+  s.cards[play.card].linkedTo = g;
+  log(s, `${cardName(s, g)} purges its ranks: weaker, but safe from rival agents.`, pl);
 }
 
 function knock(s: GameState, play: PlotPlay, target: string) {

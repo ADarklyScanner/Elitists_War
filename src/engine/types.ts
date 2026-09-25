@@ -273,6 +273,7 @@ export interface PlotPlay {
   alignment?: Alignment;
   helper?: string;               // optional group joining an Instant Attack
   targets?: string[];            // several Groups (reload cards)
+  march?: string;                // a March on Washington card in hand standing in for one required action
 }
 
 export type Action =

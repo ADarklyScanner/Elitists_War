@@ -365,30 +365,31 @@ const T: Record<string, CardHooks> = {
       check: (s, pl, _self, p) => (own(s, pl, p.target) && isGroup(s, p.target) ? null : 'Name a Group in your Power Structure.'),
       apply(s, _pl, self, p) { s.cards[self].note = p.target; },
     }],
-    onDestroy(s, self, victim) {
+    onDestroy(s, self, victim, by) {
       const pl = ctrl(s, self);
       if (!pl || !active(s, self) || s.cards[self].note !== victim || s.cards[victim].controller !== pl) return;
       s.cards[self].note = undefined;
       log(s, `The Ark of the Covenant is revealed: it protected ${cardName(s, victim)}.`, pl);
       const ctx = s.attack;
-      const destroyer = ctx && !ctx.instant ? ctx.attacker : undefined;
-      // The Ark strikes back at the Group that destroyed the named one. Instant attacks (Disasters,
-      // Assassinations) and attacks made by cards are made by a Plot, not by a Group, so there is no
-      // destroying Group to strike.
-      if (!destroyer || !inPlay(s, destroyer)) return;
-      if (def(s, destroyer).type === 'Illuminati') {
-        // The Illuminati's owner chooses which of his Groups is lost.
-        const rival = s.cards[destroyer].controller!;
-        const options = structureCards(s, rival).filter((g) => isGroup(s, g)).map((g) => ({ id: g, label: cardName(s, g) }));
-        if (options.length) {
-          askChoice(s, rival, {
-            key: 'ark-of-the-covenant', source: self, min: 1, max: 1, options, data: { by: pl },
-            question: `The Ark of the Covenant protected ${cardName(s, victim)}: your Illuminati destroyed it, so choose one of your Groups to lose.`,
-          });
-        }
-      } else {
-        log(s, `${cardName(s, destroyer)} is destroyed by the Ark.`, pl);
-        destroyGroup(s, destroyer, pl);
+      // The Group that made the attack strikes back on itself. Instant attacks (Disasters, Assassinations),
+      // attacks made by cards and Plots that destroy directly are directed by the Illuminati (the rules
+      // say so of Plots), so they count as destroyed by the Illuminati of the player behind them.
+      const group = ctx && !ctx.instant && ctx.target === victim && ctx.attacker && def(s, ctx.attacker).type === 'Group' ? ctx.attacker : undefined;
+      if (group) {
+        if (!inPlay(s, group)) return;
+        log(s, `${cardName(s, group)} is destroyed by the Ark.`, pl);
+        destroyGroup(s, group, pl);
+        return;
+      }
+      const rival = by;
+      if (!rival || rival === pl || !s.players.some((p) => p.id === rival && !p.eliminated)) return;
+      // The Illuminati's owner chooses which of his Groups is lost.
+      const options = structureCards(s, rival).filter((g) => isGroup(s, g)).map((g) => ({ id: g, label: cardName(s, g) }));
+      if (options.length) {
+        askChoice(s, rival, {
+          key: 'ark-of-the-covenant', source: self, min: 1, max: 1, options, data: { by: pl },
+          question: `The Ark of the Covenant protected ${cardName(s, victim)}: your Illuminati destroyed it, so choose one of your Groups to lose.`,
+        });
       }
     },
   },
