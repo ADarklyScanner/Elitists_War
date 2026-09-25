@@ -366,8 +366,10 @@ describe('Professional Sports', () => {
     const ps = under(s, 'p1', 'professional-sports');
     const pers = give(s, 'p1', 'dan-quayle', { under: ps, side: 'RIGHT' });
     const other = under(s, 'p1', 'bill-clinton', 'TOP');
-    expect(power(s, pers)).toBe(1 + 3);
-    expect(power(s, other)).toBe(4);
+    expect(power(s, pers)).toBe(1);
+    const next = use(s, 'p1', ps, 'link', { target: pers });
+    expect(power(next, pers)).toBe(1 + 3);
+    expect(power(next, other)).toBe(4);
   });
 });
 
@@ -886,11 +888,11 @@ describe('Punk Rockers', () => {
 });
 
 describe('Reformed Church of Satan can only be attacked to destroy', () => {
-  it('refuses an Attack to Control', () => {
+  it('refuses an Attack to Control by a Straight Group', () => {
     const s = scenario();
-    const att = under(s, 'p1', 'the-mafia');
+    const att = under(s, 'p1', 'fbi');
     const church = under(s, 'p2', 'reformed-church-of-satan');
-    expect(() => act(s, 'p1', { type: 'attack', attackType: 'control', attacker: att, target: church })).toThrow(/only be attacked to destroy/);
+    expect(() => act(s, 'p1', { type: 'attack', attackType: 'control', attacker: att, target: church })).toThrow(/only attack the Reformed Church of Satan to destroy/);
     expect(() => act(s, 'p1', { type: 'attack', attackType: 'destroy', attacker: att, target: church })).not.toThrow();
   });
 });
@@ -1257,5 +1259,137 @@ describe('MI-5 negating an attempt to expose your Plots', () => {
     s = use(s, 'p1', nasa, 'transferToken', { target: fbi });
     expect(s.window?.event?.type).toBe('action'); // opened for the Supreme Court
     expect(() => use(s, 'p2', mi5, 'negateExpose')).toThrow(/reveal your hidden Plots/);
+  });
+});
+
+describe('audit fixes', () => {
+  describe('"any attempt" bonuses help every attack your Groups lead', () => {
+    // [card with the bonus, target, attack type, bonus]
+    const cases: [string, string, 'control' | 'destroy', number][] = [
+      ['nasa', 'moonbase', 'control', 4],
+      ['nato', 'england', 'control', 4],
+      ['phone-phreaks', 'silicon-valley', 'control', 6],
+      ['phone-phreaks', 'silicon-valley', 'destroy', 6],
+      ['professional-sports', 'dan-quayle', 'control', 4],
+      ['psychiatrists', 'dan-quayle', 'destroy', 6],
+      ['ninjas', 'dentists', 'destroy', 2],
+    ];
+    for (const [id, target, type, value] of cases) {
+      it(`${CARDS[id].name}: +${value} to ${type} ${CARDS[target].name} when another of your Groups leads`, () => {
+        let s = scenario();
+        under(s, 'p1', id, 'TOP');
+        const mafia = under(s, 'p1', 'the-mafia');
+        const t = under(s, 'p2', target);
+        s = act(s, 'p1', { type: 'attack', attackType: type, attacker: mafia, target: t });
+        expect(mod(s, 'Attack', id)).toBe(value);
+      });
+    }
+    it('a rival\'s copy gives nothing to your attack', () => {
+      let s = scenario();
+      under(s, 'p2', 'nasa', 'TOP');
+      const mafia = under(s, 'p1', 'the-mafia');
+      const t = under(s, 'p2', 'moonbase');
+      s = act(s, 'p1', { type: 'attack', attackType: 'control', attacker: mafia, target: t });
+      expect(mod(s, 'Attack', 'nasa')).toBe(0);
+    });
+    it('Psychiatrists: still nothing in a Privileged attack, whoever leads', () => {
+      let s = scenario();
+      under(s, 'p1', 'psychiatrists', 'TOP');
+      const mafia = under(s, 'p1', 'the-mafia');
+      const t = under(s, 'p2', 'dan-quayle');
+      s = act(s, 'p1', { type: 'attack', attackType: 'destroy', attacker: mafia, target: t });
+      s.attack!.privileged = true;
+      expect(mod(s, 'Attack', 'psychiatrists')).toBe(0);
+    });
+  });
+
+  describe('Punk Rockers', () => {
+    it('no other Weird or Liberal Group may help defend when they help defend', () => {
+      let s = scenario();
+      const mafia = under(s, 'p1', 'the-mafia');
+      const tgt = under(s, 'p2', 'california'); // Weird, Liberal, Government
+      const punks = under(s, 'p2', 'punk-rockers', 'TOP');
+      const fem = under(s, 'p2', 'feminists', 'RIGHT');
+      const fbi = under(s, 'p2', 'fbi', 'LEFT');
+      s = act(s, 'p1', { type: 'attack', attackType: 'destroy', attacker: mafia, target: tgt });
+      expect(canOppose(s, 'p2', fem).ok).toBe(true);
+      s = act(s, 'p2', { type: 'oppose', group: punks });
+      expect(canOppose(s, 'p2', fem).ok).toBe(false);
+      expect(canOppose(s, 'p2', fbi).ok).toBe(true);
+    });
+  });
+
+  describe('Reformed Church of Satan', () => {
+    it('Groups that are not Straight may attack it to control', () => {
+      const s = scenario();
+      const att = under(s, 'p1', 'the-mafia');
+      const church = under(s, 'p2', 'reformed-church-of-satan');
+      expect(() => act(s, 'p1', { type: 'attack', attackType: 'control', attacker: att, target: church })).not.toThrow();
+    });
+    it('a Straight Group cannot help an Attack to Control on it', () => {
+      let s = scenario();
+      const att = under(s, 'p1', 'the-mafia');
+      const fbi = under(s, 'p1', 'fbi', 'TOP');
+      const church = under(s, 'p2', 'reformed-church-of-satan');
+      s = act(s, 'p1', { type: 'attack', attackType: 'control', attacker: att, target: church });
+      expect(canAid(s, 'p1', fbi).ok).toBe(false);
+    });
+  });
+
+  describe('Professional Sports', () => {
+    it('may link to any one Personality you control, and only one', () => {
+      let s = scenario();
+      const ps = under(s, 'p1', 'professional-sports');
+      const quayle = under(s, 'p1', 'dan-quayle', 'TOP');
+      const clinton = under(s, 'p1', 'bill-clinton', 'RIGHT');
+      s = use(s, 'p1', ps, 'link', { target: quayle });
+      expect(power(s, quayle)).toBe(1 + 3);
+      expect(power(s, clinton)).toBe(4);
+      s.cards[ps].data = { ...s.cards[ps].data, link: clinton };
+      expect(power(s, quayle)).toBe(1);
+      expect(power(s, clinton)).toBe(4 + 3);
+    });
+    it('not a rival\'s Personality, nor an Organization', () => {
+      const s = scenario();
+      const ps = under(s, 'p1', 'professional-sports');
+      const theirs = under(s, 'p2', 'dan-quayle');
+      const org = under(s, 'p1', 'the-mafia', 'TOP');
+      expect(() => use(s, 'p1', ps, 'link', { target: theirs })).toThrow(/Personality you control/);
+      expect(() => use(s, 'p1', ps, 'link', { target: org })).toThrow(/Personality you control/);
+    });
+  });
+
+  describe('Madison Avenue', () => {
+    it('+10 when it leads an Attack to Control a Media Group', () => {
+      let s = scenario();
+      const mad = under(s, 'p1', 'madison-avenue');
+      const t = under(s, 'p2', 'punk-rockers');
+      s = act(s, 'p1', { type: 'attack', attackType: 'control', attacker: mad, target: t });
+      expect(mod(s, 'Attack', 'madison-avenue')).toBe(10);
+    });
+    it('+2 when it leads an Attack to Destroy a Media Group', () => {
+      let s = scenario();
+      const mad = under(s, 'p1', 'madison-avenue');
+      const t = under(s, 'p2', 'punk-rockers');
+      s = act(s, 'p1', { type: 'attack', attackType: 'destroy', attacker: mad, target: t });
+      expect(mod(s, 'Attack', 'madison-avenue')).toBe(2);
+    });
+    it('+2 on any attempt on a Media Group by another of your Groups', () => {
+      for (const type of ['control', 'destroy'] as const) {
+        let s = scenario();
+        under(s, 'p1', 'madison-avenue', 'TOP');
+        const mafia = under(s, 'p1', 'the-mafia');
+        const t = under(s, 'p2', 'punk-rockers');
+        s = act(s, 'p1', { type: 'attack', attackType: type, attacker: mafia, target: t });
+        expect(mod(s, 'Attack', 'madison-avenue')).toBe(2);
+      }
+    });
+    it('nothing against a Group that is not Media', () => {
+      let s = scenario();
+      const mad = under(s, 'p1', 'madison-avenue');
+      const t = under(s, 'p2', 'dentists');
+      s = act(s, 'p1', { type: 'attack', attackType: 'control', attacker: mad, target: t });
+      expect(mod(s, 'Attack', 'madison-avenue')).toBe(0);
+    });
   });
 });

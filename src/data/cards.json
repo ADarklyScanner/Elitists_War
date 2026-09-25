@@ -1082,7 +1082,8 @@
   "resistance": 5,
   "variableStats": false,
   "alignments": [
-   "Liberal"
+   "Liberal",
+   "Corporate"
   ],
   "conditionalAlignments": [],
   "attributes": [],

@@ -27,14 +27,14 @@ registerAbilities({
   'mossad': [],
   'multinational-oil-companies': [],
   'nasa': [
-    { kind: 'attackBonus', on: 'control', target: { attributes: ['Space'] }, value: 4, scope: 'direct' },
+    { kind: 'attackBonus', on: 'control', target: { attributes: ['Space'] }, value: 4, scope: 'any' },
   ],
   'nato': [
-    { kind: 'attackBonus', on: 'control', target: { attributes: ['Nation'] }, value: 4, scope: 'direct' },
+    { kind: 'attackBonus', on: 'control', target: { attributes: ['Nation'] }, value: 4, scope: 'any' },
   ],
   'nephews-of-god': [],
   'ninjas': [
-    { kind: 'attackBonus', on: 'destroy', value: 2, scope: 'direct' },
+    { kind: 'attackBonus', on: 'destroy', value: 2, scope: 'any' },
     { kind: 'selfDefense', value: 10, on: 'destroy', instant: true },
   ],
   'n-s-a': [],
@@ -47,12 +47,12 @@ registerAbilities({
   ],
   'phone-company': [],
   'phone-phreaks': [
-    { kind: 'attackBonus', on: 'both', target: { attributes: ['Computer'] }, value: 6, scope: 'direct' },
+    { kind: 'attackBonus', on: 'both', target: { attributes: ['Computer'] }, value: 6, scope: 'any' },
   ],
   'pollsters': [],
   'post-office': [],
   'professional-sports': [
-    { kind: 'attackBonus', on: 'control', target: { alignments: ['Straight'] }, value: 4, scope: 'direct' },
+    { kind: 'attackBonus', on: 'control', target: { alignments: ['Straight'] }, value: 4, scope: 'any' },
   ],
   'psychiatrists': [],
   'punk-rockers': [],
@@ -504,14 +504,28 @@ registerHooks({
   },
 
   'professional-sports': {
-    // A Personality directly linked to it by an arrow (its master or puppet).
-    powerMod: (s, self, iid) => sameOwner(s, self, iid) && def(s, iid).subtype === 'Personality' &&
-      (s.cards[iid].master === self || s.cards[self].master === iid) ? 3 : 0,
+    // +3 Power to the one Personality it is linked to, while the same player controls both.
+    powerMod: (s, self, iid) => s.cards[self].data?.link === iid && inPlay(s, self) && sameOwner(s, self, iid) && def(s, iid).subtype === 'Personality' ? 3 : 0,
+    actions: [{
+      id: 'link', label: 'Link to one of your Personalities (+3 Power)', timing: ['main'], usesToken: false, oncePerTurn: true, ai: 'never',
+      needs: { target: 'personality' },
+      check(s, pl, self, p) {
+        const t = p.target;
+        if (!t || !inPlay(s, t) || s.cards[t].controller !== pl || !isGroup(s, t) || def(s, t).subtype !== 'Personality') return 'Choose a Personality you control.';
+        return s.cards[self].data?.link === t ? 'Already linked there.' : null;
+      },
+      apply(s, pl, self, p) {
+        s.cards[self].data = { ...s.cards[self].data, link: p.target };
+        log(s, `${cardName(s, self)} link to ${cardName(s, p.target!)}: +3 Power.`, pl);
+      },
+    }],
   },
 
   'psychiatrists': {
+    // +6 on any (non-Privileged) attack to destroy a Personality led by one of your Groups.
     attackMod: (s, self, ctx, side) =>
-      side === 'attack' && leads(ctx, self) && ctx.type === 'destroy' && def(s, ctx.target).subtype === 'Personality' && !isPrivileged(ctx) ? 6 : 0,
+      side === 'attack' && !ctx.instant && !!ctx.attacker && ctx.attackerPlayer === controllerOf2(s, self) && ctx.type === 'destroy'
+        && def(s, ctx.target).subtype === 'Personality' && !isPrivileged(ctx) ? 6 : 0,
     actions: [discardExposed(false)],
   },
 
@@ -885,13 +899,17 @@ registerHooks({
   },
 
   'punk-rockers': {
-    // Their Power is on the attacking side: no Weird or Liberal Group may help defend the target.
-    forbidJoin: (s, self, ctx, group, as) => as === 'oppose' && group !== ctx.target && attackingGroups(ctx).includes(self) &&
+    // Their Power is used in the attack, on either side: no Weird or Liberal Group may help defend the target.
+    forbidJoin: (s, self, ctx, group, as) => as === 'oppose' && group !== ctx.target && group !== self &&
+      (attackingGroups(ctx).includes(self) || ctx.oppose.some((c) => c.iid === self)) &&
       !cancelledGroups(ctx).has(self) && isGroup(s, group) && hasAlign(s, group, 'Weird', 'Liberal'),
   },
 
   'reformed-church-of-satan': {
-    forbidAttack: (_s, self, _attacker, target, type) => (target === self && type === 'control' ? 'The Reformed Church of Satan can only be attacked to destroy it.' : null),
+    // Straight Groups may only attack it to destroy it (nor help an Attack to Control on it).
+    forbidAttack: (s, self, attacker, target, type) => (target === self && type === 'control' && !!attacker && isGroup(s, attacker) && hasAlign(s, attacker, 'Straight')
+      ? 'Straight Groups can only attack the Reformed Church of Satan to destroy it.' : null),
+    forbidJoin: (s, self, ctx, group, as) => as === 'aid' && ctx.target === self && ctx.type === 'control' && isGroup(s, group) && hasAlign(s, group, 'Straight'),
   },
 
   'rosicrucians': {
