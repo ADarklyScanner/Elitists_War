@@ -379,3 +379,7 @@ p { margin: 0; }
 @media (max-width: 480px) { .deck { width: 44px; height: 62px; } .decks { left: 6px; gap: 28px; top: 42%; } .deck-count { min-width: 18px; height: 18px; line-height: 16px; font-size: 10px; } }
 
 .sheet { z-index: 3; }
+.card-legend { display: flex; gap: 18px; align-items: flex-start; flex-wrap: wrap; }
+.card-legend ul { flex: 1; min-width: 220px; margin: 0; }
+.legend-card { position: relative; width: 84px; height: 118px; flex: none; margin: 12px 8px; cursor: default; }
+.vs .info-btn { margin-left: 4px; }

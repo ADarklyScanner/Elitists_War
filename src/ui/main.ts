@@ -309,6 +309,12 @@ const gnext = (a: Area) => (G.next === a ? 'g-next' : '');
 function render() {
   if (!ui.game) { renderStart(); return; }
   ensureLayout(ui.game); // a game saved before cards had real shapes
+  // A brand-new player in Tutorial mode sees the rules once, at the start of their first game.
+  if (tutorial() && !ui.showRules) {
+    let seen = true;
+    try { seen = localStorage.getItem('elitists-war.intro') === 'seen'; if (!seen) localStorage.setItem('elitists-war.intro', 'seen'); } catch { /* storage unavailable */ }
+    if (!seen) ui.showRules = 'goal';
+  }
   G = computeGuide(ui.game);
   const s = ui.game;
   noticeRolls(s);
@@ -612,7 +618,7 @@ function tableCard(s: GameState, iid: string): string {
   const p = power(s, iid), g = globalPower(s, iid);
   const partial = !ill && !isImplemented(d.id) && (GROUP_ABILITIES[d.id]?.length ?? 0) > 0;
   return `
-    <button class="card ${ill ? 'ill' : ''} ${c.devastated ? 'devastated' : ''} ${highlightFor(s, iid)} ${gcls(iid)}" data-card="${iid}" title="${esc(d.name)}">
+    <button class="card ${ill ? 'ill' : ''} ${c.devastated ? 'devastated' : ''} ${highlightFor(s, iid)} ${gcls(iid)}" data-card="${iid}" title="${esc(`${d.name}: Power ${p}${ill ? '' : `, Global Power ${g}, Resistance ${resistance(s, iid)}`}`)}">
       ${arrows}
       <span class="name">${esc(d.name)}</span>
       <span class="aligns">${alignments(s, iid).map(chip).join('')}</span>
@@ -665,21 +671,36 @@ function rulesHtml(s: GameState): string {
   const two = s.players.length === 2;
   const sec = (id: string, title: string, body: string) => `<section id="rule-${id}"><h3>${title}</h3>${body}</section>`;
   return `<h2>How to play</h2>
-  <nav class="rule-nav">${[['goal', 'Your goal'], ['turn', 'A turn'], ['tokens', 'Actions'], ['attack', 'Attacks'], ['roll', 'The roll'], ['help', 'Helping'], ['plots', 'Plots'], ['more', 'More rules']].map(([id, t]) => `<button data-rules="${id}">${t}</button>`).join('')}<button class="close-rules" data-rules="" aria-label="Close rules">✕</button></nav>
+  <nav class="rule-nav">${[['goal', 'Your goal'], ['card', 'Reading a card'], ['turn', 'A turn'], ['tokens', 'Actions'], ['attack', 'Attacks'], ['roll', 'The roll'], ['help', 'Helping'], ['plots', 'Plots'], ['more', 'More rules']].map(([id, t]) => `<button data-rules="${id}">${t}</button>`).join('')}<button class="close-rules" data-rules="" aria-label="Close rules">✕</button></nav>
   ${sec('goal', 'Your goal', `<p>You win by meeting a Goal when victory is checked, at the end of any turn (never in the first round). There are three ways:</p><ul>
     <li><b>Basic Goal:</b> control ${goalNeeded(s, ui.me)} Groups, counting your Illuminati. You have ${goalCount(s, ui.me)}.</li>
     <li><b>Your Illuminati's Special Goal</b> (${esc(ill.name)}): ${esc(ill.text.replace(/^Power [^.]+\.\s*/, ''))}</li>
     <li><b>A Goal card</b> in your hand${goals.length ? ` (you hold: ${esc(goals.join(', '))})` : ''}. You may hold only one Goal card${goalLimit(s, ui.me) > 1 ? ` (your Illuminati allows ${goalLimit(s, ui.me)})` : ''}.</li></ul>
     <p>Groups under a Devastated Place do not count. A player whose Illuminati has no Groups left after their third turn is out.</p>`)}
+  ${sec('card', 'Reading a card', `<div class="card-legend">
+      <div class="card legend-card" aria-label="Sample card"><i class="arr out top"></i><i class="arr out right"></i><i class="arr in bottom"></i>
+        <span class="name">Sample Group</span><span class="aligns">${['Violent', 'Criminal'].map(chip).join('')}</span>
+        <span class="stats"><span class="pw">6<small>/2</small></span><span class="rs">4</span></span><span class="token"></span></div>
+      <ul>
+        <li><b>Big gold number: Power.</b> What the Group adds when it attacks, aids or opposes, and what defends it against an Attack to Destroy.</li>
+        <li><b>Small number after the slash: Global Power.</b> What it adds when helping an attack it has no matching alignment for. No slash means 0.</li>
+        <li><b>Boxed number: Resistance.</b> What defends it against an Attack to Control.</li>
+        <li><b>Coloured tags: alignments</b> (Government, Violent, Weird…). They decide bonuses, and who may help or defend. Tap a card for its attributes (Media, Magic, Nation…) and ability.</li>
+        <li><b>Gold triangles: outgoing control arrows.</b> Each can hold one puppet. <b>Small grey notch: the incoming arrow</b>, which faces the card's master.</li>
+        <li><b>Gold dot: an Action token.</b> The Group can still act this turn.</li>
+      </ul></div>`)}
   ${sec('turn', 'A turn', `<ol><li><b>Start:</b> draw a Plot card, then a Group card, by tapping your decks (both draws are optional: you may skip them; computer players always draw). Then you may make <b>one automatic takeover</b>: put a Group (or Resource) from your hand into your Power Structure with no roll, on a free arrow. Then every Group you control gets its Action token.${two ? ' <i>Two-player rule: if you took a Group over this way, your Illuminati gets no token this turn.</i>' : ''}</li>
     <li><b>Main phase:</b> spend Action tokens: attack, move a Group, buy Plots, bring in a Resource, use card abilities. Anyone may answer with Plots and help at any time.</li>
     <li><b>End:</b> you say you are done; everyone gets a last chance to play cards, then victory is checked.</li></ol>`)}
-  ${sec('tokens', 'Action tokens', `<p>Each Group has one action per turn, shown by its token. Spending it lets the Group attack, aid, oppose, or pay for a card. Tokens come back at the start of your turn, so a Group that aided in a rival's turn may have none left for yours.</p>
+  ${sec('tokens', 'Action tokens', `<p>Each Group has one action per turn, shown by its token. Spending it lets the Group attack, aid, oppose, or pay for a card. Tokens come back at the start of your own turn. So a Group that acts in your turn has no token left to defend with during your rivals' turns, while helping or defending in a rival's turn costs you nothing next turn.</p>
     <p>Your <b>Illuminati</b>'s token also buys things: 1 Illuminati token (or 2 tokens from other Groups) buys a Plot card at any time; once per turn it can bring a Resource into play or draw a Group card.</p>`)}
   ${sec('attack', 'Attacks', `<p><b>Attack to Control</b> takes a Group from a rival (or from your own hand). The attacker needs an open outgoing arrow for the captured Group to hang from. Its strength is your Power minus the target's <b>Resistance</b>.</p>
     <p><b>Attack to Destroy</b> removes a Group from play. Strength is your Power minus the target's <b>Power</b>.</p>
     <p>Defense bonus by position: <b>+10</b> if the target hangs directly from its Illuminati, <b>+5</b> one step further, none beyond. Alignments matter: for control, <b>+4</b> for each alignment the attacker shares with the target and <b>−4</b> for each opposite pair; for destroy it is reversed. In an Attack to Control the target also gets <b>+4</b> Resistance for each alignment it shares with its master.</p>
-    <p><b>Instant attacks</b> are cards that attack by themselves: Disasters hit Places, Assassinations hit Personalities.</p>
+    <p>Only the Group <b>making</b> the attack gets alignment bonuses; Groups that help never do. Criminal has no opposite, and any two Fanatic Groups count as opposites.</p>
+    <p><b>Card bonuses:</b> an <b>"any attempt"</b> bonus helps every attack of that kind made by <i>any</i> of your Groups, even if the card with the bonus takes no part (but not another player's attack, even if you help). A <b>direct</b> bonus counts only when that Group makes the attack itself. A Group with both for the same attack uses the larger one; they don't add up.</p>
+    <p><b>Puppets:</b> capturing a Group brings its puppets (and theirs) along. Destroying a Group sends its puppets, without tokens, back to the hand of the player who controlled them.</p>
+    <p><b>Instant attacks</b> are cards that attack by themselves: Disasters hit Places, Assassinations hit Personalities. Nobody may aid or oppose them unless a card allows it, and most attack bonuses don't apply to them.</p>
     <p>Nobody can attack an Illuminati.${two ? ' Two-player rule: nobody may attack the other player until both have finished a full turn.' : ''}</p>`)}
   ${sec('roll', 'The roll', `<p>${rollHelp(7)}</p><p>Before the attacker rolls, every player may play Plots, aid, or oppose, back and forth, until nobody wants to add anything. Only then are the dice rolled.</p>`)}
   ${sec('help', 'Helping and defending', `<p>Any Group except the attacker may spend its token to <b>aid</b> (add its Power to the attack) or <b>oppose</b> (add its Power to the defense), from any player, even in someone else's turn.</p>
@@ -790,7 +811,7 @@ function attackPanel(s: GameState): string {
   const rolled = ctx.roll ? finalRoll(ctx) : undefined;
   return `
     <div class="attack">
-      <div class="vs"><b>${esc(who)}</b> <span class="muted">${ctx.instant ? 'strikes' : `attacks to ${ctx.type}`}</span> <b>${esc(cardName(s, ctx.target))}</b></div>
+      <div class="vs"><b>${esc(who)}</b> <span class="muted">${ctx.instant ? 'strikes' : `attacks to ${ctx.type}`}</span> <b>${esc(cardName(s, ctx.target))}</b> <button class="info-btn" data-rules="attack" aria-label="How attacks work" title="How attacks work">i</button></div>
       <div class="meter">
         <div><span class="big">${st.attack}</span><span class="muted">attack</span></div>
         <div class="minus">−</div>
