@@ -33,7 +33,7 @@ describe('R025 setup', () => {
       expect(inPlay.length).toBeGreaterThanOrEqual(2); // Illuminati + lead (the first player has also drawn for turn 1)
       if (s.players[s.active].id !== p.id) {
         expect(p.hand.filter((i) => CARDS[s.cards[i].cardId].type === 'Plot').length).toBe(3);
-        expect(p.hand.filter((i) => CARDS[s.cards[i].cardId].type === 'Group').length).toBe(6);
+        expect(p.hand.filter((i) => CARDS[s.cards[i].cardId].type !== 'Plot').length).toBe(6); // Groups and Resources both come from the Group deck
       }
     }
   });

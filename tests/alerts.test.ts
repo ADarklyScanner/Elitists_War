@@ -45,7 +45,9 @@ describe('text alerts', () => {
         if (a.kind === 'yourTurn') turnAlerts++;
       }
     }
-    expect(turnAlerts).toBeGreaterThan(2);
+    // Someone is told whenever a turn passes to them, unless they made the move that passed it.
+    expect(turnAlerts).toBeGreaterThan(0);
+    expect(turnAlerts).toBeLessThanOrEqual((await store.get(id))!.state!.turn);
     // Far fewer alerts than moves: reaction windows alone never text anyone.
     expect(r.sent.length).toBeLessThan(120);
   });
