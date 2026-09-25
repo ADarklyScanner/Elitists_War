@@ -7,6 +7,7 @@ import {
   plotOptions, plotsInHand, handLimit, power, resistance, globalPower, alignments, randomDeck,
   responseOptions, structureCards, subtree, takeoverOptions, tokenBarred, waitingFor, PLOTS, NWO_EFFECTS,
   describePlay, player, leadOptions, type AiLevel, actionCancelled, actionSummary, abilitiesOf, abilityOptions, resourcesOf, canEnterPlay, HOOKS, goalsInHand, goalLimit,
+  declareOptions, victoryReminder,
 } from '../engine';
 import { attachRect, rectOf, ensureLayout, type Rect } from '../engine/geometry';
 import { chooseAction, successChance } from '../ai/ai';
@@ -70,6 +71,8 @@ const HELP_TITLE: Record<HelpMode, string> = {
 };
 
 const ui: Ui = { game: null, me: 'p1', sel: { kind: 'none' }, autoPass: true, thinking: false, help: loadHelpPref(), guide: true };
+/** The game version at which the victory reminder last stopped you ending your turn or passing. */
+let remindedAt = -1;
 ui.guide = ui.help !== 'off';
 
 /** New players start in Tutorial; someone who had turned the old Guide on/off keeps Guided/Off. */
@@ -191,7 +194,9 @@ function schedule() {
   // Nothing you could do in this window? Pass for you (can be turned off).
   // Your own attack always waits for you to press "Roll the dice".
   const myRoll = s.window?.kind === 'attack' && s.attack?.attackerPlayer === ui.me;
-  if (ui.autoPass && s.window && waiting.includes(ui.me) && !hasResponse(s, ui.me) && !myRoll) {
+  // A rival claiming victory is always shown to you, even when you have nothing to answer it with.
+  const rivalClaim = s.window?.kind === 'endOfTurn' && !!s.claims?.some((c) => c.player !== ui.me);
+  if (ui.autoPass && s.window && waiting.includes(ui.me) && !hasResponse(s, ui.me) && !myRoll && !rivalClaim) {
     timer = window.setTimeout(() => act({ type: 'pass' }), 250);
   }
 }
@@ -367,7 +372,7 @@ function newGame(illuminati: string, quick: boolean) {
       { id: 'p1', name: 'You', isAI: false, deck: randomDeck(seed, illuminati) },
       ...bots.map((b, i) => ({ id: `p${i + 2}`, name: b.name, isAI: true, aiLevel: b.level, aiStyle: b.style, aiStyleData: b.data, deck: randomDeck(seed + i + 1, ills[i]) })),
     ],
-    settings: { houseRules: quick ? ['quickGame'] : [] },
+    settings: { houseRules: quick ? ['quickGame'] : [], victoryReminder: ui.help !== 'off' },
     chooseLeads: true,
   });
   ui.sel = { kind: 'none' };
@@ -970,11 +975,12 @@ function rulesHtml(s: GameState): string {
   const sec = (id: string, title: string, body: string) => `<section id="rule-${id}"><h3>${title}</h3>${body}</section>`;
   return `<h2>How to play</h2>
   <nav class="rule-nav">${[['goal', 'Your goal'], ['card', 'Reading a card'], ['turn', 'A turn'], ['tokens', 'Actions'], ['attack', 'Attacks'], ['roll', 'The roll'], ['help', 'Helping'], ['plots', 'Plots'], ['more', 'More rules'], ...(s.players.some((p) => p.isAI && p.aiStyle) ? [['foes', 'Opponents']] : [])].map(([id, t]) => `<button data-rules="${id}">${t}</button>`).join('')}<button class="close-rules" data-rules="" aria-label="Close rules">✕</button></nav>
-  ${sec('goal', 'Your goal', `<p>You win by meeting a Goal when victory is checked, at the end of any turn (never in the first round). There are three ways:</p><ul>
+  ${sec('goal', 'Your goal', `<p>You win by <b>declaring victory</b> when you meet a Goal at the end of a turn (yours or anyone's; never in the first round), and then surviving your rivals' attempts to stop you. Nobody wins without declaring. There are three kinds of Goal:</p><ul>
     <li><b>Basic Goal:</b> control ${goalNeeded(s, ui.me)} Groups, counting your Illuminati. You have ${goalCount(s, ui.me)}.</li>
     <li><b>Your Illuminati's Special Goal</b> (${esc(ill.name)}): ${esc(ill.text.replace(/^Power [^.]+\.\s*/, ''))}</li>
     <li><b>A Goal card</b> in your hand${goals.length ? ` (you hold: ${esc(goals.join(', '))})` : ''}. You may hold only one Goal card${goalLimit(s, ui.me) > 1 ? ` (your Illuminati allows ${goalLimit(s, ui.me)})` : ''}.</li></ul>
-    <p>Groups under a Devastated Place do not count. A player whose Illuminati has no Groups left after their third turn is out.</p>`)}
+    <p>Groups under a Devastated Place do not count. A player whose Illuminati has no Groups left after their third turn is out, and if all your rivals are out, you win at once.</p>
+    <p><b>Declaring:</b> press <i>End turn and declare victory</i> on your turn, or <i>Declare victory</i> while a turn is ending. A Goal card is shown to everyone; nobody can touch it while the claim is decided. Every rival may then use Plots and abilities (including Assassinations and Disasters) to stop you. If your Goal is still met when they all pass, you win; if two players' claims both hold, they share the win. If you are stopped, the turn ends and a Goal card you showed stays exposed.</p>`)}
   ${sec('card', 'Reading a card', `<div class="card-legend">
       <div class="card legend-card" aria-label="Sample card"><i class="arr out top"></i><i class="arr out right"></i><i class="arr in bottom"></i>
         <span class="name">Sample Group</span><span class="aligns">${['Violent', 'Criminal'].map(chip).join('')}</span>
@@ -989,7 +995,7 @@ function rulesHtml(s: GameState): string {
       </ul></div>`)}
   ${sec('turn', 'A turn', `<ol><li><b>Start:</b> draw a Plot card, then a Group card, by tapping your decks (both draws are optional: you may skip them; computer players always draw). Then you may make <b>one automatic takeover</b>: put a Group (or Resource) from your hand into your Power Structure with no roll, on a free arrow. Then every Group you control gets its Action token.${two ? ' <i>Two-player rule: if you took a Group over this way, your Illuminati gets no token this turn.</i>' : ''}</li>
     <li><b>Main phase:</b> spend Action tokens: attack, move a Group, buy Plots, bring in a Resource, use card abilities. Anyone may answer with Plots and help at any time.</li>
-    <li><b>End:</b> you say you are done; everyone gets a last chance to play cards, then victory is checked.</li></ol>`)}
+    <li><b>End:</b> you say you are done. Anyone who meets a Goal may now declare victory; everyone gets a last chance to play cards, and to stop any claim.</li></ol>`)}
   ${sec('tokens', 'Action tokens', `<p>Each Group has one action per turn, shown by its token. Spending it lets the Group attack, aid, oppose, or pay for a card. Tokens come back at the start of your own turn. So a Group that acts in your turn has no token left to defend with during your rivals' turns, while helping or defending in a rival's turn costs you nothing next turn.</p>
     <p>Your <b>Illuminati</b>'s token also buys things: 1 Illuminati token (or 2 tokens from other Groups) buys a Plot card at any time; once per turn it can bring a Resource into play or draw a Group card.</p>`)}
   ${sec('attack', 'Attacks', `<p><b>Attack to Control</b> takes a Group from a rival (or from your own hand). The attacker needs an open outgoing arrow for the captured Group to hang from. Its strength is your Power minus the target's <b>Resistance</b>.</p>
@@ -1023,7 +1029,7 @@ function rulesHtml(s: GameState): string {
 
 /** When a Plot may be played, in the words of the rules. */
 function plotTiming(id: string, subtype: string, short = false): string {
-  if (subtype === 'Goal') return short ? '' : 'Goal card: you win if you meet it when victory is checked at the end of a turn (hold at most one).';
+  if (subtype === 'Goal') return short ? '' : 'Goal card: not played. When you meet it at the end of a turn, declare victory and show it (hold at most one).';
   if (subtype === 'NWO') return short ? '' : 'New World Order: play any time except during an Instant or Privileged attack; it affects everyone until replaced by another of its colour.';
   const t = PLOTS[id]?.timing ?? [];
   const words: Record<string, [string, string]> = {
@@ -1078,7 +1084,7 @@ function whyNot(s: GameState, iid: string, can?: { control: boolean; destroy: bo
       return undefined;
     }
     if (d.type === 'Plot') {
-      if (!PLOTS[d.id]) return d.subtype === 'Goal' ? 'Goal cards are not played: you win if you meet the Goal when victory is checked at the end of a turn.' : 'This card is not in this version yet.';
+      if (!PLOTS[d.id]) return d.subtype === 'Goal' ? 'Goal cards are not played: when you meet the Goal at the end of a turn, declare victory with it.' : 'This card is not in this version yet.';
       if (plotOptions(s, ui.me, iid).length) return undefined;
       const t = PLOTS[d.id].timing;
       if (!t.includes('anytime') && !t.includes('nwo')) return `${plotTiming(d.id, d.subtype)} That moment is not now.`;
@@ -1139,7 +1145,7 @@ function renderConsole(s: GameState): string {
   if (s.phase === 'gameOver') {
     const won = s.winners?.includes(ui.me);
     body = `<h2 class="${won ? 'ok' : 'bad'}">${won ? (s.winners!.length > 1 ? 'Shared victory.' : 'You win.') : s.winners?.length ? `${esc(s.winners.map((w) => player(s, w).name).join(' and '))} ${s.winners.length > 1 ? 'win' : 'wins'}.` : 'Nobody wins.'}</h2>
-      <p>${esc(s.log.filter((l) => / wins/.test(l.text) && !/roll to go first/.test(l.text)).map((l) => youText(l.text)).join(' '))}</p>
+      <p>${esc(s.log.filter((l) => (/ wins/.test(l.text) || /share the victory/.test(l.text)) && !/roll to go first/.test(l.text)).map((l) => youText(l.text)).join(' '))}</p>
       ${s.players.some((p) => p.isAI && p.aiStyle) ? `<h3>How to beat them next time</h3><ul class="tells">${s.players.filter((p) => p.isAI && styleById(p.aiStyle)).map((p) => {
         const st = styleById(p.aiStyle)!;
         return `<li><b>${esc(p.name)}</b> (${esc(st.style)}): ${esc(st.tell)}</li>`;
@@ -1209,17 +1215,19 @@ function renderConsole(s: GameState): string {
     const evText = ev ? (evTexts[ev.type]?.() ?? 'Something happened.') : '';
     const head = s.window.kind === 'event' ? `<p>${evText} You have a card that can respond.</p>`
       : s.window.kind === 'plot' ? `<p><b>${esc(cardName(s, s.window.plot!.iid))}</b> was played. You can counter it.</p>`
+      : s.window.kind === 'endOfTurn' && s.claims?.length ? ''
       : s.window.kind === 'endOfTurn' ? '<p>The turn is ending. Last chance to play a card.</p>'
       : s.window.kind === 'roll' ? '<p>The dice are down. Cards that change rolls can be played now.</p>' : '';
-    body = `${s.attack ? attackPanel(s) : ''}${head}
+    const rivalClaim = s.window.kind === 'endOfTurn' && !!s.claims?.some((c) => c.player !== ui.me);
+    body = `${s.claims?.length ? claimPanel(s, opts.length > 0) : ''}${s.attack ? attackPanel(s) : ''}${head}${declarePanel(s, false)}
       <div class="opts">${opts.map((o, i) => `<button data-opt="${i}">${esc(o.label)}</button>`).join('')}</div>
-      <div class="btns"><button class="primary" data-act="pass">${s.window.kind === 'attack' && s.attack?.attackerPlayer === ui.me ? '🎲 Roll the dice' : 'Pass'}</button>${s.window.kind === 'attack' && s.attack?.attackerPlayer === ui.me && !s.attack.instant && !s.attack.plays.some((pp) => pp.player === ui.me) ? '<button data-act="callOff">Call off the attack</button>' : ''}</div>`;
+      <div class="btns"><button class="primary" data-act="pass">${s.window.kind === 'attack' && s.attack?.attackerPlayer === ui.me ? '🎲 Roll the dice' : rivalClaim ? (opts.length ? 'Pass: let the claim stand' : 'Let the claim stand') : 'Pass'}</button>${s.window.kind === 'attack' && s.attack?.attackerPlayer === ui.me && !s.attack.instant && !s.attack.plays.some((pp) => pp.player === ui.me) ? '<button data-act="callOff">Call off the attack</button>' : ''}</div>`;
     (window as unknown as { __opts: typeof opts }).__opts = opts;
   } else if (idle(s)) {
     body = renderMainConsole(s);
   } else {
     const names = waiting.map((id) => player(s, id).name).join(', ');
-    body = `${s.attack ? attackPanel(s) : ''}<p class="muted thinking">${online ? (online.busy ? 'Sending…' : `Waiting for ${esc(names)}. You'll see their move here as soon as it's made.`) : ui.thinking ? 'The Computer is thinking…' : 'Waiting…'}</p>`;
+    body = `${s.claims?.length && !s.attack ? claimPanel(s, false) : ''}${declarePanel(s, false)}${s.attack ? attackPanel(s) : ''}<p class="muted thinking">${online ? (online.busy ? 'Sending…' : `Waiting for ${esc(names)}. You'll see their move here as soon as it's made.`) : ui.thinking ? 'The Computer is thinking…' : 'Waiting…'}</p>`;
   }
   return `<div class="panel now">${err}${body}</div>`;
 }
@@ -1316,6 +1324,7 @@ function renderMainConsole(s: GameState): string {
   });
   (window as unknown as { __relief: typeof reliefs }).__relief = reliefs;
   return `<h2>Your turn</h2>
+    ${declarePanel(s, true)}
     <p>Tap one of your Groups with a <span class="token-inline"></span> token to attack or move it. Tap a Plot in your hand to play it.</p>
     <div class="btns">
       <button data-act="buy-ill" ${s.cards[ill].tokens && me.plotDeck.length ? '' : 'disabled'}>Buy a Plot (Illuminati token)</button>
@@ -1325,6 +1334,52 @@ function renderMainConsole(s: GameState): string {
     </div>
     ${reliefs.length ? `<div class="label">Relief for Devastated Places (needs 3× printed Power)</div><div class="opts">${reliefs.map((r, i) => `<button data-relief="${i}" ${r.ok ? '' : 'disabled'}>Relieve ${esc(cardName(s, r.place))} (needs ${r.need})${r.ok ? ` with ${r.pay.map((g) => esc(cardName(s, g))).join(', ')}` : ' — not enough Power with tokens'}</button>`).join('')}</div>` : ''}
     ${online ? '' : `<label class="toggle"><input type="checkbox" id="autopass" ${ui.autoPass ? 'checked' : ''}> Pass for me when I have no possible response</label>`}`;
+}
+
+/** Is the victory reminder on for you: the game's setting, or Tutorial/Guided help? */
+const remindOn = (s: GameState) => ui.help !== 'off' || !!s.settings.victoryReminder;
+
+/**
+ * With the reminder on, ending your turn or passing while you could declare victory stops once to
+ * tell you (tap again to go on without declaring). In strict play nothing warns you.
+ */
+function remindFirst(s: GameState | null): boolean {
+  if (!s || !victoryReminder(s, ui.me, remindOn(s)).length || remindedAt === s.version) return false;
+  remindedAt = s.version;
+  ui.error = 'You meet a Goal right now. Declare victory, or the chance passes: nobody wins without declaring. Tap again to go on without declaring.';
+  render();
+  return true;
+}
+
+/** "Declare victory" buttons, one per Goal you could claim now. `knock`: in your main phase, declaring also ends your turn. */
+function declarePanel(s: GameState, knock: boolean): string {
+  const opts = declareOptions(s, ui.me);
+  if (!opts.length) return '';
+  const remind = victoryReminder(s, ui.me, remindOn(s)).length > 0;
+  const lead = remind
+    ? `<p class="claim-remind"><b>You meet a Goal.</b> Declare victory${knock ? ' (this ends your turn)' : ''}: if you do not, you do not win.</p>`
+    : '';
+  const teach = tutorial()
+    ? `<p class="why">Declaring shows which Goal you have met${opts.some((o) => o.card) ? ' (a Goal card is shown to everyone)' : ''}. Every rival then gets a chance to stop you with Plots and abilities, including Instant attacks such as Assassinations and Disasters. If your Goal is still met when they have all passed, you win. If they stop you, the turn simply ends${opts.some((o) => o.card) ? ', and a Goal card you showed stays exposed in your hand' : ''}.</p>`
+    : '';
+  return `<div class="claim-box">${lead}<div class="opts">${opts.map((o) => `<button class="claim-btn" data-claim="${esc(o.id)}">${knock ? 'End turn and declare victory' : 'Declare victory'}: ${esc(o.label)}${o.why ? ` <span class="muted">(${esc(o.why)})</span>` : ''}</button>`).join('')}</div>${teach}</div>`;
+}
+
+/** The claims of victory waiting to be decided, as everyone sees them. */
+function claimPanel(s: GameState, canAnswer: boolean): string {
+  const claims = s.claims ?? [];
+  if (!claims.length) return '';
+  const mine = claims.find((c) => c.player === ui.me);
+  const rivals = claims.filter((c) => c.player !== ui.me);
+  const line = (c: { player: string; labels: string[] }) => `<li><b>${esc(player(s, c.player).name)}</b> is claiming victory with ${esc(c.labels.join(' and '))}.</li>`;
+  const ask = rivals.length
+    ? (canAnswer ? '<p><b>Respond?</b> Use a card below to stop the claim, or pass to let it stand.</p>' : '<p>You have nothing that can stop it right now.</p>')
+    : '<p>Your rivals are deciding whether they can stop you. You may answer anything they do.</p>';
+  const teach = tutorial()
+    ? `<p class="why">A victory is only won once every other player has had the chance to stop it. Plots and special abilities may be used now, and Instant attacks (Assassinations, Disasters) may strike a claimant's Groups. If the Goal is still met when everyone has passed, the claim wins${claims.length > 1 ? '; claims that all hold share the victory, except two factions of the same Illuminati, who cancel each other out' : ''}. If not, the turn ends and play goes on.</p>`
+    : '';
+  return `<div class="claim-banner" role="alert"><h2>${rivals.length ? (rivals.length > 1 ? 'Victory is being claimed' : `${esc(player(s, rivals[0].player).name)} is claiming victory`) : 'You have declared victory'}</h2>
+    <ul>${[...(mine ? [mine] : []), ...rivals].map((c) => c.player === ui.me ? `<li><b>You</b> are claiming victory with ${esc(c.labels.join(' and '))}.</li>` : line(c)).join('')}</ul>${ask}${teach}</div>`;
 }
 
 function abilityButtons(s: GameState, card: string): string {
@@ -1472,6 +1527,9 @@ function bind() {
       act({ type: 'move', group: sel.group, onto, side, payWith });
     } else if (sel.kind === 'confirm') { ui.sel = { ...sel, side }; render(); }
   }
+  app.querySelectorAll<HTMLElement>('[data-claim]').forEach((b) => b.onclick = () => {
+    act({ type: 'declareVictory', goal: b.dataset.claim! });
+  });
   app.querySelectorAll<HTMLElement>('[data-opt]').forEach((b) => b.onclick = () => {
     const o = (window as unknown as { __opts: { action: Action }[] }).__opts[Number(b.dataset.opt)];
     act(o.action);
@@ -1546,11 +1604,13 @@ function bind() {
         ui.help = HELP_MODES[(HELP_MODES.indexOf(ui.help) + 1) % HELP_MODES.length];
         ui.guide = ui.help !== 'off';
         try { localStorage.setItem('elitists-war.help', ui.help); } catch { /* storage unavailable */ }
+        // Tutorial and Guided remind you when you could declare victory; with help off you are on your own.
+        if (ui.game && !online) { ui.game.settings.victoryReminder = ui.help !== 'off'; saveGame(ui.game); }
         render(); break;
       case 'clearSlot': ui.slotChoice = undefined; render(); break;
       case 'skipTakeover': act({ type: 'skipTakeover' }); break;
-      case 'pass': act({ type: 'pass' }); break;
-      case 'endTurn': act({ type: 'endTurn' }); break;
+      case 'pass': if (!remindFirst(s)) act({ type: 'pass' }); break;
+      case 'endTurn': if (!remindFirst(s)) act({ type: 'endTurn' }); break;
       case 'discard': if (sel.kind === 'discard') act({ type: 'discard', cards: sel.cards }); break;
       case 'return': if (sel.kind === 'discard') act({ type: 'discard', cards: sel.cards, toDeck: true }); break;
       case 'callOff': act({ type: 'callOff' }); break;

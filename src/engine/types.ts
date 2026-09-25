@@ -224,6 +224,28 @@ export interface GameSettings {
   basicGoal: number;       // groups to control (incl. Illuminati)
   responseHours: number;   // async deadline for response windows
   houseRules: string[];
+  /**
+   * Remind a player who could declare victory that he may (a learner's aid; the interface turns it on
+   * in its Tutorial and Guided help modes). Off by default: strict play means you must spot your own
+   * win and declare it, and nobody wins without declaring.
+   */
+  victoryReminder?: boolean;
+}
+
+/** One Goal a player can claim: the Basic Goal, his Illuminati's Special Goal, or a Goal card in hand. */
+export interface GoalOption {
+  id: string;              // 'basic', 'special', or the Goal card's instance id
+  label: string;           // plain words: which Goal it is
+  met: boolean;            // is it met right now?
+  why?: string;            // when met: what meets it
+  card?: string;           // a Goal card's instance id
+}
+
+/** A declared victory, waiting while the other players try to stop it (R016). */
+export interface VictoryClaim {
+  player: string;
+  goals: string[];         // GoalOption ids declared (a Goal card is shown: exposed)
+  labels: string[];        // what was said when declaring, for everyone to read
 }
 
 export interface GameState {
@@ -248,6 +270,7 @@ export interface GameState {
     freeMovesOnce?: boolean;    // the free moves are one reorganization: they end at the player's next other step (Elders of Zion)
     noDraws?: boolean;          // skip this turn's normal draws (An Offer You Can't Refuse)
     redoTakeover?: boolean;     // the automatic takeover was undone: offer it again (Botched Contact)
+    endedAtOnce?: boolean;      // a card ended the turn at once: nobody can win at the end of it (R016)
   };
   events?: GameEvent[];       // queued events waiting for their response window
   continuation?: string;      // what to do when the current event window closes
@@ -262,6 +285,8 @@ export interface GameState {
   firstPlayer: number;      // index of the player who went first (rounds start with them)
   log: LogEntry[];
   winners?: string[];
+  /** Victories declared at the end of this turn, open to responses until everyone passes (R016). */
+  claims?: VictoryClaim[];
   setup?: { picks: Record<string, string | undefined>; banned: string[]; setAside: string[] };
   /** How each person has played this game so far (counters kept by src/ai/profile.ts; people only). */
   habits?: Record<string, Record<string, unknown>>;
@@ -299,6 +324,7 @@ export type Action =
   | { type: 'oppose'; group: string; useGlobal?: boolean }
   | { type: 'pass' }
   | { type: 'endTurn' }
+  | { type: 'declareVictory'; goal: string }  // knock (in your main phase) or at the end of a turn: claim a Goal
   | { type: 'discard'; cards: string[]; toDeck?: boolean }
   | { type: 'chooseLead'; card: string }
   | { type: 'choose'; ids: string[] }

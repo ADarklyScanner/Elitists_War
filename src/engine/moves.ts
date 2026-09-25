@@ -7,7 +7,7 @@ import { openArrows, structureCards } from './geometry';
 import { alignments, attributes, power } from './stats';
 import { PLOTS } from './plotTypes';
 import { HOOKS } from './hooks';
-import { announcedAction, announcedActors, checkAbility, disasterTarget, resourcesOf, MARCH_ON_WASHINGTON } from './game';
+import { announcedAction, announcedActors, checkAbility, declareOptions, disasterTarget, resourcesOf, MARCH_ON_WASHINGTON } from './game';
 
 const ALIGNMENTS: Alignment[] = ['Government', 'Corporate', 'Liberal', 'Conservative', 'Peaceful', 'Violent', 'Straight', 'Weird', 'Criminal', 'Fanatic'];
 
@@ -222,6 +222,7 @@ export function abilityOptions(s: GameState, pl: string, card: string): MoveOpti
   return out;
 }
 
+/** Is there anything this player could do in the current window: respond, or declare victory? */
 export function hasResponse(s: GameState, pl: string): boolean {
-  return responseOptions(s, pl).length > 0;
+  return responseOptions(s, pl).length > 0 || (!!s.window && declareOptions(s, pl).length > 0);
 }

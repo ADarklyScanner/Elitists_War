@@ -1,7 +1,7 @@
 // The Elitists War rules engine. Pure state transitions: applyAction(state, player, action)
 // validates the move against the rules, mutates a copy of the state and returns it.
 import type {
-  Action, Alignment, AttackCtx, CardInstance, Contribution, GameSettings, GameState, PlayedPlot,
+  Action, Alignment, AttackCtx, CardInstance, Contribution, GameSettings, GameState, GoalOption, PlayedPlot,
   PlayerState, PlotPlay, Prompt, Side,
 } from './types';
 import { RuleError } from './types';
@@ -511,6 +511,7 @@ function forbiddenUse(s: GameState, playerId: string, card: string, target: stri
     if (why) return why;
   }
   if (target && resourceProtected(s, target) && s.cards[target].controller !== playerId) return `${cardName(s, target)} is protected and cannot be affected.`;
+  if (shownGoal(s, target)) return `${cardName(s, target!)} is shown for a victory claim: nothing can affect it until the claim is decided.`;
   if (target && s.cards[target]?.hiddenUnder && s.cards[target].controller !== playerId) return 'That Resource is face down under Warehouse 23: only its controller can reach it.';
   return null;
 }
@@ -811,9 +812,9 @@ function finishTurn(s: GameState) {
   s.prompt = undefined;
   const p = activePlayer(s);
   if (!s.turnFlags.extraTurn) p.turnsTaken++;
-  // Victory is checked before "until end of turn" changes expire: temporary changes count for
-  // a declaration made at the end of that turn (R016).
-  checkVictory(s);
+  // Claims were decided in the end-of-turn window, before "until end of turn" changes expire:
+  // a temporary change helps only a claim made while it lasts, at the close of this same turn (R016).
+  s.claims = undefined;
   for (const c of Object.values(s.cards)) c.mods = c.mods.filter((m) => m.until !== 'endOfTurn');
   if (isOver(s)) return;
   checkElimination(s);
@@ -877,54 +878,198 @@ export function goalNeeded(s: GameState, playerId: string): number {
   return n;
 }
 
+/** The first Goal this player meets right now, in words (null if none). Meeting a Goal is not winning: he must declare it. */
 export function meetsGoal(s: GameState, playerId: string): string | null {
+  return goalOptions(s, playerId).find((o) => o.met)?.why ?? null;
+}
+
+/** Plain words for an Illuminati's self-contained Special Goal. */
+const SPECIAL_GOAL_TEXT: Record<string, (v: number) => string> = {
+  totalPower: (v) => `Power totalling ${v} in your Power Structure`,
+  bermuda: (v) => `every alignment in your Power Structure and Power totalling ${v}`,
+  destroyCount: (v) => `${v} Groups destroyed`,
+  peacefulPower: (v) => `${v} Power of Peaceful Groups in play (anyone's)`,
+};
+
+/**
+ * Every Goal this player could claim, and whether each is met now (R016): the Basic Goal (as his
+ * Illuminati and Goal cards may modify it), each Goal card in hand, and his Illuminati's Special
+ * Goal. `meetsGoal` reports the first one met, in this order.
+ */
+export function goalOptions(s: GameState, playerId: string): GoalOption[] {
   // Cards that change alignments "except for Goals" (Military-Industrial Complex) read this flag.
   const was = goalCheck.active;
   goalCheck.active = true;
-  try { return meetsGoalNow(s, playerId); } finally { goalCheck.active = was; }
+  try {
+    const out: GoalOption[] = [];
+    const need = goalNeeded(s, playerId);
+    const basic = goalCount(s, playerId) >= need;
+    out.push({ id: 'basic', label: `Basic Goal (${need} Groups)`, met: basic, why: basic ? 'controls enough Groups' : undefined });
+    for (const g of goalsInHand(s, playerId)) {
+      const why = GOALS[s.cards[g].cardId]?.(s, playerId) ?? null;
+      out.push({ id: g, card: g, label: `Goal card: ${cardName(s, g)}`, met: !!why, why: why ? `${cardName(s, g)}: ${why}` : undefined });
+    }
+    const special = specialGoal(s, playerId);
+    if (special) out.push(special);
+    return out;
+  } finally { goalCheck.active = was; }
 }
 
-function meetsGoalNow(s: GameState, playerId: string): string | null {
-  if (goalCount(s, playerId) >= goalNeeded(s, playerId)) return 'controls enough Groups';
-  // Goal cards held in hand (R016).
-  for (const g of goalsInHand(s, playerId)) {
-    const why = GOALS[s.cards[g].cardId]?.(s, playerId);
-    if (why) return `${cardName(s, g)}: ${why}`;
-  }
+function specialGoal(s: GameState, playerId: string): GoalOption | undefined {
   const ill = illuminatiOf(s, playerId);
+  const a = abilitiesOf(s, ill).find((x) => x.kind === 'specialGoal');
+  if (!a || a.kind !== 'specialGoal') return undefined;
+  const label = `Special Goal: ${SPECIAL_GOAL_TEXT[a.goal](a.value)}`;
   const mine = structureCards(s, playerId).filter((iid) => !tokenBarredForGoals(s, iid));
-  for (const a of abilitiesOf(s, ill)) {
-    if (a.kind !== 'specialGoal') continue;
-    const total = mine.reduce((n, iid) => n + power(s, iid, { goals: true }), 0);
-    if (a.goal === 'totalPower' && total >= a.value) return `reached ${a.value} total Power`;
-    if (a.goal === 'bermuda' && total >= a.value) {
-      const all = new Set(mine.flatMap((iid) => alignments(s, iid)));
-      if (['Government', 'Corporate', 'Liberal', 'Conservative', 'Peaceful', 'Violent', 'Straight', 'Weird', 'Criminal', 'Fanatic'].every((x) => all.has(x as never))) return 'controls every alignment with 35 Power';
-    }
-    if (a.goal === 'destroyCount' && player(s, playerId).destroyedCredit.length >= a.value) return `destroyed ${a.value} Groups`;
-    if (a.goal === 'peacefulPower') {
-      // Peaceful Groups in play count whoever controls them (Shangri-La).
-      const inPlay = livePlayers(s).flatMap((p) => structureCards(s, p.id)).filter((iid) => !tokenBarredForGoals(s, iid));
-      const peaceful = inPlay.filter((iid) => alignments(s, iid).includes('Peaceful')).reduce((n, iid) => n + power(s, iid, { goals: true }), 0);
-      if (peaceful >= a.value) return `has ${a.value} Peaceful Power`;
-    }
+  const total = mine.reduce((n, iid) => n + power(s, iid, { goals: true }), 0);
+  let why: string | null = null;
+  if (a.goal === 'totalPower' && total >= a.value) why = `reached ${a.value} total Power`;
+  if (a.goal === 'bermuda' && total >= a.value) {
+    const all = new Set(mine.flatMap((iid) => alignments(s, iid)));
+    if (['Government', 'Corporate', 'Liberal', 'Conservative', 'Peaceful', 'Violent', 'Straight', 'Weird', 'Criminal', 'Fanatic'].every((x) => all.has(x as never))) why = 'controls every alignment with 35 Power';
   }
+  if (a.goal === 'destroyCount' && player(s, playerId).destroyedCredit.length >= a.value) why = `destroyed ${a.value} Groups`;
+  if (a.goal === 'peacefulPower') {
+    // Peaceful Groups in play count whoever controls them (Shangri-La).
+    const inPlay = livePlayers(s).flatMap((p) => structureCards(s, p.id)).filter((iid) => !tokenBarredForGoals(s, iid));
+    const peaceful = inPlay.filter((iid) => alignments(s, iid).includes('Peaceful')).reduce((n, iid) => n + power(s, iid, { goals: true }), 0);
+    if (peaceful >= a.value) why = `has ${a.value} Peaceful Power`;
+  }
+  return { id: 'special', label, met: !!why, why: why ?? undefined };
+}
+
+/**
+ * Why this player may not declare victory at this moment (null if he may). Victory is declared
+ * after the player whose turn it is knocks: by him as he knocks (in his main phase, with nothing
+ * else under way), or by anyone while the end-of-turn window is open. Never in the first round, and
+ * never at the end of a turn a card cut short (R016).
+ */
+export function declareBlocked(s: GameState, playerId: string): string | null {
+  if (s.phase === 'gameOver') return 'The game is over.';
+  const p = s.players.find((x) => x.id === playerId);
+  if (!p || p.eliminated) return 'You are out of the game.';
+  if (s.round === 1) return 'Victory cannot be claimed in round 1. The earliest claim comes when the first player finishes his second turn.';
+  if (s.turnFlags.endedAtOnce) return 'This turn was cut short, so nobody can win at the end of it.';
+  const knocking = s.phase === 'main' && activePlayer(s).id === playerId && !s.window && !s.attack && !s.prompt;
+  const endWindow = s.phase === 'endOfTurn' && s.window?.kind === 'endOfTurn' && !s.attack && !s.prompt;
+  if (!knocking && !endWindow) return 'Victory can only be declared at the end of a turn, after the player whose turn it is has finished.';
   return null;
 }
 
-function checkVictory(s: GameState) {
-  if (s.round === 1) return; // no one can win in the first round (R017)
-  let winners = livePlayers(s).filter((p) => meetsGoal(s, p.id));
-  // Two factions of the same Illuminati can never share a win (R044): both are knocked out of the claim.
-  const ill = (pl: PlayerState) => s.cards[pl.illuminati].cardId;
-  const shangri = winners.every((w) => ill(w) === 'shangri-la' && meetsGoal(s, w.id)?.includes('Peaceful'));
-  if (!shangri) winners = winners.filter((w) => winners.filter((x) => ill(x) === ill(w)).length === 1);
-  const alive = livePlayers(s);
-  if (alive.length === 1) winners.splice(0, winners.length, alive[0]);
-  if (winners.length) {
-    s.phase = 'gameOver';
-    s.winners = winners.map((w) => w.id);
-    for (const w of winners) log(s, `${w.name} wins: ${meetsGoal(s, w.id) ?? 'last player standing'}!`, w.id);
+/** The Goals this player could declare victory with right now (met, legal timing, not already declared). */
+export function declareOptions(s: GameState, playerId: string): GoalOption[] {
+  if (declareBlocked(s, playerId)) return [];
+  const claimed = s.claims?.find((c) => c.player === playerId)?.goals ?? [];
+  return goalOptions(s, playerId).filter((o) => o.met && !claimed.includes(o.id));
+}
+
+/**
+ * A learner's reminder: the Goals this player could declare with now, but only when reminding is on
+ * (the game's `victoryReminder` setting, or the caller's own help setting). Off by default: in strict
+ * play nobody reminds you.
+ */
+export function victoryReminder(s: GameState, playerId: string, remind = !!s.settings.victoryReminder): GoalOption[] {
+  return remind ? declareOptions(s, playerId) : [];
+}
+
+/** A Goal card shown for a victory claim still being decided: nobody may steal, cancel or affect it (R016). */
+export function shownGoal(s: GameState, iid: string | undefined): boolean {
+  return !!iid && !!s.claims?.some((c) => c.goals.includes(iid));
+}
+
+/** The active player knocks: his turn is over and the end-of-turn window opens (R001 steps 6-7). */
+function knock(s: GameState, p: PlayerState) {
+  s.phase = 'endOfTurn';
+  log(s, `${p.name} ends the turn.`, p.id);
+  discardFailedTakeovers(s);
+  openWindow(s, 'endOfTurn');
+  s.window!.passed = [p.id];
+}
+
+function declareVictory(s: GameState, p: PlayerState, goal: string) {
+  const why = declareBlocked(s, p.id);
+  if (why) throw new RuleError(why);
+  const opt = goalOptions(s, p.id).find((o) => o.id === goal);
+  if (!opt) throw new RuleError('That is not one of your Goals.');
+  const claim = s.claims?.find((c) => c.player === p.id);
+  if (claim?.goals.includes(opt.id)) throw new RuleError('You have already declared victory with that Goal.');
+  // You can never announce a play that is illegal at the moment you make it (R010).
+  if (!opt.met) throw new RuleError(`You do not meet this Goal right now (${opt.label}), so you cannot declare victory with it.`);
+  if (s.phase === 'main') knock(s, p);
+  // A Goal card is shown to prove you hold it: it is not played, and it stays exposed if the claim fails.
+  if (opt.card) exposeCards(s, [opt.card]);
+  if (claim) { claim.goals.push(opt.id); claim.labels.push(opt.label); }
+  else (s.claims ??= []).push({ player: p.id, goals: [opt.id], labels: [opt.label] });
+  log(s, `${p.name} declares victory: ${opt.label}${opt.card ? ' (shows the card)' : ''}. Everyone else may now try to stop it.`, p.id);
+  // Everyone else gets a chance to respond: the claim stands only if they all pass.
+  s.window!.passed = [p.id];
+}
+
+/**
+ * Everyone has passed on the declared victories: each claim holds if its Goal is still met. Claims
+ * that hold share the win, except factions of the same Illuminati, who cancel each other out
+ * (unless they are Shangri-La winning with its Special Goal). A winner shows all his Plots to prove
+ * he held no excess Goal cards; a failed claim's Goal card stays in his hand, exposed (R016, R044).
+ */
+function resolveClaims(s: GameState) {
+  const claims = s.claims ?? [];
+  s.claims = undefined;
+  const ill = (id: string) => s.cards[player(s, id).illuminati].cardId;
+  const held = claims.filter((c) => !player(s, c.player).eliminated)
+    .map((c) => ({ c, met: goalOptions(s, c.player).filter((o) => o.met && c.goals.includes(o.id)) }))
+    .filter((x) => x.met.length);
+  const clash: string[] = [];
+  let winners = held.filter((w) => {
+    const same = held.filter((x) => ill(x.c.player) === ill(w.c.player));
+    if (same.length === 1) return true;
+    if (ill(w.c.player) === 'shangri-la' && same.every((x) => x.met.some((o) => o.id === 'special'))) return true;
+    clash.push(w.c.player);
+    return false;
+  });
+  // Winners show all their Plots: holding more Goal cards than allowed puts a player out of the game.
+  for (const w of [...winners]) {
+    const p = player(s, w.c.player);
+    const plots = plotsInHand(s, p.id);
+    log(s, `${p.name} shows all Plots in hand: ${plots.map((c) => cardName(s, c)).join(', ') || 'none'}.`, p.id);
+    if (goalsInHand(s, p.id).length > goalLimit(s, p.id)) {
+      log(s, `${p.name} holds more Goal cards than allowed and is out of the game.`, p.id);
+      eliminate(s, p);
+      winners = winners.filter((x) => x !== w);
+    }
+  }
+  for (const c of claims) {
+    if (winners.some((w) => w.c === c)) continue;
+    const p = player(s, c.player);
+    if (p.eliminated) continue;
+    const reason = clash.includes(c.player) ? 'another faction of the same Illuminati also met its Goal, and factions cannot share a victory' : 'the Goal is no longer met';
+    log(s, `${p.name}'s claim of victory fails: ${reason}.`, p.id);
+    for (const g of c.goals) if (s.cards[g] && p.hand.includes(g)) log(s, `${cardName(s, g)} goes back into ${p.name}'s hand, exposed.`, p.id);
+  }
+  if (!winners.length) return;
+  s.phase = 'gameOver';
+  s.winners = winners.map((w) => w.c.player);
+  s.window = undefined; s.attack = undefined; s.prompt = undefined;
+  for (const w of winners) log(s, `${player(s, w.c.player).name} wins: ${w.met[0].why}!`, w.c.player);
+  if (winners.length > 1) log(s, `${winners.map((w) => player(s, w.c.player).name).join(' and ')} share the victory.`);
+}
+
+/** Take a player out of the game: his hand and decks leave play, and his Resources go (R049, R044). */
+function eliminate(s: GameState, p: PlayerState) {
+  p.eliminated = true;
+  p.eliminatedBy = p.lastPuppetTakenBy;
+  // His hand and decks leave the game.
+  for (const iid of [...p.hand, ...p.plotDeck, ...p.groupDeck]) s.cards[iid].zone = 'removed';
+  p.hand = []; p.plotDeck = []; p.groupDeck = [];
+  // His Resources leave play too, unless the player who knocked him out is another faction of
+  // the same Illuminati: that player takes them all (R044, R049).
+  const heir = p.eliminatedBy && !player(s, p.eliminatedBy).eliminated && s.cards[player(s, p.eliminatedBy).illuminati].cardId === s.cards[p.illuminati].cardId
+    ? player(s, p.eliminatedBy) : undefined;
+  for (const r of resourcesOf(s, p.id)) {
+    const c = s.cards[r];
+    if (heir) { Object.assign(c, { controller: heir.id, linkedTo: heir.illuminati }); continue; }
+    Object.assign(c, { controller: undefined, linkedTo: undefined, hiddenUnder: undefined, tokens: 0 });
+    if (c.owner === p.id) c.zone = 'removed';
+    else { c.zone = 'discard'; player(s, c.owner).discard.push(r); }
   }
 }
 
@@ -932,27 +1077,12 @@ function checkVictory(s: GameState) {
 function checkElimination(s: GameState) {
   const activeId = activePlayer(s).id;
   // A Servants-of-Cthulhu-style player whose own last Group was his winning destruction is not
-  // knocked out: he wins at the end of this turn instead (R049).
+  // knocked out: he may declare victory at the end of this turn instead (R049).
   const winsByDestroying = (p: PlayerState) => p.id === activeId && abilitiesOf(s, p.illuminati)
     .some((a) => a.kind === 'specialGoal' && a.goal === 'destroyCount' && p.destroyedCredit.length >= a.value);
   for (const p of livePlayers(s)) {
     if (p.turnsTaken >= 3 && puppets(s, p.illuminati).length === 0 && !winsByDestroying(p)) {
-      p.eliminated = true;
-      p.eliminatedBy = p.lastPuppetTakenBy;
-      // His hand and decks leave the game.
-      for (const iid of [...p.hand, ...p.plotDeck, ...p.groupDeck]) s.cards[iid].zone = 'removed';
-      p.hand = []; p.plotDeck = []; p.groupDeck = [];
-      // His Resources leave play too, unless the player who knocked him out is another faction of
-      // the same Illuminati: that player takes them all (R044, R049).
-      const heir = p.eliminatedBy && !player(s, p.eliminatedBy).eliminated && s.cards[player(s, p.eliminatedBy).illuminati].cardId === s.cards[p.illuminati].cardId
-        ? player(s, p.eliminatedBy) : undefined;
-      for (const r of resourcesOf(s, p.id)) {
-        const c = s.cards[r];
-        if (heir) { Object.assign(c, { controller: heir.id, linkedTo: heir.illuminati }); continue; }
-        Object.assign(c, { controller: undefined, linkedTo: undefined, hiddenUnder: undefined, tokens: 0 });
-        if (c.owner === p.id) c.zone = 'removed';
-        else { c.zone = 'discard'; player(s, c.owner).discard.push(r); }
-      }
+      eliminate(s, p);
       log(s, `${p.name} has no Groups left and is eliminated.`, p.id);
     }
   }
@@ -966,8 +1096,10 @@ function checkElimination(s: GameState) {
     return;
   }
   if (player(s, activeId).eliminated) {
-    // The active player went out during his own turn: play passes on.
+    // The active player went out during his own turn: play passes on. Victories already declared
+    // at the end of that turn are decided first.
     s.attack = undefined; s.window = undefined; s.prompt = undefined;
+    if (s.claims?.length) { resolveClaims(s); if (isOver(s)) return; }
     advanceTurn(s);
   }
 }
@@ -2048,13 +2180,13 @@ export function applyAction(state: GameState, playerId: string, action: Action):
 
     case 'endTurn': {
       if (s.phase !== 'main' || activePlayer(s).id !== playerId || s.window || s.attack || s.prompt) throw new RuleError('You cannot end your turn right now.');
-      s.phase = 'endOfTurn';
-      log(s, `${p.name} ends the turn.`, playerId);
-      discardFailedTakeovers(s);
-      openWindow(s, 'endOfTurn');
-      s.window!.passed = [playerId];
+      knock(s, p);
       break;
     }
+
+    case 'declareVictory':
+      declareVictory(s, p, action.goal);
+      break;
 
     case 'discard': {
       if (s.prompt?.kind !== 'discardToLimit' || s.prompt.player !== playerId) throw new RuleError('You do not need to discard.');
@@ -2184,7 +2316,12 @@ function settleWindows(s: GameState) {
     if (w.kind === 'attack') rollAttack(s);
     else if (w.kind === 'roll') { if (!beforeResult(s)) finishAttack(s); }
     else if (w.kind === 'plot') resolvePendingPlot(s);
-    else if (w.kind === 'endOfTurn') { s.window = undefined; endTurnCleanup(s); }
+    else if (w.kind === 'endOfTurn') {
+      s.window = undefined;
+      // Everyone has had the chance to stop the declared victories: decide them (R016).
+      if (s.claims?.length) { resolveClaims(s); if (isOver(s)) return; }
+      endTurnCleanup(s);
+    }
     else if (w.kind === 'event') {
       s.window = undefined;
       const then = w.event?.data?.then as string | undefined;

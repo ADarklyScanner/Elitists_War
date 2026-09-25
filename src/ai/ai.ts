@@ -6,7 +6,7 @@ import {
   plotsInHand, handLimit, power, resistance, structureCards, takeoverOptions, validateAttack, waitingFor,
   alignments, globalPower, abilitiesOf, PLOTS, subtree, goalCount, goalNeeded, depth, bestLead, plotOptions,
   HOOKS, CHOICES, checkAbility, resourcesOf, canEnterPlay, goalsInHand, goalLimit, type AbilityParams,
-  type AiLevel,
+  type AiLevel, declareOptions, type GoalOption,
 } from '../engine';
 import { OPPOSITE } from '../engine/cards';
 import { abilityOptions, attackOptions, responseOptions } from '../engine/moves';
@@ -430,8 +430,84 @@ export function chooseAction(s: GameState, pl: string): Action {
     S = { ...BASE_STYLE, ...knobs };
     if (level === 'normal' && mistakes !== undefined) P = { ...P, mistakes };
   }
+  // A computer never lets a win go by: it declares as soon as it may (even the wild cards).
+  const claim = declareMove(s, pl);
+  if (claim) return claim;
   if (player(s, pl).aiStyle === 'chaos') return chaosMove(s, pl);
   return decide(s, pl);
+}
+
+/**
+ * Declare victory when a Goal is met and the moment is right (R016). A Goal card is shown only when
+ * nothing else will do, since a failed claim leaves it exposed.
+ */
+function declareMove(s: GameState, pl: string): Action | undefined {
+  if (s.prompt) return undefined;
+  const opts = declareOptions(s, pl);
+  if (!opts.length) return undefined;
+  const pick = (o: GoalOption) => (o.card ? 1 : 0);
+  const best = [...opts].sort((x, y) => pick(x) - pick(y))[0];
+  return { type: 'declareVictory', goal: best.id };
+}
+
+/** Let a copy of the game run on, everyone passing, until the declared victories are decided. */
+function untilClaimsDecided(state: GameState, success?: boolean): GameState {
+  let t = state;
+  for (let i = 0; i < 80 && t.phase !== 'gameOver' && t.claims?.length; i++) {
+    if (t.window?.kind === 'roll' && t.attack?.roll && success !== undefined) t.attack.roll = success ? [1, 1] : [6, 6];
+    let a: Action = { type: 'pass' };
+    const who = waitingFor(t)[0];
+    if (!who) break;
+    if (t.prompt) {
+      const ch = t.prompt.choice;
+      if (t.prompt.kind !== 'choose' || !ch) break;
+      a = { type: 'choose', ids: CHOICES[ch.key]?.ai?.(t, who, ch.options, { ...ch.data, source: ch.source }) ?? ch.options.slice(0, ch.min).map((o) => o.id) };
+    }
+    try { t = applyAction(t, who, a); } catch { break; }
+  }
+  return t;
+}
+
+/**
+ * A rival has declared victory: this is the moment to spend everything. Each Plot and ability we
+ * could use now (Instant attacks such as Assassinations and Disasters included) is played out on a
+ * copy of the game, and the one most likely to leave every rival claim failing is chosen. An Instant
+ * attack counts by its odds: its success and its failure are both played out.
+ */
+function stopClaim(s: GameState, pl: string): Action | undefined {
+  const claimants = (s.claims ?? []).map((c) => c.player).filter((id) => id !== pl);
+  if (!claimants.length) return undefined;
+  if (slips(s, pl, 'claim')) return undefined;
+  const stopped = (t: GameState) => !(t.phase === 'gameOver' && t.winners?.some((w) => claimants.includes(w)));
+  const aimedElsewhere = (a: Action) => {
+    if (a.type !== 'playPlot' || !a.play.target || !PLOTS[s.cards[a.play.card].cardId]?.timing.includes('instant')) return false;
+    const c = s.cards[a.play.target];
+    return !!c && c.zone === 'structure' && !claimants.includes(c.controller ?? '');
+  };
+  const opts = responseOptions(s, pl).map((o) => o.action)
+    .filter((a) => (a.type === 'playPlot' || a.type === 'useAbility') && !aimedElsewhere(a));
+  let best: Action | undefined;
+  let bestValue = 0;
+  for (const a of spread(opts, 36)) {
+    let after: GameState;
+    try { after = applyAction(s, pl, a); } catch { continue; }
+    let value: number;
+    if (after.attack && after.phase !== 'gameOver') {
+      const chance = attackChance(after);
+      value = chance * Number(stopped(untilClaimsDecided(after, true))) + (1 - chance) * Number(stopped(untilClaimsDecided(after, false)));
+    } else value = Number(stopped(untilClaimsDecided(after)));
+    if (value > bestValue + 0.01) { bestValue = value; best = a; }
+  }
+  if (best) return best;
+  // Nothing in hand stops it: spend spare actions on more Plot cards and look again (Normal and Hard).
+  if (!P.tricks) return undefined;
+  const me = player(s, pl);
+  if (!me.plotDeck.length || s.turnFlags.noPlotDraws?.includes(pl)) return undefined;
+  const spare = structureCards(s, pl).filter((g) => g !== me.illuminati && s.cards[g].tokens > 0).sort((x, y) => power(s, x) - power(s, y));
+  const buys: Action[] = [{ type: 'buyPlot', payWith: [me.illuminati] }];
+  if (spare.length >= 2) buys.push({ type: 'buyPlot', payWith: spare.slice(0, 2) });
+  for (const b of buys) if (tryAction(s, pl, b)) return b;
+  return undefined;
 }
 
 /**
@@ -499,6 +575,11 @@ function decide(s: GameState, pl: string): Action {
     }
   }
   const w = s.window;
+  // A rival is claiming victory: try everything that could stop it before anything else.
+  if (w?.kind === 'endOfTurn' && s.claims?.some((c) => c.player !== pl)) {
+    const stop = stopClaim(s, pl);
+    if (stop) return stop;
+  }
   if (w?.kind === 'attack' && s.attack) return respondToAttack(s, pl);
   if (w?.kind === 'roll' && s.attack) return respondToRoll(s, pl);
   if (w && (w.kind === 'plot' || w.kind === 'event' || w.kind === 'endOfTurn')) return windowMove(s, pl);

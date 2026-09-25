@@ -209,12 +209,20 @@ describe('R004 destruction and R016 victory', () => {
     s = act(s, 'p2', { type: 'pass' });
     expect(s.phase).not.toBe('gameOver');
   });
-  it('a player who meets the Basic Goal wins at the end of a turn after round 1', () => {
+  it('a player who meets the Basic Goal and declares it wins at the end of a turn after round 1', () => {
+    const s0 = scenario();
+    s0.settings.basicGoal = 1;
+    let s = act(s0, 'p1', { type: 'declareVictory', goal: 'basic' });
+    s = act(s, 'p2', { type: 'pass' });
+    expect(s.phase).toBe('gameOver');
+    expect(s.winners).toEqual(['p1']);
+  });
+  it('meeting a Goal without declaring it wins nothing (R016)', () => {
     const s0 = scenario();
     s0.settings.basicGoal = 1;
     let s = act(s0, 'p1', { type: 'endTurn' });
     s = act(s, 'p2', { type: 'pass' });
-    expect(s.phase).toBe('gameOver');
+    expect(s.phase).not.toBe('gameOver');
   });
   it('a player with no Groups after his third turn is eliminated at once (R049)', () => {
     const s0 = scenario();
@@ -566,7 +574,7 @@ describe('R016 / R018 / R049 Goals and elimination', () => {
     const s = act(s0, 'p1', { type: 'buyPlot', payWith: [s0.players[0].illuminati] });
     expect(s.cards[res]).toMatchObject({ zone: 'resources', controller: 'p1', linkedTo: s.players[0].illuminati });
   });
-  it('the Servants of Cthulhu destroying their own last Group as the 8th win at the end of the turn instead (R049)', () => {
+  it('the Servants of Cthulhu destroying their own last Group as the 8th may declare victory at the end of the turn instead (R049)', () => {
     const s0 = scenario();
     const ill = s0.players[0].illuminati;
     s0.cards[ill].cardId = 'servants-of-cthulhu';
@@ -584,7 +592,7 @@ describe('R016 / R018 / R049 Goals and elimination', () => {
     s = resolve(s, [1, 1]);
     expect(s.cards[place].zone).toBe('destroyed');
     expect(s.players[0].eliminated).toBe(false);
-    s = act(s, 'p1', { type: 'endTurn' });
+    s = act(s, 'p1', { type: 'declareVictory', goal: 'special' });
     s = act(s, 'p2', { type: 'pass' });
     expect(s.winners).toEqual(['p1']);
   });

@@ -593,3 +593,11 @@ button.primary:hover { filter: brightness(1.06); }
 .rule-nav { background: #1f161d !important; }
 .rule-nav button { font-family: var(--display); font-size: 11.5px !important; letter-spacing: .06em; }
 input, select, textarea { background: #140e13; color: var(--ink); border: 1px solid #6b5230; border-radius: 6px; font-family: var(--body); }
+
+/* Declaring and claiming victory */
+.claim-banner { border: 2px solid var(--threat); background: #e05a4b22; padding: 10px 12px; border-radius: 6px; margin-bottom: 10px; }
+.claim-banner h2 { margin: 0 0 6px; }
+.claim-banner ul { margin: 0 0 6px; padding-left: 18px; }
+.claim-box { margin: 6px 0 10px; }
+.claim-remind { border-left: 3px solid #e0c05a; background: #e0c05a1f; padding: 6px 10px; border-radius: 4px; }
+.claim-btn { font-weight: 700; border-color: #e0c05a; }

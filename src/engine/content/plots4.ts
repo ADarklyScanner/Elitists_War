@@ -14,7 +14,7 @@ import {
   player, playResourceCard, protectedPlayer, startInstantAttack, takeoverOptions,
   disasterTarget,
 } from '../game';
-import { attackStrength, exposableHand, exposeCards } from '../game';
+import { attackStrength, exposableHand, exposeCards, shownGoal } from '../game';
 
 // ---------------------------------------------------------------- helpers
 
@@ -584,6 +584,8 @@ registerPlots({
       }
       log(s, `${player(s, pl).name}'s turn ends at once.`, pl);
       s.phase = 'endOfTurn';
+      // A turn cut short skips the rest of the turn sequence: nobody can win at its end (R016).
+      s.turnFlags.endedAtOnce = true;
     },
   },
 });
@@ -608,7 +610,7 @@ function strip(s: GameState, pl: string, play: PlotPlay) {
 
 function exposedGoals(s: GameState, pl: string): string[] {
   return s.players.filter((p) => p.id !== pl && !p.eliminated && !protectedPlayer(s, pl, p.id))
-    .flatMap((p) => p.hand.filter((i) => def(s, i).subtype === 'Goal' && s.cards[i].exposed));
+    .flatMap((p) => p.hand.filter((i) => def(s, i).subtype === 'Goal' && s.cards[i].exposed && !shownGoal(s, i)));
 }
 
 function grabOption(s: GameState, pl: string, play: PlotPlay) {
