@@ -174,7 +174,7 @@ function cardHtml(s) {
   const sub = s.subtype && s.subtype !== s.type ? s.subtype : '';
   return `<div class="card-wrap"><div class="card ${esc(s.type)}">${arrows}
     <div class="c-head">${EYE}<div class="c-name">${esc(s.name)}</div><div class="c-type">${esc(s.type)}${sub ? `<small>${esc(sub)}</small>` : ''}</div></div>
-    <div class="c-art"><b>Art to come</b><span>${esc(s.artBrief)}</span></div>
+    <div class="c-art"><b>Art to come</b><span>${esc(s.photo?.photoPrompt || s.artBrief)}</span></div>
     <div class="c-text">${esc(s.cardText)}${s.flavorText ? `<div class="fl">${esc(s.flavorText)}</div>` : ''}</div>
     ${stats ? `<div class="c-stats">${stats}</div>` : ''}
   </div></div>`;
@@ -198,6 +198,7 @@ function sheetHtml(s) {
     <tr><th>Interactions</th><td>${inter}</td></tr>
     <tr><th>Prerequisites</th><td>${esc(s.prerequisites)}</td></tr>
     <tr><th>Art brief</th><td>${esc(s.artBrief)}</td></tr>
+    ${s.photo ? `<tr><th>Photo prompt</th><td>${esc(s.photo.photoPrompt)}${s.photo.note ? `<div class="saved">${esc(s.photo.subjectKind)} · ${esc(s.photo.note)}</div>` : ''}</td></tr>` : ''}
     <tr><th>Image file</th><td class="mono">${esc(s.imageFile)}</td></tr>
     <tr><th>Originality check</th><td class="${orig.startsWith('PASS') ? 'pass' : 'bad'}">${esc(orig || 'Not run')}</td></tr>
     <tr><th>Draft status</th><td>${esc(s.status)}</td></tr>
