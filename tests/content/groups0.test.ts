@@ -687,6 +687,19 @@ describe('Druids and Secret Groups', () => {
   });
 });
 
+describe('Antiwar Activists', () => {
+  function defense(attacker: string, type: AttackType) {
+    const s0 = scenario();
+    const att = put(s0, 'p1', attacker);
+    put(s0, 'p2', 'anti-war-activists');
+    const tgt = put(s0, 'p2', 'dentists');
+    return line(attack(s0, att, tgt, type), 'Defense', 'Anti-War Activists');
+  }
+  it('+4 Resistance for the whole Power Structure against a Government attacker', () => expect(defense('fbi', 'control')).toBe(4));
+  it('not against other attackers', () => expect(defense('the-mafia', 'control')).toBe(0));
+  it('Resistance does not defend against an Attack to Destroy', () => expect(defense('fbi', 'destroy')).toBe(0));
+});
+
 describe('Elders of Zion', () => {
   it('spend their action and an Illuminati action to move Groups for free', () => {
     const s0 = scenario();
@@ -699,6 +712,22 @@ describe('Elders of Zion', () => {
     s.cards[gun].tokens = 0; s.cards[mafia].tokens = 0;
     s = act(s, 'p1', { type: 'move', group: gun, onto: mafia, side: openArrows(s, mafia)[0], payWith: gun });
     expect(s.cards[gun].master).toBe(mafia);
+  });
+  it('the reorganization is one step: free moves end when the player does something else', () => {
+    const s0 = scenario();
+    const ez = put(s0, 'p1', 'elders-of-zion');
+    const mafia = put(s0, 'p1', 'the-mafia');
+    const gun = put(s0, 'p1', 'gun-lobby');
+    let s = use(s0, 'p1', ez, 'reorganize');
+    s.cards[gun].tokens = 0; s.cards[mafia].tokens = 0;
+    s = act(s, 'p1', { type: 'move', group: gun, onto: mafia, side: openArrows(s, mafia)[0], payWith: gun });
+    expect(s.turnFlags.freeMoves).toBe('p1'); // still reorganizing after a move
+    s.cards[ill(s, 'p1')].tokens = 1;
+    s = act(s, 'p1', { type: 'drawGroup' });
+    while (s.window) s = act(s, waitingFor(s)[0], { type: 'pass' });
+    expect(s.turnFlags.freeMoves).toBeUndefined();
+    expect(() => act(s, 'p1', { type: 'move', group: gun, onto: ill(s, 'p1'), side: openArrows(s, ill(s, 'p1'))[0], payWith: gun }))
+      .toThrow(/Pay with a token/);
   });
   it('need the Illuminati action too', () => {
     const s = scenario();

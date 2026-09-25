@@ -770,6 +770,19 @@ describe('Bill Clinton', () => {
     s.turn++; // the result lasts for one turn only
     expect(alignments(s, b)).not.toContain('Liberal');
   });
+  it('every attack gets its own roll, which holds for that attack only', () => {
+    const s0 = scenario();
+    const b = put(s0, 'p1', 'bill-clinton');
+    const att = put(s0, 'p1', 'the-mafia');
+    const tgt = put(s0, 'p2', 'dentists');
+    s0.cards[b].data = { liberalTurn: s0.turn }; // Liberal for now
+    const s = act(s0, 'p1', { type: 'attack', attackType: 'control', attacker: att, target: tgt });
+    const last = s.log.filter((l) => l.text.startsWith('Bill Clinton rolls')).at(-1)!.text;
+    expect(last).toMatch(/in this attack/);
+    expect(alignments(s, b).includes('Liberal')).toBe(!last.includes('not Liberal'));
+    s.attack = undefined; // once the attack is over the turn's roll applies again
+    expect(alignments(s, b)).toContain('Liberal');
+  });
 });
 
 describe('Count Dracula: linked Magic Artifacts', () => {
@@ -791,6 +804,23 @@ describe('Count Dracula: linked Magic Artifacts', () => {
     const { s, d, r } = setup('necronomicon');
     destroyGroup(s, d, 'p1');
     expect(s.cards[r].zone).toBe('destroyed');
+  });
+  it('once he is destroyed, he and his Magic Artifacts are gone for good', () => {
+    const { s, d, r } = setup('necronomicon');
+    destroyGroup(s, d, 'p1');
+    expect(s.cards[d].data?.neverReturns).toBe(true);
+    expect(s.cards[r].data?.neverReturns).toBe(true);
+    s.events = []; // skip the response windows for the destructions
+    // Media Blitz cannot bring back a duplicate of him, though it works for another destroyed Group.
+    const dup = give(s, 'p1', 'count-dracula', { hand: true });
+    const media = put(s, 'p1', 'cable-tv');
+    const mb = give(s, 'p1', 'media-blitz', { hand: true });
+    expect(checkPlot(s, 'p1', { card: mb, target: dup, payWith: [media] })).toMatch(/duplicates a destroyed Group/);
+    const other = put(s, 'p2', 'loan-sharks');
+    destroyGroup(s, other, 'p1');
+    s.events = [];
+    const dup2 = give(s, 'p1', 'loan-sharks', { hand: true });
+    expect(checkPlot(s, 'p1', { card: mb, target: dup2, payWith: [media] })).toBeNull();
   });
   it('Resources that are not Magic Artifacts get no protection', () => {
     const { s, r } = setup('cyborg-soldiers');
@@ -894,6 +924,15 @@ describe('Ronald Reagan', () => {
   }
   it('Media Groups cannot oppose an attack he makes', () => expect(oppose('ronald-reagan')).toMatchObject({ ok: false, why: expect.stringMatching(/stops/) }));
   it('they may oppose other attacks', () => expect(oppose('the-mafia').ok).toBe(true));
+  it('Media Groups cannot attack him even while he is in a hand, nor aid such an attack', () => {
+    const s0 = scenario();
+    const tab = put(s0, 'p1', 'tabloids');
+    const mafia = put(s0, 'p1', 'the-mafia');
+    const rr = give(s0, 'p1', 'ronald-reagan', { hand: true });
+    expect(() => act(s0, 'p1', { type: 'attack', attackType: 'control', attacker: tab, target: rr })).toThrow(/immune/);
+    const s = act(s0, 'p1', { type: 'attack', attackType: 'control', attacker: mafia, target: rr });
+    expect(canAid(s, 'p1', tab).ok).toBe(false);
+  });
 });
 
 describe('Ross Perot', () => {
@@ -951,6 +990,17 @@ describe('Stonehenge: immune to Magic', () => {
     };
     expect(run(false)).not.toThrow();
     expect(run(true)).toThrow(/Stonehenge/);
+  });
+  it('a rival\'s Magic Group can neither lead nor aid an attack on you (so its own bonus never counts)', () => {
+    const s0 = scenario();
+    const v = put(s0, 'p1', 'voudonistas'); // +8 to destroy a Personality
+    const mafia = put(s0, 'p1', 'the-mafia');
+    boost(s0, mafia);
+    const per = put(s0, 'p2', 'hillary-clinton');
+    put(s0, 'p2', 'stonehenge');
+    expect(() => act(s0, 'p1', { type: 'attack', attackType: 'destroy', attacker: v, target: per })).toThrow(/immune/);
+    const s = act(s0, 'p1', { type: 'attack', attackType: 'destroy', attacker: mafia, target: per });
+    expect(canAid(s, 'p1', v).ok).toBe(false);
   });
   it('bonuses from a rival\'s Magic Groups to an attack on you are cancelled', () => {
     const s = scenario();

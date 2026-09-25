@@ -981,6 +981,8 @@ export function canAttackPlayer(s: GameState, attacker: string, defender: string
 function immuneTo(s: GameState, target: string, attackerGroups: string[], ctx?: AttackCtx): boolean {
   attackerGroups = attackerGroups.filter((g) => !anyHook(s, (h, self) => !!h.ignoreImmunity?.(s, self, g, target)));
   if (attackerGroups.some((g) => anyHook(s, (h, self) => h.immune?.(s, self, target, g, ctx)))) return true;
+  // A Group's own immunity (Ronald Reagan) protects it wherever it is attacked, in a hand too.
+  if (abilitiesOf(s, target).some((a) => a.kind === 'selfImmune' && attackerGroups.some((g) => matches(s, g, a.from)))) return true;
   const owner = controllerOf(s, target);
   if (!owner) return false;
   const protectors = [target, ...structureCards(s, owner)];
@@ -1054,6 +1056,7 @@ export function startAttack(s: GameState, playerId: string, a: Extract<Action, {
   };
   if (a.privileged) s.turnFlags.bavarianPrivilege = true;
   s.attack = ctx;
+  fireHooks(s, (h, self) => h.onAttackStart?.(s, self, ctx));
   log(s, `${cardName(s, a.attacker)} attacks to ${a.attackType} ${cardName(s, a.target)}${fromHand ? ' (from hand)' : ''}${ctx.privileged ? ' — Privileged' : ''}.`, playerId);
   for (const play of a.plots ?? []) playPlot(s, playerId, play, true);
   openWindow(s, 'attack');
@@ -1657,12 +1660,20 @@ export function waitingFor(s: GameState): string[] {
   return [activePlayer(s).id];
 }
 
+/** Main-phase steps that end a one-step reorganization (anything but moving Groups). */
+const REORG_ENDERS = new Set<Action['type']>(['attack', 'playPlot', 'useAbility', 'playResource', 'link', 'buyPlot', 'drawGroup', 'relief']);
+
 export function applyAction(state: GameState, playerId: string, action: Action): GameState {
   const s: GameState = structuredClone(state);
   ensureLayout(s); // games saved before cards had real shapes
   assertPriority(s, playerId);
   const p = player(s, playerId);
   if (p.eliminated) throw new RuleError('You have been eliminated.');
+  // A one-step reorganization (Elders of Zion) is over once its player does anything but move Groups.
+  if (s.turnFlags.freeMovesOnce && s.turnFlags.freeMoves === playerId && !s.window && !s.attack && REORG_ENDERS.has(action.type)) {
+    s.turnFlags.freeMoves = undefined;
+    s.turnFlags.freeMovesOnce = undefined;
+  }
 
   switch (action.type) {
     case 'playResource': {
@@ -2080,6 +2091,7 @@ export function startCardAttack(s: GameState, playerId: string, opts: {
   };
   if (opts.disaster && s.cards[opts.target].tokens > 0) { s.cards[opts.target].tokens--; ctx.tokenTaken = true; }
   s.attack = ctx;
+  fireHooks(s, (h, self) => h.onAttackStart?.(s, self, ctx));
   openWindow(s, 'attack');
 }
 
@@ -2100,6 +2112,7 @@ export function startInstantAttack(s: GameState, playerId: string, opts: {
   ctx.instantDefense = power(s, opts.target, { defense: true, halve: !!s.cards[opts.target].devastated }); // Power when played (R034)
   if (opts.disaster && s.cards[opts.target].tokens > 0) { s.cards[opts.target].tokens--; ctx.tokenTaken = true; } // R036
   s.attack = ctx;
+  fireHooks(s, (h, self) => h.onAttackStart?.(s, self, ctx));
   openWindow(s, 'attack');
 }
 

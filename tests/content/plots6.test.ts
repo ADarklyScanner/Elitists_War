@@ -5,6 +5,7 @@ import {
   CARDS, GOALS, type Action, type GameState, type PlotPlay, type Side,
 } from '../../src/engine';
 import { randomDeck } from '../../src/engine/decks';
+import { NWO_EFFECTS } from '../../src/engine/nwo';
 import { viewFor } from '../../src/server/service';
 import { checkInvariants, give, scenario } from '../helpers';
 
@@ -109,6 +110,10 @@ describe('New World Orders', () => {
     expect(alignments(s, corp, { goals: true })).toEqual(['Corporate']);
     goalCheck.active = true;
     try { expect(alignments(s, corp)).toEqual(['Corporate']); } finally { goalCheck.active = false; }
+  });
+  it('no NWO card is still marked unimplemented', () => {
+    expect(NWO_EFFECTS['military-industrial-complex'].implemented).toBe(true);
+    expect(Object.entries(NWO_EFFECTS).filter(([, e]) => !e.implemented).map(([id]) => id)).toEqual([]);
   });
   it('Political Correctness: Liberal +3; Conservative Groups with Power 0 or 1 become Criminal', () => {
     let s = scenario();

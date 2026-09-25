@@ -117,6 +117,15 @@ Engine choices, made so the game can be played on screens, in pieces and online:
   players' hidden Plots, Plots hidden beneath cards, face-down Warehouse 23 Resources, secret ability
   choices and private log lines.
 - **Quick game**: an optional house rule lowers the Basic Goal to 8 Groups.
+- **Unanimous agreements on cards**: International Cocaine Smugglers' optional extension of its +4 to
+  Personalities that every player agrees on is not offered (the engine has no all-player vote), so only
+  its named Groups and their puppets count (content/groups0 › "International Cocaine Smugglers").
+- **Bill Clinton's die**: rather than at every single check of his alignments, he rolls at the start of
+  each attack (the result holds for that attack) and at the start of each turn (the result holds for
+  everything else) (content/groups2 › "Bill Clinton").
+- **The I.R.S. tax** is a once-per-turn ability used in its controller's main phase. Under Tax Reform
+  the same tax takes the top Plot of every rival's deck; the controller's own deck is never taxed
+  (content/plots2 › "New World Orders").
 - **Computer difficulty** (Easy, Normal, Hard) only changes how well the computer chooses; every level
   plays by the same rules (tests/aiLevels.test.ts › "Easy, Normal and Hard all play complete, legal games").
 
@@ -150,3 +159,9 @@ Engine choices, made so the game can be played on screens, in pieces and online:
   abilities; they now apply, except Resources linked to a non-Secret Group (R014).
 - An attack of any kind other than control or destroy is now refused instead of being treated as a
   destroy attack (R005).
+- Card fixes (Groups and Resources): Count Dracula and the Magic Artifacts linked to him can never come
+  back once he is destroyed; Antiwar Activists' extra Resistance no longer counts against Attacks to
+  Destroy; Rogue Boomer's one-shot +10 against a Place is for its holder's own attacks only; Ronald
+  Reagan is immune to Media Groups even while in a hand; Elders of Zion's reorganization ends at the
+  player's next step other than a move; Tax Reform no longer taxes automatically or the I.R.S.'s own
+  controller.

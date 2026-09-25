@@ -3,6 +3,8 @@ import {
   applyAction, attackStrength, goalLimit, isPrivileged, meetsGoal, power, resistance, waitingFor, HOOKS,
   type Action, type GameState, type Side,
 } from '../../src/engine';
+import { createGame, CARDS } from '../../src/engine';
+import { randomDeck } from '../../src/engine/decks';
 import { give, scenario } from '../helpers';
 
 const act = (s: GameState, pl: string, a: Action) => applyAction(s, pl, a);
@@ -40,6 +42,20 @@ function nwoInPlay(s: GameState, pl: string, cardId: string, color: string) {
   Object.assign(s.cards[n], { zone: 'table', controller: pl, linkedTo: 'nwo' });
   s.nwo[color] = n;
   return n;
+}
+
+/** A three-player game in p1's main phase, set up like scenario(). */
+function threeWay(): GameState {
+  const s = createGame({
+    seed: 11,
+    players: ['p1', 'p2', 'p3'].map((id, i) => ({ id, name: id.toUpperCase(), isAI: true, deck: randomDeck(90 + i) })),
+  });
+  for (const c of Object.values(s.cards)) {
+    if ((c.zone === 'structure' && CARDS[c.cardId].type === 'Group') || c.zone === 'hand') delete s.cards[c.iid];
+  }
+  for (const p of s.players) { p.turnsTaken = 1; p.hand = []; s.cards[p.illuminati].tokens = 1; }
+  s.active = 0; s.phase = 'main'; s.prompt = undefined; s.window = undefined; s.round = 3; s.nwo = {};
+  return s;
 }
 
 describe('Goals', () => {
@@ -156,7 +172,7 @@ describe('New World Orders', () => {
     const b = act(off, 'p1', { type: 'attack', attackType: 'destroy', attacker: ls, target: rc });
     expect(attackStrength(a, a.attack!).defense - attackStrength(b, b.attack!).defense).toBe(3);
   });
-  it('Tax Reform: the I.R.S. gets +10 defense and taxes each Plot deck at the start of its turn', () => {
+  it('Tax Reform: the I.R.S. gets +10 defense', () => {
     const s0 = scenario();
     const irs = under(s0, 'p1', 'i-r-s');
     const card = give(s0, 'p1', 'tax-reform', { hand: true });
@@ -164,28 +180,25 @@ describe('New World Orders', () => {
     s = act(s, 'p2', { type: 'pass' });
     expect(s.nwo.red).toBe(card);
     const att = under(s, 'p2', 'the-mafia');
-    const noTax = structuredClone(s);
-    noTax.nwo = {}; noTax.cards[card].zone = 'discard'; noTax.cards[card].linkedTo = undefined;
-    // Defense
     s.active = 1;
     const a = act(s, 'p2', { type: 'attack', attackType: 'destroy', attacker: att, target: irs });
     expect(attackStrength(a, a.attack!).lines).toContain('Defense +10: Tax Reform');
-    // Tax at the start of p1's turn
-    const run = (st: GameState) => {
-      st.active = 1; st.attack = undefined; st.window = undefined;
-      let x = act(st, 'p2', { type: 'endTurn' });
-      x = passAll(x);
-      return x;
-    };
-    const before = { p1: P(s, 'p1').plotDeck.length, p2: P(s, 'p2').plotDeck.length, hand: P(s, 'p1').hand.length };
-    const taxed = run(s);
-    expect(taxed.players[taxed.active].id).toBe('p1');
-    expect(P(taxed, 'p2').plotDeck.length).toBe(before.p2 - 1);
-    const plain = run(noTax);
-    expect(P(plain, 'p1').plotDeck.length - P(taxed, 'p1').plotDeck.length).toBe(1); // taxed his own deck too
-    expect(P(plain, 'p2').plotDeck.length).toBe(before.p2);
-    expect(P(taxed, 'p1').hand.length - P(plain, 'p1').hand.length).toBe(2);
-    expect(HOOKS['i-r-s'].onTurnStart).toBeDefined();
+  });
+  it('Tax Reform: the I.R.S. may tax every rival once per turn, never its own deck and never on its own', () => {
+    const s0 = threeWay();
+    const irs = give(s0, 'p1', 'i-r-s', { under: ill(s0, 'p1'), side: 'BOTTOM' });
+    nwoInPlay(s0, 'p1', 'tax-reform', 'red');
+    give(s0, 'p3', 'lawyers', { under: ill(s0, 'p3'), side: 'BOTTOM' }); // p3 is immune
+    const tops = { p2: P(s0, 'p2').plotDeck[0], p3: P(s0, 'p3').plotDeck[0] };
+    const own = P(s0, 'p1').plotDeck.length;
+    // Nothing is taken automatically at the start of the I.R.S.'s turn.
+    expect(HOOKS['i-r-s'].onTurnStart).toBeUndefined();
+    const s = act(s0, 'p1', { type: 'useAbility', card: irs, ability: 'tax', params: {} });
+    expect(P(s, 'p1').hand).toContain(tops.p2);
+    expect(P(s, 'p1').hand).not.toContain(tops.p3);
+    expect(P(s, 'p3').plotDeck[0]).toBe(tops.p3);
+    expect(P(s, 'p1').plotDeck.length).toBe(own);
+    expect(() => act(s, 'p1', { type: 'useAbility', card: irs, ability: 'tax', params: {} })).toThrow(/Already used/);
   });
   it('World War Three: Nation vs Nation Power x3; success draws a Plot and gives a token', () => {
     const s0 = scenario();

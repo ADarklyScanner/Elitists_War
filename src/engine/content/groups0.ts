@@ -26,7 +26,8 @@ registerAbilities({
     { kind: 'attackBonus', on: 'control', target: { attributes: ['Green'] }, value: 4, scope: 'any' },
   ],
   'anti-war-activists': [
-    { kind: 'structureDefense', value: 4, vs: { alignments: ['Government'] } },
+    // Extra Resistance: it only counts against Attacks to Control (an Attack to Destroy is defended with Power).
+    { kind: 'structureDefense', value: 4, on: 'control', vs: { alignments: ['Government'] } },
   ],
   'bank-of-england': [],
   'b-a-t-f': [
@@ -208,6 +209,13 @@ function rivalFor(s: GameState, pl: string, p: AbilityParams): string | null {
   const rivals = livePlayers(s).filter((x) => x.id !== pl);
   return rivals.length === 1 ? rivals[0].id : null;
 }
+/** The Lawyers make their controller immune to the I.R.S. */
+const lawyered = (s: GameState, pl: string) => structureCards(s, pl).some((g) => s.cards[g].cardId === 'lawyers');
+/** Tax Reform (a New World Order) is in play. */
+const taxReform = (s: GameState) => Object.values(s.nwo).some((iid) => !!iid && s.cards[iid]?.cardId === 'tax-reform' && s.cards[iid].zone === 'table');
+/** Rivals the I.R.S. can tax under Tax Reform. */
+const taxable = (s: GameState, pl: string) => livePlayers(s)
+  .filter((r) => r.id !== pl && !protectedPlayer(s, pl, r.id) && !lawyered(s, r.id) && r.plotDeck.length).map((r) => r.id);
 const rivalError = (s: GameState, pl: string, r: string | null) =>
   !r ? 'Choose a card of the rival you want to target.' : protectedPlayer(s, pl, r) ? 'That player has not finished a first turn yet.' : null;
 
@@ -422,6 +430,7 @@ registerHooks({
   },
 
   'elders-of-zion': {
+    // One reorganization of the whole Power Structure: free moves, until the player does anything else.
     actions: [{
       id: 'reorganize', label: 'Reorganize your Power Structure (also spends an Illuminati action)', timing: ['main'], usesToken: true, ai: 'never',
       check(s, pl) {
@@ -431,15 +440,10 @@ registerHooks({
       apply(s, pl, self) {
         s.cards[player(s, pl).illuminati].tokens--;
         s.turnFlags.freeMoves = pl;
-        s.cards[self].data = { ...s.cards[self].data, reorgTurn: s.turn };
-        log(s, `${cardName(s, self)}: ${player(s, pl).name} may now move Groups without paying, until the next attack.`, pl);
+        s.turnFlags.freeMovesOnce = true;
+        log(s, `${cardName(s, self)}: ${player(s, pl).name} reorganizes the Power Structure — Groups move for free until the next other step.`, pl);
       },
     }],
-    // The reorganization is one step: it ends with the controller's next attack.
-    onAttackEnd(s, self, ctx) {
-      const pl = ctl(s, self);
-      if (pl && ctx.attackerPlayer === pl && s.cards[self].data?.reorgTurn === s.turn && s.turnFlags.freeMoves === pl) s.turnFlags.freeMoves = undefined;
-    },
   },
 
   'eff': {
@@ -662,23 +666,29 @@ registerHooks({
   },
 
   'i-r-s': {
+    // Once per turn, and optional: the top Plot of one rival's deck. While the Tax Reform NWO is in
+    // play the same tax takes the top Plot of every rival's deck instead.
     actions: [{
-      id: 'tax', label: 'Take the top Plot of a rival\'s deck', timing: ['main'], usesToken: false, oncePerTurn: true, ai: 'draw',
+      id: 'tax', label: 'Take the top Plot of a rival\'s deck (of every rival under Tax Reform)', timing: ['main'], usesToken: false, oncePerTurn: true, ai: 'draw',
       needs: { target: 'rivalGroup' },
       check(s, pl, _self, p) {
+        if (taxReform(s)) return taxable(s, pl).length ? null : 'No rival has a Plot deck the I.R.S. can tax.';
         const r = rivalFor(s, pl, p);
         const err = rivalError(s, pl, r);
         if (err) return err;
-        if (structureCards(s, r!).some((g) => s.cards[g].cardId === 'lawyers')) return 'That rival\'s Lawyers make them immune to the I.R.S.';
+        if (lawyered(s, r!)) return 'That rival\'s Lawyers make them immune to the I.R.S.';
         return player(s, r!).plotDeck.length ? null : 'That rival\'s Plot deck is empty.';
       },
       apply(s, pl, _self, p) {
-        const r = player(s, rivalFor(s, pl, p)!);
-        const c = r.plotDeck.shift()!;
-        s.cards[c].zone = 'hand';
-        s.cards[c].exposed = false;
-        player(s, pl).hand.push(c);
-        log(s, `The I.R.S. collects ${cardName(s, c)} from the top of ${r.name}'s Plot deck.`, r.id);
+        const rivals = taxReform(s) ? taxable(s, pl) : [rivalFor(s, pl, p)!];
+        for (const id of rivals) {
+          const r = player(s, id);
+          const c = r.plotDeck.shift()!;
+          s.cards[c].zone = 'hand';
+          s.cards[c].exposed = false;
+          player(s, pl).hand.push(c);
+          log(s, `The I.R.S. collects ${cardName(s, c)} from the top of ${r.name}'s Plot deck.`, r.id);
+        }
       },
     }],
   },

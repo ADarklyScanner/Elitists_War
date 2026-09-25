@@ -354,10 +354,23 @@ function loseHidden(s: GameState, self: string) {
 }
 
 /** Bill Clinton: whether he counts as Liberal is rolled each turn (1-3: Liberal). */
-function rollClinton(s: GameState, self: string) {
+/**
+ * Bill Clinton: whenever his alignments matter a die decides whether he is Liberal (1-3) at that moment.
+ * A fresh roll is made at the start of every attack (it holds for that attack) and at the start of each
+ * turn (it holds outside attacks, e.g. for Goals and moves).
+ */
+function rollClinton(s: GameState, self: string, attack?: number) {
   const die = rollDie(s);
-  s.cards[self].data = { ...s.cards[self].data, liberalTurn: die <= 3 ? s.turn : undefined };
-  log(s, `Bill Clinton rolls ${die}: he is ${die <= 3 ? '' : 'not '}Liberal this turn.`);
+  const liberal = die <= 3;
+  s.cards[self].data = attack === undefined
+    ? { ...s.cards[self].data, liberalTurn: liberal ? s.turn : undefined }
+    : { ...s.cards[self].data, rollAttack: attack, liberalAttack: liberal };
+  log(s, `Bill Clinton rolls ${die}: he is ${liberal ? '' : 'not '}Liberal ${attack === undefined ? 'for now' : 'in this attack'}.`);
+}
+function clintonLiberal(s: GameState, self: string): boolean {
+  const d = s.cards[self].data;
+  if (s.attack && d?.rollAttack === s.attack.id) return !!d.liberalAttack;
+  return d?.liberalTurn === s.turn;
 }
 
 /** The Great Pyramid: its controller forgets the Plots it showed him (no notes allowed). */
@@ -448,7 +461,8 @@ registerHooks({
   'bill-clinton': {
     onEnterPlay: rollClinton,
     onEvent(s, self, e) { if (e.type === 'turnStart') rollClinton(s, self); },
-    alignmentMod: (s, self, iid, cur) => (iid === self && s.cards[self].data?.liberalTurn === s.turn && !cur.includes('Liberal')
+    onAttackStart(s, self, ctx) { rollClinton(s, self, ctx.id); },
+    alignmentMod: (s, self, iid, cur) => (iid === self && clintonLiberal(s, self) && !cur.includes('Liberal')
       ? [...cur.filter((a) => a !== 'Conservative'), 'Liberal'] : cur),
   },
 
@@ -474,6 +488,15 @@ registerHooks({
     },
     // Magic Artifacts linked to him cannot be taken or lost while he lives.
     protectResource: (s, self, r) => s.cards[r].linkedTo === self && resourceKinds(s, r).includes('Magic') && resourceKinds(s, r).includes('Artifact'),
+    // Once destroyed he is gone for good, and so are the Magic Artifacts linked to him (they are
+    // destroyed with him; this also bars any card that would bring them back).
+    onDestroy(s, self, victim) {
+      if (victim !== self) return;
+      const lost = [self, ...Object.values(s.cards).filter((c) => c.linkedTo === self && c.zone === 'resources'
+        && resourceKinds(s, c.iid).includes('Magic') && resourceKinds(s, c.iid).includes('Artifact')).map((c) => c.iid)];
+      for (const iid of lost) s.cards[iid].data = { ...s.cards[iid].data, neverReturns: true };
+      if (lost.length > 1) log(s, `${lost.slice(1).map((r) => cardName(s, r)).join(', ')} ${lost.length > 2 ? 'are' : 'is'} lost forever with Count Dracula.`);
+    },
   },
 
   'fidel-castro': plotHider({ name: 'Fidel Castro', swap: false, beyondLimit: false, goals: true }),

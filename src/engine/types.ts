@@ -243,6 +243,7 @@ export interface GameState {
     restricted?: boolean;       // active player may only draw and place tokens (Senate Investigating Committee)
     extraTurn?: boolean;        // an extra turn: no draws, no Plots, no new Illuminati token (Seize the Time)
     freeMoves?: string;         // this player may move Groups without paying (Reorganization)
+    freeMovesOnce?: boolean;    // the free moves are one reorganization: they end at the player's next other step (Elders of Zion)
     noDraws?: boolean;          // skip this turn's normal draws (An Offer You Can't Refuse)
     redoTakeover?: boolean;     // the automatic takeover was undone: offer it again (Botched Contact)
   };
