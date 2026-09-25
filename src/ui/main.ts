@@ -14,6 +14,8 @@ import { chooseAction, successChance } from '../ai/ai';
 import { suggestBots, type TableLevel } from './botMix';
 import { mirrorName, styleById, STYLES, WILD_CARDS } from '../ai/personas';
 import { foldGame, habitsIn, habitsReport, MIN_GAMES, mirrorSeats, normalizeProfile, observeHuman, type PlayProfile, type ProfileSummary } from '../ai/profile';
+import { RULES_PANEL_LINKS, sectionById } from './rulebook';
+import './rulebookReader';
 import { assignIlluminati, emptyLineup, lineupRequest, lineupSize, pickId, resolveLineup, SECTIONS, specOf, type BotSpec, type Lineup, type Section } from './lineup';
 
 // ------------------------------------------------------------------ state
@@ -972,9 +974,9 @@ function rulesHtml(s: GameState): string {
   const ill = def(s, me.illuminati);
   const goals = goalsInHand(s, ui.me).map((g) => cardName(s, g));
   const two = s.players.length === 2;
-  const sec = (id: string, title: string, body: string) => `<section id="rule-${id}"><h3>${title}</h3>${body}</section>`;
+  const sec = (id: string, title: string, body: string) => `<section id="rule-${id}"><h3>${title}</h3>${body}${fullRules(id)}</section>`;
   return `<h2>How to play</h2>
-  <nav class="rule-nav">${[['goal', 'Your goal'], ['card', 'Reading a card'], ['turn', 'A turn'], ['tokens', 'Actions'], ['attack', 'Attacks'], ['roll', 'The roll'], ['help', 'Helping'], ['plots', 'Plots'], ['more', 'More rules'], ...(s.players.some((p) => p.isAI && p.aiStyle) ? [['foes', 'Opponents']] : [])].map(([id, t]) => `<button data-rules="${id}">${t}</button>`).join('')}<button class="close-rules" data-rules="" aria-label="Close rules">✕</button></nav>
+  <nav class="rule-nav">${[['goal', 'Your goal'], ['card', 'Reading a card'], ['turn', 'A turn'], ['tokens', 'Actions'], ['attack', 'Attacks'], ['roll', 'The roll'], ['help', 'Helping'], ['plots', 'Plots'], ['more', 'More rules'], ...(s.players.some((p) => p.isAI && p.aiStyle) ? [['foes', 'Opponents']] : [])].map(([id, t]) => `<button data-rules="${id}">${t}</button>`).join('')}<button class="rb-open-btn" data-rulebook="">Full rulebook</button><button class="close-rules" data-rules="" aria-label="Close rules">✕</button></nav>
   ${sec('goal', 'Your goal', `<p>You win by <b>declaring victory</b> when you meet a Goal at the end of a turn (yours or anyone's; never in the first round), and then surviving your rivals' attempts to stop you. Nobody wins without declaring. There are three kinds of Goal:</p><ul>
     <li><b>Basic Goal:</b> control ${goalNeeded(s, ui.me)} Groups, counting your Illuminati. You have ${goalCount(s, ui.me)}.</li>
     <li><b>Your Illuminati's Special Goal</b> (${esc(ill.name)}): ${esc(ill.text.replace(/^Power [^.]+\.\s*/, ''))}</li>
@@ -1025,6 +1027,12 @@ function rulesHtml(s: GameState): string {
     <li><b>Devastated</b> Places lose their tokens and stop counting until someone sends Relief (spending actions worth three times the Place's printed Power).</li>
     <li>You may <b>move</b> a Group (with its puppets) to another open arrow in your Power Structure in your main phase for one token. Groups cannot be dropped.</li>
     <li>When a card and a rule disagree, the card wins.</li></ul>`)}`;
+}
+
+/** The link from a short Rules section to the matching section of the full rulebook. */
+function fullRules(id: string): string {
+  const target = sectionById(RULES_PANEL_LINKS[id] ?? '');
+  return target ? `<button class="rb-link" data-rulebook="${target.id}">Open the full rulebook: ${esc(target.title)} ›</button>` : '';
 }
 
 /** When a Plot may be played, in the words of the rules. */
@@ -1428,6 +1436,7 @@ function renderStart() {
       <header class="hero">
         <h1>Elitists War</h1>
         <p>Build a secret Power Structure, take over the world's Groups one arrow at a time, and stop your rival doing the same.</p>
+        <button class="rb-home-btn" data-rulebook="">Read the rulebook</button>
       </header>
       ${saves.length ? `<section><div class="label">Continue a game</div><div class="saves">${saves.map((sv) => `
         <div class="save"><button data-load="${sv.id}"><b>${esc(sv.summary)}</b><span class="muted">${new Date(sv.updated).toLocaleString()}</span></button>
@@ -1757,7 +1766,7 @@ function renderOnline() {
   const o = online!;
   const msg = o.msg ? `<div class="error" role="alert">${esc(o.msg)}</div>` : '';
   if (!o.userId) {
-    app.innerHTML = `<div class="start"><header class="hero"><h1>Elitists War</h1><p>Play online with friends, a move at a time. Sign in so your games follow you to any device.</p></header>
+    app.innerHTML = `<div class="start"><header class="hero"><h1>Elitists War</h1><p>Play online with friends, a move at a time. Sign in so your games follow you to any device.</p><button class="rb-home-btn" data-rulebook="">Read the rulebook</button></header>
       <section class="panel auth">${msg}
         <button class="google" id="a-google" ${o.busy ? 'disabled' : ''}>
           <svg viewBox="0 0 48 48" width="20" height="20" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>
@@ -1784,7 +1793,7 @@ function renderOnline() {
   const pick = (ui as Ui & { pick?: string }).pick ?? 'bavarian-illuminati';
   const friends = (ui as Ui & { friends?: number }).friends ?? 1;
   app.innerHTML = `<div class="start">
-    <header class="bar"><div class="brand">Elitists War</div><div class="turn">${esc(o.name)} · <button class="linkish" data-o="signout">Sign out</button></div></header>
+    <header class="bar"><div class="brand">Elitists War</div><button class="rb-bar-btn" data-rulebook="">Rulebook</button><div class="turn">${esc(o.name)} · <button class="linkish" data-o="signout">Sign out</button></div></header>
     ${msg}
     <section><div class="label">Your games</div><div class="saves">${o.games.map((g) => `
       <div class="save"><button data-open="${g.id}"><b>${g.yourMove ? '● Your move — ' : ''}${esc(g.seats.map((x) => x.name || 'Open seat').join(' vs '))}</b>
