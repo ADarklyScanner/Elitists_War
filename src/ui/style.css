@@ -491,3 +491,10 @@ p { margin: 0; }
 .sweet-on { color: var(--ok); font-size: 12.5px; font-weight: 600; }
 .table-level { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 8px 10px; border: 1px solid #d4a34066; border-radius: 8px; background: #d4a3400d; }
 .table-level .seg button.on { background: var(--brass); }
+.roster { margin-top: 6px; }
+.roster summary { cursor: pointer; color: var(--brass); font-size: 13px; }
+.roster table { width: 100%; border-collapse: collapse; margin-top: 6px; font-size: 13px; }
+.roster th, .roster td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.roster td b { display: block; }
+.roster td .small { display: block; }
+.tells { padding-left: 18px; font-size: 13px; }

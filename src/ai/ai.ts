@@ -158,7 +158,7 @@ function planAttacks(s: GameState, pl: string): AttackPlan[] {
       // The named computer's habits, as a nudge to the final choice (0 for a by-the-book player).
       const owner = s.cards[t.iid].controller;
       const habit = (t.type === 'destroy' ? S.destroy - 1 : S.control - 1) * 3
-        + (owner && owner === leader ? (S.leader - 1.3) * 3 : 0) + (owner && owner === weakest ? (S.weakest - 1) * 3 : 0)
+        + (owner && owner === leader ? (S.leader - 1.3) * 6 : 0) + (owner && owner === weakest ? (S.weakest - 1) * 6 : 0)
         + (s.cards[t.iid].zone === 'hand' ? S.fromHand * 0.4 : 0)
         + (S.safeBets ? (chance - 0.6) * 6 : 0) + (S.risk < 0 ? (0.6 - chance) * -S.risk * 12 : 0);
       plans.push({ action, score, chance, habit });

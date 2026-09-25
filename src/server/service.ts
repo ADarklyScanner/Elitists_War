@@ -7,8 +7,9 @@ import {
   RuleError, def, HOOKS, canExpose,
 } from '../engine';
 import { chooseAction } from '../ai/ai';
+import { seatComputers, styleById } from '../ai/personas';
 
-export interface Seat { id: string; name: string; isAI: boolean; aiLevel?: AiLevel; userId?: string; illuminati?: string }
+export interface Seat { id: string; name: string; isAI: boolean; aiLevel?: AiLevel; aiStyle?: string; userId?: string; illuminati?: string }
 
 export interface StandingOrders {
   /** Pass automatically in windows where you have no legal response. */
@@ -55,10 +56,12 @@ export async function newTable(store: Store, host: { userId: string; name: strin
 }, notifier?: Notifier): Promise<GameRecord> {
   const seats: Seat[] = [{ id: 'p1', name: host.name, isAI: false, userId: host.userId, illuminati: host.illuminati }];
   const firstAi = opts.seats - (opts.computerSeats ?? 0) + 1;
+  const levels = Array.from({ length: opts.computerSeats ?? 0 }, (_, k) => opts.aiLevels?.[k] ?? opts.aiLevel ?? 'normal');
+  // Named computers, each with its own style; their Illuminati are picked when the game starts.
+  const named = seatComputers(levels, Date.now() % 1e9);
   for (let i = 2; i <= opts.seats; i++) {
     const k = i - firstAi; // 0 for the first computer player
-    const level = opts.aiLevels?.[k] ?? opts.aiLevel ?? 'normal';
-    seats.push(k >= 0 ? { id: `p${i}`, name: `Computer ${k + 1} (${level[0].toUpperCase()}${level.slice(1)})`, isAI: true, aiLevel: level } : { id: `p${i}`, name: '', isAI: false });
+    seats.push(k >= 0 ? { id: `p${i}`, name: named[k].name, isAI: true, aiLevel: named[k].level, aiStyle: named[k].style.id } : { id: `p${i}`, name: '', isAI: false });
   }
   const now = Date.now();
   const rec: GameRecord = {
@@ -95,10 +98,11 @@ function maybeStart(rec: GameRecord) {
     players: rec.seats.map((s, i) => {
       let ill = s.illuminati;
       if (!ill) {
-        ill = ['bavarian-illuminati', 'gnomes-of-zurich', 'the-network', 'servants-of-cthulhu', 'discordian-society', 'ufos', 'shangri-la', 'adepts-of-hermes', 'bermuda-triangle'].find((x) => !used.has(x))!;
+        // A named computer takes an Illuminati that suits its style when one is free.
+        ill = [...(styleById(s.aiStyle)?.favours ?? []), 'bavarian-illuminati', 'gnomes-of-zurich', 'the-network', 'servants-of-cthulhu', 'discordian-society', 'ufos', 'shangri-la', 'adepts-of-hermes', 'bermuda-triangle'].find((x) => !used.has(x))!;
         used.add(ill);
       }
-      return { id: s.id, name: s.name, isAI: s.isAI, aiLevel: s.aiLevel, deck: randomDeck(seed + i, ill) };
+      return { id: s.id, name: s.name, isAI: s.isAI, aiLevel: s.aiLevel, aiStyle: s.aiStyle, deck: randomDeck(seed + i, ill) };
     }),
   });
   rec.state = settle(rec, rec.state);

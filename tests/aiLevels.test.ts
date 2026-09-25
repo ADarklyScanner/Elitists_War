@@ -6,6 +6,7 @@ import { chooseAction, PROFILES } from '../src/ai/ai';
 import { MemoryStore } from '../src/server/memoryStore';
 import { newTable } from '../src/server/service';
 import { checkInvariants } from './helpers';
+import { whoIs } from '../src/ai/personas';
 
 function play(a: AiLevel, b: AiLevel, seed: number) {
   let s = createGame({ seed, players: [
@@ -48,7 +49,8 @@ describe('computer difficulty levels', () => {
       { seats: 8, computerSeats: 6, aiLevels: ['easy', 'hard', 'normal', 'hard', 'easy', 'normal'] });
     expect(rec.seats[1]).toMatchObject({ isAI: false, name: '' }); // the friend's seat waits for them
     expect(rec.seats.slice(2).map((x) => x.aiLevel)).toEqual(['easy', 'hard', 'normal', 'hard', 'easy', 'normal']);
-    expect(rec.seats[2].name).toBe('Computer 1 (Easy)');
+    expect(whoIs(rec.seats[2].name)?.level).toBe('easy'); // an Easy computer gets an Easy player's name
+    expect(new Set(rec.seats.slice(2).map((x) => x.aiStyle)).size).toBe(6); // six different styles
     expect(rec.state).toBeNull(); // not started until the friend joins
   });
   it('an 8-player game with mixed levels plays to a legal finish', () => {

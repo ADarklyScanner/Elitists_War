@@ -11,6 +11,7 @@ import {
 import { attachRect, rectOf, ensureLayout, type Rect } from '../engine/geometry';
 import { chooseAction, successChance } from '../ai/ai';
 import { suggestBots, type TableLevel } from './botMix';
+import { seatComputers, styleById, STYLES } from '../ai/personas';
 
 // ------------------------------------------------------------------ state
 
@@ -251,7 +252,8 @@ function botsEditor(humans: number, minBots: number): string {
     ${total < 8 ? '<button type="button" class="add-bot" data-bot-add>+ Add a computer player</button>' : ''}
     ${recommend(humans, minBots, total)}
     <p class="muted small">${total} players in all · Goal ${goalFor(total)} Groups. 7–8 players works, but rounds take longer.
-    <br><b>Easy</b> makes mistakes · <b>Normal</b> plays solidly · <b>Hard</b> plans its help and fights hardest near a win.</p></div>`;
+    <br><b>Easy</b> makes mistakes · <b>Normal</b> plays solidly · <b>Hard</b> plans its help and fights hardest near a win.
+    Each computer gets its own name and style when the game starts.</p>${rosterHtml()}</div>`;
 }
 
 /** Players generally find 4 or 6 at the table the sweet spot; offer one tap to get there. */
@@ -283,19 +285,29 @@ function bindBots(rerender: () => void) {
   app.querySelector<HTMLElement>('[data-bot-add]')?.addEventListener('click', () => { setBotCount(loadBots().length + 1); rerender(); });
 }
 
+const LEVEL_NAME: Record<AiLevel, string> = { easy: 'Easy', normal: 'Normal', hard: 'Hard' };
+
+/** Every named computer: one name per style at each level. */
+function rosterHtml(): string {
+  return `<details class="roster"><summary>Meet the computer players (${STYLES.length * 3})</summary>
+    <p class="muted small">Each name always plays the same way. Easy, Normal and Hard players of one style share its habits; the harder ones just play them better.</p>
+    <table><thead><tr><th>Style</th><th>Easy</th><th>Normal</th><th>Hard</th></tr></thead><tbody>${STYLES.map((st) => `
+      <tr><td><b>${esc(st.style)}</b><span class="muted small">${esc(st.blurb)}</span></td><td>${esc(st.names.easy)}</td><td>${esc(st.names.normal)}</td><td>${esc(st.names.hard)}</td></tr>`).join('')}</tbody></table></details>`;
+}
+
 function newGame(illuminati: string, quick: boolean) {
   const seed = Math.floor(Math.random() * 1e9);
   if (!loadBots().length) setBotCount(1);
   const bots = loadBots();
-  // Every player gets a different Illuminati, picked at random for the computers.
+  // Each computer is a named player with its own style, on an Illuminati that suits it.
   const others = ILLUMINATI.filter((c) => c.id !== illuminati).map((c) => c.id);
   for (let i = others.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [others[i], others[j]] = [others[j], others[i]]; }
-  const levelName = (lv: AiLevel) => LEVELS.find((l) => l[0] === lv)![1];
+  const seats = seatComputers(bots, seed, [illuminati], others);
   const s = createGame({
     seed,
     players: [
       { id: 'p1', name: 'You', isAI: false, deck: randomDeck(seed, illuminati) },
-      ...bots.map((lv, i) => ({ id: `p${i + 2}`, name: bots.length === 1 ? `Computer (${levelName(lv)})` : `Computer ${i + 1} (${levelName(lv)})`, isAI: true, aiLevel: lv, deck: randomDeck(seed + i + 1, others[i]) })),
+      ...seats.map((c, i) => ({ id: `p${i + 2}`, name: c.name, isAI: true, aiLevel: c.level, aiStyle: c.style.id, deck: randomDeck(seed + i + 1, c.illuminati ?? others[i]) })),
     ],
     settings: { houseRules: quick ? ['quickGame'] : [] },
     chooseLeads: true,
@@ -578,7 +590,8 @@ function playerChip(s: GameState, pl: string): string {
   const n = goalCount(s, pl), need = goalNeeded(s, pl);
   const active = s.players[s.active].id === pl && s.phase !== 'gameOver';
   const inHand = pl === ui.me ? '' : ` · ${p.hand.filter((i) => def(s, i).type === 'Plot').length}P ${p.hand.filter((i) => def(s, i).type !== 'Plot').length}G`;
-  return `<span class="pchip ${active ? 'active' : ''} ${pl === ui.me ? 'me' : ''} ${p.eliminated ? 'out' : ''}" title="${esc(p.name)}: ${n} of ${need} Groups${inHand ? `; ${inHand.slice(3)} in hand` : ''}">
+  const who = p.isAI ? styleById(p.aiStyle) : undefined;
+  return `<span class="pchip ${active ? 'active' : ''} ${pl === ui.me ? 'me' : ''} ${p.eliminated ? 'out' : ''}" title="${esc(p.name)}${who ? ` (${who.style}, ${LEVEL_NAME[p.aiLevel ?? 'normal']}): ${who.blurb}` : ''} ${n} of ${need} Groups${inHand ? `; ${inHand.slice(3)} in hand` : ''}">
     <b>${esc(pl === ui.me ? 'You' : p.name)}</b><span class="goal-bar"><span style="width:${Math.min(100, (n / need) * 100)}%"></span></span><span class="mono">${n}/${need}</span><span class="muted">${inHand}</span></span>`;
 }
 
@@ -886,7 +899,7 @@ function rulesHtml(s: GameState): string {
   const two = s.players.length === 2;
   const sec = (id: string, title: string, body: string) => `<section id="rule-${id}"><h3>${title}</h3>${body}</section>`;
   return `<h2>How to play</h2>
-  <nav class="rule-nav">${[['goal', 'Your goal'], ['card', 'Reading a card'], ['turn', 'A turn'], ['tokens', 'Actions'], ['attack', 'Attacks'], ['roll', 'The roll'], ['help', 'Helping'], ['plots', 'Plots'], ['more', 'More rules']].map(([id, t]) => `<button data-rules="${id}">${t}</button>`).join('')}<button class="close-rules" data-rules="" aria-label="Close rules">✕</button></nav>
+  <nav class="rule-nav">${[['goal', 'Your goal'], ['card', 'Reading a card'], ['turn', 'A turn'], ['tokens', 'Actions'], ['attack', 'Attacks'], ['roll', 'The roll'], ['help', 'Helping'], ['plots', 'Plots'], ['more', 'More rules'], ...(s.players.some((p) => p.isAI && p.aiStyle) ? [['foes', 'Opponents']] : [])].map(([id, t]) => `<button data-rules="${id}">${t}</button>`).join('')}<button class="close-rules" data-rules="" aria-label="Close rules">✕</button></nav>
   ${sec('goal', 'Your goal', `<p>You win by meeting a Goal when victory is checked, at the end of any turn (never in the first round). There are three ways:</p><ul>
     <li><b>Basic Goal:</b> control ${goalNeeded(s, ui.me)} Groups, counting your Illuminati. You have ${goalCount(s, ui.me)}.</li>
     <li><b>Your Illuminati's Special Goal</b> (${esc(ill.name)}): ${esc(ill.text.replace(/^Power [^.]+\.\s*/, ''))}</li>
@@ -927,6 +940,10 @@ function rulesHtml(s: GameState): string {
     <ul><li>Outside your own turn you may hold at most <b>${handLimit(s, ui.me)}</b> Plots; in your turn there is no limit.</li>
     <li><b>New World Orders</b> sit in the middle and change the rules for everyone; only one of each colour at a time.</li>
     <li>Nobody may use two copies of the same Plot in one attack.</li></ul>`)}
+  ${s.players.some((p) => p.isAI && p.aiStyle) ? sec('foes', 'Your opponents', `<p>Each computer player has a style it always plays. Learn their habits and use them.</p><ul>${s.players.filter((p) => p.isAI).map((p) => {
+    const st = styleById(p.aiStyle);
+    return `<li><b>${esc(p.name)}</b> (${st ? esc(st.style) : 'Computer'}, ${LEVEL_NAME[p.aiLevel ?? 'normal']})${st ? `: ${esc(st.blurb)}` : ''}</li>`;
+  }).join('')}</ul>`) : ''}
   ${sec('more', 'More rules', `<ul><li><b>Secret</b> Groups can only be attacked or helped by Illuminati and other Secret Groups.</li>
     <li>A <b>Privileged</b> attack allows only the attacker and defender to take part.</li>
     <li><b>Devastated</b> Places lose their tokens and stop counting until someone sends Relief (spending actions worth three times the Place's printed Power).</li>
@@ -1051,8 +1068,12 @@ function renderConsole(s: GameState): string {
   let body = '';
   if (s.phase === 'gameOver') {
     const won = s.winners?.includes(ui.me);
-    body = `<h2 class="${won ? 'ok' : 'bad'}">${won ? (s.winners!.length > 1 ? 'Shared victory.' : 'You win.') : s.winners?.length ? 'The Computer wins.' : 'Nobody wins.'}</h2>
+    body = `<h2 class="${won ? 'ok' : 'bad'}">${won ? (s.winners!.length > 1 ? 'Shared victory.' : 'You win.') : s.winners?.length ? `${esc(s.winners.map((w) => player(s, w).name).join(' and '))} ${s.winners.length > 1 ? 'win' : 'wins'}.` : 'Nobody wins.'}</h2>
       <p>${esc(s.log.filter((l) => / wins/.test(l.text) && !/roll to go first/.test(l.text)).map((l) => youText(l.text)).join(' '))}</p>
+      ${s.players.some((p) => p.isAI && p.aiStyle) ? `<h3>How to beat them next time</h3><ul class="tells">${s.players.filter((p) => p.isAI && styleById(p.aiStyle)).map((p) => {
+        const st = styleById(p.aiStyle)!;
+        return `<li><b>${esc(p.name)}</b> (${esc(st.style)}): ${esc(st.tell)}</li>`;
+      }).join('')}</ul>` : ''}
       <div class="btns"><button class="primary" data-act="home">New game</button></div>`;
   } else if (s.prompt?.player === ui.me && s.prompt.kind === 'choose' && s.prompt.choice) {
     const ch = s.prompt.choice;
