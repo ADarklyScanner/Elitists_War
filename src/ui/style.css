@@ -112,9 +112,6 @@ p { margin: 0; }
 .al-criminal { background: #202020; color: #e8e8e8; border: 1px solid #555; } .al-fanatic { background: #8a5a14; color: #fff0d6; }
 .attr { font-size: 11px; font-style: italic; color: var(--muted); }
 
-/* NWO row */
-.nwo-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-.nwo { border-radius: 999px; border: 1px solid var(--line); background: var(--panel-2); padding: 3px 10px; font-size: 12.5px; }
 .nwo-red { border-color: #b8483c; } .nwo-blue { border-color: #4a78b8; } .nwo-yellow { border-color: #c9a43a; }
 
 /* ---------- console ---------- */
@@ -236,7 +233,7 @@ p { margin: 0; }
 
 .tablearea { position: relative; overflow: hidden; min-height: 0; }
 .viewport { position: absolute; inset: 0; overflow: hidden; touch-action: none; cursor: grab;
-  background: radial-gradient(ellipse at 50% 60%, #15252c, var(--ground) 75%); }
+  background: radial-gradient(ellipse at 50% 50%, #1c1422, #0a080d 72%); }
 .viewport:active { cursor: grabbing; }
 .world { position: absolute; left: 0; top: 0; transform-origin: 0 0; display: flex; flex-direction: column; align-items: center; gap: 22px; padding: 16px; width: max-content; }
 .world .rivals { display: flex; gap: 22px; align-items: flex-end; justify-content: center; flex-wrap: nowrap; }
@@ -318,8 +315,8 @@ p { margin: 0; }
 @keyframes dice-result { to { opacity: 1; } }
 @keyframes dice-fade { 0%, 88% { opacity: 1; } 100% { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .die { animation: none; } .dice-result { animation-delay: 0s; } }
-.world.wide { flex-direction: row-reverse; align-items: center; }
-.world.wide .rivals { flex-direction: column; align-items: center; }
+.world.wide.duel { flex-direction: row-reverse; align-items: center; }
+.world.wide.duel .rivals { flex-direction: column; align-items: center; }
 .sheet-top { display: flex; align-items: stretch; background: var(--panel-2); border-bottom: 1px solid var(--line); }
 .sheet-top .sheet-handle { border-bottom: 0; width: auto; flex: 1; min-width: 0; }
 .sheet.min .sheet-top { border-bottom: 0; }
@@ -355,20 +352,10 @@ p { margin: 0; }
 /* ---------- your decks: face down along the left of the table ---------- */
 .decks { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; gap: 30px; z-index: 1; padding: 6px; border-radius: 12px; }
 .deck { position: relative; width: 64px; height: 90px; padding: 0; border: 0; background: none; display: block; }
-.deck .back { position: absolute; inset: 0; border-radius: 7px; border: 2px solid #d4a34099;
+.deck .back { position: absolute; inset: 0; border-radius: 6px; border: 1px solid #d4a34066;
   box-shadow: 2px 2px 0 #0b1216, 4px 4px 0 #2a3f48, 6px 6px 0 #0b1216, 0 8px 18px #0009; }
-/* Plot back: a violet rosette around a brass seal. */
-.deck.plot .back { background:
-  radial-gradient(circle at 50% 50%, #d4a340 0 9%, #3a2657 10% 13%, #d4a340cc 14% 15%, transparent 16%),
-  repeating-conic-gradient(from 7deg at 50% 50%, #4a2f70 0 11.25deg, #2c1b45 11.25deg 22.5deg),
-  #2c1b45; }
-/* Group back: a teal lattice of linked nodes. */
-.deck.group .back { background:
-  radial-gradient(circle at 50% 50%, #d4a340 0 8%, transparent 9%),
-  radial-gradient(circle at 50% 50%, transparent 0 22%, #d4a34066 23% 25%, transparent 26%),
-  repeating-linear-gradient(45deg, #1f4d52 0 5px, #16373b 5px 10px),
-  repeating-linear-gradient(-45deg, #1f4d5288 0 5px, transparent 5px 10px),
-  #16373b; }
+.deck.plot .back, .cardback.plot { background: #1d0f2c url("assets/back-plot.webp") center / cover; }
+.deck.group .back, .cardback.group { background: #0c1a2c url("assets/back-group.webp") center / cover; }
 .deck.empty .back { opacity: .3; box-shadow: none; }
 .deck-label { position: absolute; left: 0; right: 0; bottom: -17px; text-align: center; font: 600 10.5px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
 .deck-count { position: absolute; top: -8px; right: -8px; min-width: 22px; height: 22px; border-radius: 11px; background: var(--panel-2); border: 1px solid var(--line); font: 600 11.5px/20px var(--mono); color: var(--ink); text-align: center; padding: 0 4px; }
@@ -398,3 +385,62 @@ p { margin: 0; }
 .dock .hand-head .jump { border: 1px solid var(--line); background: var(--panel-2); border-radius: 999px; padding: 2px 9px; font-size: 12px; white-space: nowrap; }
 .dock .hand-head .jump.plots { color: #c6b4e4; border-color: #4b3d5c; }
 .dock .hand-head .fold { margin-left: auto; border: 0; background: none; color: var(--muted); padding: 2px 6px; }
+
+/* ---------- the table: purple felt in a brass rim, seats around a New World Order centre ---------- */
+.world.felt {
+  gap: 34px; padding: 44px 56px; border-radius: 150px;
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='500' height='500'%3E%3Cfilter id='v'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.008 .014' numOctaves='4' seed='11' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .78 0 0 0 0 .5 0 0 0 0 1 1 0 0 0 0'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='table' tableValues='0 0 0 0 0 0 .2 0 0 0 0 0 0'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23v)'/%3E%3C/svg%3E"),
+    radial-gradient(ellipse at 50% 45%, #3b1d57 0%, #2a1340 40%, #170a24 100%);
+  box-shadow:
+    inset 0 0 0 1px #0008, inset 0 0 70px #000b,
+    0 0 0 3px #1a0f07, 0 0 0 5px #e2b35c, 0 0 0 11px #8a5a22, 0 0 0 13px #f0c878, 0 0 0 17px #5a3812, 0 0 0 20px #c08a3c,
+    0 26px 70px #000;
+}
+.world.felt .rivals { gap: 30px; }
+.world.felt .side { background: #0d0716b8; border: 1px solid #c99a4866; border-radius: 16px; box-shadow: inset 0 0 0 3px #0d0716, inset 0 0 0 4px #c99a4826; }
+.world.felt .side.active { border-color: #e2b35c; box-shadow: inset 0 0 0 3px #0d0716, inset 0 0 0 4px #e2b35c55, 0 0 26px -4px #e2b35c88; }
+.world.felt .side-head { justify-content: center; border: 0; padding: 8px 14px; }
+.world.felt .side-head .who { font-family: var(--display); letter-spacing: .14em; text-transform: uppercase; font-size: 14px; color: #f3d89a;
+  padding: 2px 16px; border-radius: 999px; background: linear-gradient(#2a1a0c, #140c06); border: 1px solid #c99a48; box-shadow: 0 0 0 2px #140c06, 0 0 0 3px #c99a4855; }
+.world.felt .side.active .side-head .who { color: #1a1003; background: linear-gradient(#f5d98f, #c08a3c); }
+.world.felt .card.ill { box-shadow: 0 0 0 1px #140c06, 0 0 0 2px #e2b35c, 0 0 22px -2px #e2b35c99; }
+
+/* Fixed spots at each seat, like the marked places on a card table. */
+.seat-rail { display: flex; flex-wrap: wrap; justify-content: center; align-items: flex-start; gap: 12px 16px; padding: 6px 14px 10px; }
+.spot { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.spot-label { font: 600 10px var(--display); letter-spacing: .12em; text-transform: uppercase; color: #c9a86a; white-space: nowrap; }
+.spot-card { position: relative; width: calc(var(--u) * 5.2); height: calc(var(--u) * 7.3); border-radius: 5px; border: 1px dashed #c99a4866; display: grid; place-items: center; }
+.spot-card .cardback { position: absolute; inset: 0; border-radius: 5px; box-shadow: 1px 1px 0 #0b0610, 2px 2px 0 #c99a4844, 3px 3px 0 #0b0610; }
+.cardback.empty { opacity: .25; box-shadow: none; }
+.spot-count { position: absolute; right: -7px; top: -7px; min-width: 18px; height: 18px; border-radius: 9px; padding: 0 4px; background: #140c06; border: 1px solid #c99a48; color: #f3d89a; font: 600 10.5px/16px var(--mono); text-align: center; }
+.spot-empty { font-size: 10px; color: #9c8a70; font-style: italic; }
+.discard-top { position: absolute; inset: 0; border-radius: 5px; border: 1px solid #c99a4899; background: linear-gradient(160deg, #1f343d, #182a31); padding: 3px; display: flex; align-items: flex-start; text-align: left; }
+.discard-top b { font: 600 9.5px/1.05 var(--display); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; }
+.fan { display: flex; height: calc(var(--u) * 7.3); align-items: center; padding-left: 14px; }
+.fan .cardback { width: calc(var(--u) * 5.2); height: calc(var(--u) * 7.3); border-radius: 5px; margin-left: -14px; box-shadow: -2px 0 4px #0009; border: 1px solid #c99a4855; }
+.res-tray .res-row { padding: 0; min-height: calc(var(--u) * 7.3); align-items: center; border: 1px dashed #c99a4866; border-radius: 6px; padding: 4px 8px; }
+
+/* The centre: the three New World Order places around the emblem. */
+.nwo-center { position: relative; display: grid; justify-items: center; gap: 8px; padding: 14px 24px; }
+.nwo-center .emblem { position: absolute; left: 50%; top: 50%; width: 250px; height: 250px; transform: translate(-50%, -50%); opacity: .8; pointer-events: none; }
+.nwo-center .emblem svg { width: 100%; height: 100%; filter: drop-shadow(0 0 16px #e2b35c33); }
+.nwo-label { position: relative; font: 700 13px var(--display); letter-spacing: .3em; text-transform: uppercase; color: #f3d89a; text-shadow: 0 1px 3px #000; }
+.nwo-slots { position: relative; display: flex; gap: 120px; }
+.nwo-slot { position: relative; width: calc(var(--u) * 8); height: calc(var(--u) * 11.2); border-radius: 7px; border: 1px dashed; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; padding: 4px; background: #0d071680; text-align: center; }
+.nwo-slot.filled { border-style: solid; background: linear-gradient(160deg, #1f343d, #182a31); box-shadow: 0 6px 14px #0009; }
+.nwo-slot b { font: 600 11.5px/1.1 var(--display); }
+.nwo-tag { font: 600 9.5px var(--display); letter-spacing: .14em; text-transform: uppercase; }
+.nwo-slot.nwo-red { border-color: #d0584a; } .nwo-red .nwo-tag { color: #f08a7c; }
+.nwo-slot.nwo-blue { border-color: #5a8ad0; } .nwo-blue .nwo-tag { color: #8db6f0; }
+.nwo-slot.nwo-yellow { border-color: #d6b048; } .nwo-yellow .nwo-tag { color: #f0d27a; }
+.world.wide.duel .nwo-slots { flex-direction: column; gap: 60px; }
+/* Three or more players: seats round the table, the next player on your left, clockwise from there. */
+.world.felt.ring { display: grid; grid-template-columns: auto auto auto; grid-template-areas: "top top top" "left mid right" "me me me"; align-items: center; justify-items: center; }
+.ring .rivals.top { grid-area: top; align-items: flex-end; }
+.ring .rivals.left { grid-area: left; flex-direction: column-reverse; align-items: flex-end; }
+.ring .rivals.right { grid-area: right; flex-direction: column; align-items: flex-start; }
+.ring .nwo-center { grid-area: mid; }
+.ring .side.mine { grid-area: me; }
+.ring .nwo-slots { gap: 70px; }
+@media (max-width: 480px) { .world.felt { padding: 34px 26px; border-radius: 90px; } .nwo-slots { gap: 60px; } }

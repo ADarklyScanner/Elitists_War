@@ -11,7 +11,9 @@ const out = await build({
   define: { __ONLINE__: String(online), __SB_URL__: JSON.stringify(cfg.url), __SB_KEY__: JSON.stringify(cfg.key) },
 });
 const js = out.outputFiles[0].text.replace(/<\/script/g, '<\\/script');
-const css = readFileSync('src/ui/style.css', 'utf8');
+// Pictures the stylesheet points at (card backs) are embedded, so the page stays a single file.
+const css = readFileSync('src/ui/style.css', 'utf8').replace(/url\("assets\/([\w.-]+)"\)/g, (_, f) =>
+  `url("data:image/${f.split('.').pop()};base64,${readFileSync(`src/ui/assets/${f}`).toString('base64')}")`);
 const html = `<title>Elitists War</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>

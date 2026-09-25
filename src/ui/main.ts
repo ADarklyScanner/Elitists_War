@@ -341,8 +341,8 @@ function render() {
       <button class="guide-toggle ${ui.guide ? 'on' : ''} ${ui.help}" data-act="guide" title="${esc(HELP_TITLE[ui.help])}" aria-label="Help level: ${HELP_LABEL[ui.help]} (tap to change)">${HELP_LABEL[ui.help]}</button>
     </header>
     <main class="tablearea">
-      <div class="viewport" id="vp"><div class="world" id="world">
-        <div class="rivals">${rivals.map((r) => renderSide(s, r.id, false)).join('')}</div>
+      <div class="viewport" id="vp"><div class="world felt ${rivals.length > 1 ? 'ring' : 'duel'}" id="world">
+        ${seating(s)}
         ${renderNwo(s)}
         ${renderSide(s, ui.me, true)}
       </div></div>
@@ -475,15 +475,19 @@ const youText = (t: string) => t.replace(/\bYou's\b/g, 'Your').replace(/(^|\s)Yo
 // ------------------------------------------------------------------ table pan and zoom
 
 /** Frame the whole table, leaving room for the action panel. */
+/** Width of the table's brass rim, in pixels (see .felt in style.css). */
+const RIM = 20;
+
 function fitView(vp: HTMLElement, world: HTMLElement) {
   const wide = vp.clientWidth > 900;
   const sheet = vp.parentElement!.querySelector<HTMLElement>('.sheet');
   const rail = window.innerWidth <= 480 ? 58 : 84; // the decks along the left
   const aw = vp.clientWidth - (wide ? 372 : 0) - 16 - rail;
   const ah = vp.clientHeight - (!wide && sheet ? sheet.offsetHeight + 8 : 0) - 16;
-  const ww = world.offsetWidth, wh = world.offsetHeight;
-  const z = Math.max(0.3, Math.min(1.5, aw / ww, ah / wh));
-  ui.view = { x: 8 + rail + (aw - ww * z) / 2, y: 8 + Math.max(0, (ah - wh * z) / 2), z, auto: true };
+  // The brass rim is drawn outside the felt, so leave room for it on every side.
+  const ww = world.offsetWidth + 2 * RIM, wh = world.offsetHeight + 2 * RIM;
+  const z = Math.max(0.15, Math.min(1.5, aw / ww, ah / wh));
+  ui.view = { x: 8 + rail + (aw - ww * z) / 2 + RIM * z, y: 8 + Math.max(0, (ah - wh * z) / 2) + RIM * z, z, auto: true };
 }
 
 function applyView(world: HTMLElement) {
@@ -493,7 +497,7 @@ function applyView(world: HTMLElement) {
 
 function zoomAt(px: number, py: number, factor: number) {
   const v = ui.view!;
-  const z = Math.max(0.25, Math.min(3, v.z * factor));
+  const z = Math.max(0.15, Math.min(3, v.z * factor));
   v.x = px - ((px - v.x) * z) / v.z;
   v.y = py - ((py - v.y) * z) / v.z;
   v.z = z; v.auto = false;
@@ -573,23 +577,55 @@ function renderSide(s: GameState, pl: string, mine: boolean): string {
     cells.push(`<button class="cell slot ${G.ok.has('slots') ? 'g-ok' : ''}" style="${place(sl.r)}" data-slot="${group.map((g) => `${g.onto}:${g.side}`).join('|')}" aria-label="Place here">+</button>`);
   }
   const n = goalCount(s, pl), need = goalNeeded(s, pl);
-  return `
-    <div class="side ${mine ? 'mine' : 'theirs'} ${s.players[s.active].id === pl && s.phase !== 'gameOver' ? 'active' : ''} ${gnext(mine ? 'board' : 'rival')}">
+  const head = `
       <div class="side-head">
-        <span class="who">${mine ? 'Your Power Structure' : esc(p.name)}</span>
+        <span class="who">${mine ? 'You' : esc(p.name)}</span>
         <span class="goal" title="Groups controlled toward the Basic Goal">
           <span class="goal-bar"><span style="width:${Math.min(100, (n / need) * 100)}%"></span></span>
           <b>${n}</b>/${need} Groups
         </span>
-        ${mine ? '' : `<span class="muted">${p.hand.filter((i) => def(s, i).type === 'Plot').length} Plots · ${p.hand.filter((i) => def(s, i).type !== 'Plot').length} Groups in hand</span>`}
-      </div>
-      <div class="board-scroll"><div class="field" style="width:calc(var(--u) * ${maxX - minX});height:calc(var(--u) * ${maxY - minY})">${cells.join('')}</div></div>
-      ${resourcesOf(s, pl).length ? `<div class="res-row"><span class="label">Resources</span>${resourcesOf(s, pl).map((r) => {
-        const c = s.cards[r];
-        const sel = (ui.sel.kind === 'resource' && ui.sel.iid === r) || (ui.sel.kind === 'link' && ui.sel.resource === r);
-        return `<button class="res ${sel ? 'selected' : ''} ${gcls(r)}" data-res="${r}"><b>${esc(cardName(s, r))}</b>${c.tokens ? '<span class="token-inline"></span>' : ''}<span class="muted small">${c.hiddenUnder ? `face down under ${esc(cardName(s, c.hiddenUnder))}` : c.linkedTo && s.cards[c.linkedTo] && def(s, c.linkedTo).type !== 'Illuminati' ? `linked to ${esc(cardName(s, c.linkedTo))}` : 'unlinked'}</span></button>`;
-      }).join('')}</div>` : ''}
+      </div>`;
+  const field = `<div class="board-scroll"><div class="field" style="width:calc(var(--u) * ${maxX - minX});height:calc(var(--u) * ${maxY - minY})">${cells.join('')}</div></div>`;
+  // Seat order mirrors a real table: your nameplate at your edge, the Power Structure toward the middle.
+  return `
+    <div class="side ${mine ? 'mine' : 'theirs'} ${s.players[s.active].id === pl && s.phase !== 'gameOver' ? 'active' : ''} ${gnext(mine ? 'board' : 'rival')}">
+      ${mine ? `${field}${seatRail(s, pl, mine)}${head}` : `${head}${seatRail(s, pl, mine)}${field}`}
     </div>`;
+}
+
+/** How many rivals sit on the left, across the top and on the right, by number of rivals. */
+const SEATS: Record<number, [number, number, number]> = { 1: [0, 1, 0], 2: [0, 2, 0], 3: [1, 1, 1], 4: [1, 2, 1], 5: [1, 3, 1], 6: [2, 2, 2], 7: [2, 3, 2] };
+
+/** Rivals seated around the table in turn order: the next player on your left, then round clockwise. */
+function seating(s: GameState): string {
+  const at = s.players.findIndex((p) => p.id === ui.me);
+  const order = s.players.map((_, i) => s.players[(at + 1 + i) % s.players.length]).filter((p) => p.id !== ui.me);
+  const [l, t] = SEATS[order.length] ?? [0, order.length, 0];
+  const row = (cls: string, list: typeof order) => list.length ? `<div class="rivals ${cls}">${list.map((r) => renderSide(s, r.id, false)).join('')}</div>` : '';
+  return row('left', order.slice(0, l)) + row('top', order.slice(l, l + t)) + row('right', order.slice(l + t));
+}
+
+/** The fixed places at each seat: decks, discard pile, cards in hand and the Resources tray. */
+function seatRail(s: GameState, pl: string, mine: boolean): string {
+  const p = player(s, pl);
+  const spot = (label: string, body: string, cls = '') => `<div class="spot ${cls}"><div class="spot-card">${body}</div><span class="spot-label">${label}</span></div>`;
+  const pile = (deck: 'plot' | 'group', n: number) => spot(deck === 'plot' ? 'Plots' : 'Groups', `<span class="cardback ${deck} ${n ? '' : 'empty'}" aria-hidden="true"></span><span class="spot-count">${n}</span>`, 'deck-spot');
+  const top = p.discard[p.discard.length - 1];
+  const discard = spot('Discard', top
+    ? `<button class="discard-top" data-inspect="${top}" title="Top of the discard pile (face up): ${esc(cardName(s, top))}"><b>${esc(cardName(s, top))}</b></button><span class="spot-count">${p.discard.length}</span>`
+    : '<span class="spot-empty">empty</span>', 'discard-spot');
+  const plots = p.hand.filter((i) => def(s, i).type === 'Plot').length, groups = p.hand.length - plots;
+  const fan = (deck: 'plot' | 'group', k: number) => Array.from({ length: Math.min(k, 6) }, () => `<span class="cardback ${deck}"></span>`).join('');
+  const hand = mine ? '' : `<div class="spot hand-spot" title="${plots} Plot${plots === 1 ? '' : 's'} and ${groups} Group${groups === 1 ? '' : 's'} in hand">
+      <div class="fan">${fan('plot', plots)}${fan('group', groups)}</div><span class="spot-label">Hand · ${plots} Plots · ${groups} Groups</span></div>`;
+  const res = resourcesOf(s, pl);
+  const tray = `<div class="spot res-tray"><div class="res-row">${res.map((r) => {
+    const c = s.cards[r];
+    const sel = (ui.sel.kind === 'resource' && ui.sel.iid === r) || (ui.sel.kind === 'link' && ui.sel.resource === r);
+    return `<button class="res ${sel ? 'selected' : ''} ${gcls(r)}" data-res="${r}"><b>${esc(cardName(s, r))}</b>${c.tokens ? '<span class="token-inline"></span>' : ''}<span class="muted small">${c.hiddenUnder ? `face down under ${esc(cardName(s, c.hiddenUnder))}` : c.linkedTo && s.cards[c.linkedTo] && def(s, c.linkedTo).type !== 'Illuminati' ? `linked to ${esc(cardName(s, c.linkedTo))}` : 'unlinked'}</span></button>`;
+  }).join('') || '<span class="spot-empty">none in play</span>'}</div><span class="spot-label">Resources</span></div>`;
+  // Your own decks live on the rail at the left of the screen, where you tap to draw.
+  return `<div class="seat-rail">${mine ? '' : pile('plot', p.plotDeck.length) + pile('group', p.groupDeck.length)}${discard}${hand}${tray}</div>`;
 }
 
 function placementSlots(s: GameState, pl: string): { r: Rect; onto: string; side: Side }[] {
@@ -666,11 +702,38 @@ function handCard(s: GameState, iid: string): string {
     </button>`;
 }
 
+const NWO_COLORS = [['red', 'Red'], ['blue', 'Blue'], ['yellow', 'Yellow']] as const;
+
+/** The middle of the table: one place for each colour of New World Order, which changes the rules for everyone. */
 function renderNwo(s: GameState): string {
-  const list = Object.entries(s.nwo).filter(([, v]) => v);
-  if (!list.length) return '';
-  return `<div class="nwo-row"><span class="label">New World Order</span>${list.map(([color, iid]) => `<button class="nwo nwo-${color}" data-inspect="${iid}">${esc(cardName(s, iid!))}</button>`).join('')}</div>`;
+  const slot = ([color, label]: readonly [string, string]) => {
+    const iid = s.nwo[color];
+    return iid
+      ? `<button class="nwo-slot filled nwo-${color}" data-inspect="${iid}" title="${label} New World Order in play: tap to read it"><span class="nwo-tag">${label}</span><b>${esc(cardName(s, iid))}</b></button>`
+      : `<div class="nwo-slot nwo-${color}" title="No ${label.toLowerCase()} New World Order in play"><span class="nwo-tag">${label}</span><span class="spot-empty">open</span></div>`;
+  };
+  return `<div class="nwo-center">
+    <div class="emblem" aria-hidden="true">${EMBLEM}</div>
+    <div class="nwo-label" title="New World Order cards stay in play and change the rules for every player. Only one of each colour can be in play; a new one replaces the old.">New World Order</div>
+    <div class="nwo-slots">${NWO_COLORS.map(slot).join('')}</div>
+  </div>`;
 }
+
+/** The table's centrepiece: an eye in a pyramid over a globe, drawn here from scratch. */
+const EMBLEM = (() => {
+  const rays = Array.from({ length: 28 }, (_, i) => {
+    const a = (i / 28) * Math.PI * 2, r0 = 44, r1 = i % 2 ? 70 : 82;
+    const f = (n: number) => n.toFixed(1);
+    return `<line x1="${f(100 + Math.cos(a) * r0)}" y1="${f(104 + Math.sin(a) * r0)}" x2="${f(100 + Math.cos(a) * r1)}" y2="${f(104 + Math.sin(a) * r1)}"/>`;
+  }).join('');
+  return `<svg viewBox="0 0 200 200"><defs><linearGradient id="em-g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f7dc92"/><stop offset=".55" stop-color="#c9973e"/><stop offset="1" stop-color="#7a5320"/></linearGradient></defs>
+    <g fill="none" stroke="#c9973e" stroke-opacity=".4" stroke-width="1"><circle cx="100" cy="100" r="94"/><circle cx="100" cy="100" r="86" stroke-dasharray="2 4"/><ellipse cx="100" cy="100" rx="36" ry="86"/><ellipse cx="100" cy="100" rx="64" ry="86"/><path d="M14 100H186M22 64Q100 50 178 64M22 136Q100 150 178 136"/></g>
+    <g stroke="#e8c170" stroke-opacity=".45" stroke-width=".9">${rays}</g>
+    <path d="M100 44L154 138H46Z" fill="#170d22" stroke="url(#em-g)" stroke-width="4.5" stroke-linejoin="round"/>
+    <path d="M100 57L142 131H58Z" fill="none" stroke="#c9973e" stroke-opacity=".55"/>
+    <path d="M73 108Q100 86 127 108Q100 130 73 108Z" fill="#26170c" stroke="url(#em-g)" stroke-width="2.6"/>
+    <circle cx="100" cy="108" r="10" fill="url(#em-g)"/><circle cx="100" cy="108" r="4.4" fill="#120a06"/><circle cx="96.5" cy="104.5" r="1.8" fill="#fff" opacity=".85"/></svg>`;
+})();
 
 /** The three parts of a turn, with the current one lit. Tapping it opens the turn rules. */
 function phaseTracker(s: GameState): string {
