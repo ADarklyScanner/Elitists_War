@@ -14,8 +14,8 @@ import { abilitiesOf, attackingGroups, matches } from './abilities';
 import { alignmentPairs, alignments, attributes, globalPower, power, resistance } from './stats';
 import { NWO_EFFECTS } from './nwo';
 import { PLOTS, GOALS } from './plotTypes';
-import { HOOKS, CHOICES, abilitiesDisabled, activeHookCards, anyHook, fireHooks, goalCheck, hooksOf, sumHooks, type AbilityParams } from './hooks';
-import type { Choice, GameEvent } from './types';
+import { HOOKS, CHOICES, EVENT_ABILITY_CARDS, abilitiesDisabled, activeHookCards, anyHook, fireHooks, goalCheck, hooksOf, sumHooks, type AbilityParams, type ActivatedAbility } from './hooks';
+import type { AnnouncedKind, Choice, GameEvent, PlotEffect } from './types';
 
 // ---------------------------------------------------------------- setup
 
@@ -192,12 +192,26 @@ export function drawGroup(s: GameState, p: PlayerState): string[] { return drawF
 
 // ---------------------------------------------------------------- events, choices, private information
 
-/** Does any player hold a Plot that can respond to this kind of event? */
+/**
+ * Can anybody respond to this event: a Plot in hand with timing 'event' for it, or an activated ability
+ * of a card in play with timing 'event' for it whose `listens` says it could answer?
+ */
 function hasListeners(s: GameState, e: GameEvent): boolean {
-  return livePlayers(s).some((p) => p.hand.some((iid) => {
+  const plot = livePlayers(s).some((p) => p.hand.some((iid) => {
     const h = PLOTS[s.cards[iid].cardId];
     return !!h && h.timing.includes('event') && (!h.events || h.events.includes(e.type));
   }));
+  if (plot) return true;
+  if (!EVENT_ABILITY_CARDS.size) return false;
+  for (const c of Object.values(s.cards)) {
+    if (!EVENT_ABILITY_CARDS.has(c.cardId) || (c.zone !== 'structure' && c.zone !== 'resources') || !c.controller) continue;
+    if (player(s, c.controller).eliminated || abilitiesDisabled(s, c.iid)) continue;
+    for (const ab of HOOKS[c.cardId].actions ?? []) {
+      if (!ab.timing.includes('event') || !(ab.events ?? ['action']).includes(e.type)) continue;
+      if (!ab.listens || ab.listens(s, c.controller, c.iid, e)) return true;
+    }
+  }
+  return false;
 }
 
 /**
@@ -208,14 +222,209 @@ function hasListeners(s: GameState, e: GameEvent): boolean {
 export function raiseEvent(s: GameState, e: GameEvent, then?: string) {
   fireHooks(s, (h, self) => h.onEvent?.(s, self, e));
   if (hasListeners(s, e)) { (s.events ??= []).push({ ...e, data: { ...e.data, then } }); return; }
-  if (then) runContinuation(s, then);
+  if (then) runContinuation(s, then, e);
 }
 
-function runContinuation(s: GameState, then: string) {
+function runContinuation(s: GameState, then: string, e?: GameEvent) {
   if (s.phase === 'gameOver') return;
   if (then === 'draws') turnDraws(s);
   else if (then === 'takeoverPrompt') takeoverStep(s);
   else if (then === 'finishBeginning') finishBeginning(s);
+  else if (then === 'resolveAction' && e) resolveAction(s, e);
+}
+
+// ---------------------------------------------------------------- announced actions (R009/R010)
+//
+// Any player may respond to an announced action, and a cancelled action never happened while its
+// costs stay paid (R009). Actions outside an attack (moving a Group, an activated ability used in your
+// main phase, Relief, bringing a Resource into play, linking a Resource, the Illuminati's Group draw)
+// are therefore announced first: the costs are paid, an 'action' event is raised, and the action itself
+// is carried out by that event's continuation ('resolveAction') once its response window closes, unless
+// it was cancelled. When nobody can respond, raiseEvent runs the continuation at once, so the game plays
+// exactly as if the action had been done directly. Buying Plots is not an action and cannot be
+// cancelled (R027, R009), so it is never announced.
+
+/** Announce an action; `actors` are the Groups (or other cards) whose token pays for it. */
+function announce(s: GameState, playerId: string, kind: AnnouncedKind, action: Action, actors: string[], card?: string) {
+  raiseEvent(s, { type: 'action', player: playerId, card: card ?? actors[0], cards: actors, data: { kind, action } }, 'resolveAction');
+}
+
+/** Actions are announced only when nothing else is going on; in other windows they happen at once. */
+function canAnnounce(s: GameState) {
+  return !s.window && !s.attack && !s.prompt && s.phase === 'main';
+}
+
+/** Set while a Plot played in response to an announced action resolves (its window is closed then). */
+let respondingTo: GameEvent | undefined;
+
+/** The action waiting for responses: the open 'action' event, or the one a responding Plot resolves for. */
+export function announcedAction(s: GameState): GameEvent | undefined {
+  const e = s.window?.kind === 'event' ? s.window.event : respondingTo;
+  return e?.type === 'action' ? e : undefined;
+}
+
+/** Has this acting card's action been cancelled (or, with no card, the whole action)? */
+export function actionCancelled(e: GameEvent, card?: string): boolean {
+  const rs = e.responses ?? [];
+  return rs.some((r) => !isCancelled(rs, r.iid) && (r.effect.t === 'fail' || (!!card && r.effect.t === 'cancelGroup' && r.effect.group === card)));
+}
+
+/** Cards acting in an announced action: its uncancelled actors, and cards that answered it with a still-live ability. */
+export function announcedActors(e: GameEvent): string[] {
+  const rs = e.responses ?? [];
+  const actors = (e.cards ?? []).filter((c) => !actionCancelled(e, c));
+  const responders = rs.filter((r) => r.ability && !isCancelled(rs, r.iid)).map((r) => r.ability!);
+  return [...new Set([...actors, ...responders])];
+}
+
+/**
+ * The effect that cancels `card`'s action in an announced action: its own action, or the latest
+ * ability it used in response (so a cancel can itself be cancelled, R010).
+ */
+export function cancelActorEffect(e: GameEvent, card: string): PlotEffect | undefined {
+  if ((e.cards ?? []).includes(card) && !actionCancelled(e, card)) return { t: 'cancelGroup', group: card };
+  const rs = e.responses ?? [];
+  const r = [...rs].reverse().find((x) => x.ability === card && !isCancelled(rs, x.iid));
+  return r ? { t: 'cancelPlot', target: r.iid } : undefined;
+}
+
+/**
+ * Record a response to the announced action. The engine records abilities used in the window by
+ * itself; a Plot answering the action calls this from its `resolve`. `{t:'fail'}` cancels it all.
+ */
+export function respondToAction(s: GameState, playerId: string, source: string, effect: PlotEffect, ability = false) {
+  const e = announcedAction(s);
+  if (!e) return;
+  (e.responses ??= []).push({ iid: `${ability ? 'ability' : 'response'}:${source}:${s.version}:${e.responses.length}`, player: playerId, play: { card: source }, effect, ability: ability ? source : undefined });
+}
+
+/**
+ * The out-of-attack half of "spend this card's action to cancel an action of a [matching] Group": it
+ * answers a rival's announced action whose acting Group matches `ok` (or a card that answered it).
+ * Card scripts combine it with their attack half; the ability needs timing 'event'.
+ */
+export function announcedCancel(ok: (s: GameState, g: string) => boolean): Pick<ActivatedAbility, 'listens' | 'check' | 'apply'> {
+  const isGroupCard = (s: GameState, g: string) => ['Group', 'Illuminati'].includes(def(s, g).type);
+  const ready = (s: GameState, self: string) => s.cards[self].tokens > 0 && !tokenBarred(s, self);
+  return {
+    listens: (s, pl, self, e) => e.type === 'action' && !!e.player && e.player !== pl && !protectedPlayer(s, pl, e.player) && ready(s, self) &&
+      announcedActors(e).some((g) => g !== self && isGroupCard(s, g) && ok(s, g)),
+    check(s, pl, self, p) {
+      const e = announcedAction(s);
+      if (!e) return 'Use this right after a rival announces an action.';
+      const t = p.target;
+      if (!t || t === self || !announcedActors(e).includes(t) || !isGroupCard(s, t)) return 'Choose another Group that is taking an action right now.';
+      const owner = s.cards[t].controller ?? e.player;
+      if (owner === pl) return 'Choose a rival\'s Group.';
+      if (protectedPlayer(s, pl, owner)) return 'That player has not finished a first turn yet.';
+      if (!ok(s, t)) return `${cardName(s, t)}'s action cannot be cancelled by this card.`;
+      return null;
+    },
+    apply: (s, _pl, _self, p) => cancelActorEffect(announcedAction(s)!, p.target!) ?? { t: 'none' },
+  };
+}
+
+/** What an announced action would do, as a phrase after "wants to" / "does not". */
+export function actionSummary(s: GameState, e: GameEvent): string {
+  const a = e.data?.action as Action | undefined;
+  const n = (iid?: string) => (iid && s.cards[iid] ? cardName(s, iid) : 'a card');
+  switch (a?.type) {
+    case 'move': return `move ${n(a.group)} under ${n(a.onto)}`;
+    case 'useAbility': {
+      const ab = HOOKS[s.cards[a.card].cardId]?.actions?.find((x) => x.id === a.ability);
+      const tgt = a.params?.target && s.cards[a.params.target] && s.cards[a.params.target].zone !== 'hand' ? ` (${n(a.params.target)})` : '';
+      return `use ${n(a.card)}: ${(ab?.label ?? a.ability).replace(/^./, (x) => x.toLowerCase())}${tgt}`;
+    }
+    case 'relief': return `send Relief to ${n(a.place)}`;
+    case 'playResource': return `bring ${n(a.card)} into play`;
+    case 'link': return `link ${n(a.resource)} to ${n(a.to)}`;
+    case 'drawGroup': return 'draw a Group card with the Illuminati\'s action';
+    default: return 'take an action';
+  }
+}
+
+function doMove(s: GameState, pl: string, a: Extract<Action, { type: 'move' }>) {
+  const g = s.cards[a.group], dest = s.cards[a.onto];
+  const ok = g.zone === 'structure' && g.controller === pl && dest.zone === 'structure' && dest.controller === pl &&
+    !subtree(s, a.group).includes(a.onto) && openArrows(s, a.onto, new Set(subtree(s, a.group))).includes(a.side);
+  if (!ok) { log(s, `${cardName(s, a.group)} can no longer be moved there.`, pl); return; }
+  moveSubtree(s, a.group, pl, a.onto, a.side, 'hand');
+  // Moving under a Devastated Place costs the moved Groups their tokens (R037).
+  for (const g2 of subtree(s, a.group)) if (tokenBarred(s, g2)) s.cards[g2].tokens = 0;
+  log(s, `${player(s, pl).name} moves ${cardName(s, a.group)}.`, pl);
+}
+
+function doLink(s: GameState, pl: string, resource: string, to: string) {
+  const r = s.cards[resource];
+  if (r.zone !== 'resources' || r.controller !== pl || s.cards[to].zone !== 'structure' || s.cards[to].controller !== pl) return;
+  r.linkedTo = to;
+  r.linkMovedTurn = s.turn;
+  log(s, `${player(s, pl).name} links ${cardName(s, resource)} to ${cardName(s, to)}.`, pl);
+}
+
+function doDrawGroup(s: GameState, p: PlayerState) {
+  drawGroup(s, p);
+  log(s, `${p.name} uses the Illuminati's action to draw a Group card.`, p.id);
+}
+
+function doRelief(s: GameState, pl: string, place: string, payWith: string[], announced: boolean) {
+  s.cards[place].devastated = false;
+  log(s, `${player(s, pl).name} sends Relief: ${cardName(s, place)} is no longer Devastated.`, pl);
+  raiseEvent(s, { type: 'relief', card: place, player: pl, cards: payWith, data: announced ? { announced: true } : undefined });
+}
+
+/** The response window of an announced action has closed: carry it out unless it was cancelled. */
+function resolveAction(s: GameState, e: GameEvent) {
+  const a = e.data?.action as Action;
+  const pl = e.player!;
+  const p = player(s, pl);
+  if (p.eliminated) return;
+  const actors = e.cards ?? [];
+  const whole = actionCancelled(e);
+  const cancelled = actors.filter((c) => actionCancelled(e, c));
+  const names = (l: string[]) => l.map((c) => cardName(s, c)).join(', ');
+  if (a.type === 'relief' && !whole) {
+    // Groups sending Relief together: a cancelled one adds nothing, but the others may still be enough.
+    const place = s.cards[a.place];
+    if (place.zone !== 'structure' || !place.devastated) return;
+    const live = a.payWith.filter((g) => !cancelled.includes(g) && s.cards[g].zone === 'structure' && s.cards[g].controller === pl);
+    const need = 3 * (def(s, a.place).power ?? 0);
+    if (cancelled.length) {
+      if (live.reduce((n, g) => n + power(s, g), 0) < need) {
+        log(s, `${names(cancelled)}: action cancelled. The Relief falls short and ${cardName(s, a.place)} stays Devastated.`, pl);
+        return;
+      }
+      log(s, `${names(cancelled)}: action cancelled, but the other Groups still send enough Relief.`, pl);
+    }
+    doRelief(s, pl, a.place, a.payWith, true);
+    return;
+  }
+  if (whole || (actors.length && cancelled.length === actors.length)) {
+    // R009: the action never happened. Its costs stay paid; a once-per-turn action may be tried again.
+    log(s, `${actors.length ? `${names(actors)}: action cancelled` : 'Action cancelled'}, so ${p.name} does not ${actionSummary(s, e)}.`, pl);
+    if (a.type === 'playResource') s.turnFlags.resourcePlayed = false;
+    if (a.type === 'drawGroup') s.turnFlags.illumGroupDraw = false;
+    if (a.type === 'useAbility' && s.cards[a.card]?.abilityTurns) delete s.cards[a.card].abilityTurns![a.ability];
+    return;
+  }
+  switch (a.type) {
+    case 'move': doMove(s, pl, a); break;
+    case 'useAbility': {
+      const c = s.cards[a.card];
+      const ab = HOOKS[c.cardId]?.actions?.find((x) => x.id === a.ability);
+      if (!ab || (c.zone !== 'structure' && c.zone !== 'resources') || c.controller !== pl || abilitiesDisabled(s, a.card)) {
+        log(s, `${cardName(s, a.card)} is no longer able to use that ability.`, pl);
+        break;
+      }
+      ab.apply(s, pl, a.card, a.params ?? {}, s.attack);
+      break;
+    }
+    case 'playResource':
+      if (p.hand.includes(a.card) && canEnterPlay(s, a.card, pl)) playResourceCard(s, a.card, pl);
+      break;
+    case 'link': doLink(s, pl, a.resource, a.to); break;
+    case 'drawGroup': doDrawGroup(s, p); break;
+  }
 }
 
 /** Open the next queued event window, if the game is free to do so. */
@@ -1309,7 +1518,9 @@ function resolvePendingPlot(s: GameState) {
   const d = def(s, pp.iid);
   if (!isCancelled(w.plays!, pp.iid)) {
     log(s, `${d.name} takes effect.`, pp.player);
-    PLOTS[d.id].resolve?.(s, pp.player, pp.play);
+    // A Plot answering an announced action may respond to it (respondToAction) while it resolves.
+    respondingTo = w.event?.type === 'action' ? w.event : undefined;
+    try { PLOTS[d.id].resolve?.(s, pp.player, pp.play); } finally { respondingTo = undefined; }
     const c = s.cards[pp.iid];
     if (c.zone === 'table' && !c.linkedTo && d.subtype !== 'NWO') discardCard(s, pp.iid);
   } else {
@@ -1414,7 +1625,7 @@ export function applyAction(state: GameState, playerId: string, action: Action):
       if (s.cards[p.illuminati].tokens < 1) throw new RuleError('Your Illuminati needs an Action token.');
       s.cards[p.illuminati].tokens--;
       s.turnFlags.resourcePlayed = true;
-      playResourceCard(s, action.card, playerId);
+      announce(s, playerId, 'resource', action, [p.illuminati]);
       break;
     }
 
@@ -1431,9 +1642,8 @@ export function applyAction(state: GameState, playerId: string, action: Action):
       if (r.linkedTo && anyHook(s, (h, self) => self === r.linkedTo && !!h.lockLinks?.(s, self, action.resource))) throw new RuleError(`${cardName(s, action.resource)} is locked to ${cardName(s, r.linkedTo)} and cannot be moved.`);
       const rule = HOOKS[r.cardId]?.linkTo;
       if (rule && def(s, action.to).type !== 'Illuminati' && !rule(s, action.resource, action.to)) throw new RuleError(`${cardName(s, action.resource)} cannot be linked to ${cardName(s, action.to)}.`);
-      r.linkedTo = action.to;
-      r.linkMovedTurn = s.turn;
-      log(s, `${p.name} links ${cardName(s, action.resource)} to ${cardName(s, action.to)}.`, playerId);
+      // Linking spends no Group's action, so only cards answering any action (Plots) may respond.
+      announce(s, playerId, 'link', action, [], action.resource);
       break;
     }
 
@@ -1545,10 +1755,7 @@ export function applyAction(state: GameState, playerId: string, action: Action):
       const payers = [action.group, g.master, action.onto, p.illuminati];
       if (!free && (!payers.includes(action.payWith) || s.cards[action.payWith].tokens < 1)) throw new RuleError('Pay with a token from the Group, its old or new master, or your Illuminati.');
       if (!free) s.cards[action.payWith].tokens--;
-      moveSubtree(s, action.group, playerId, action.onto, action.side, 'hand');
-      // Moving under a Devastated Place costs the moved Groups their tokens (R037).
-      for (const g2 of subtree(s, action.group)) if (tokenBarred(s, g2)) s.cards[g2].tokens = 0;
-      log(s, `${p.name} moves ${cardName(s, action.group)}.`, playerId);
+      announce(s, playerId, 'move', action, free ? [] : [action.payWith], action.group);
       break;
     }
 
@@ -1581,8 +1788,7 @@ export function applyAction(state: GameState, playerId: string, action: Action):
       if (!p.groupDeck.length) throw new RuleError('Your Group deck is empty.');
       s.cards[p.illuminati].tokens--;
       s.turnFlags.illumGroupDraw = true;
-      drawGroup(s, p);
-      log(s, `${p.name} uses the Illuminati's action to draw a Group card.`, playerId);
+      announce(s, playerId, 'drawGroup', action, [p.illuminati]);
       break;
     }
 
@@ -1602,9 +1808,8 @@ export function applyAction(state: GameState, playerId: string, action: Action):
       if (total < need) throw new RuleError(`Relief needs ${need} Power in total (three times its printed Power); you have ${total}.`);
       for (const g of action.payWith) s.cards[g].tokens--;
       if ((place.data?.noReliefUntilTurn as number | undefined) !== undefined && s.turn <= (place.data!.noReliefUntilTurn as number)) throw new RuleError('No Relief can be sent there yet.');
-      place.devastated = false;
-      log(s, `${p.name} sends Relief: ${cardName(s, action.place)} is no longer Devastated.`, playerId);
-      raiseEvent(s, { type: 'relief', card: action.place, player: playerId, cards: action.payWith });
+      if (canAnnounce(s)) announce(s, playerId, 'relief', action, [...action.payWith], action.place);
+      else doRelief(s, playerId, action.place, action.payWith, false);
       break;
     }
 
@@ -1697,7 +1902,9 @@ export function checkAbility(s: GameState, playerId: string, card: string, abili
     (t === 'main' && ctxKind === 'main' && mine) ||
     (t === 'attack' && ctxKind === 'attack') ||
     (t === 'roll' && ctxKind === 'roll') ||
-    (t === 'anytime' && ((ctxKind === 'main' && mine) || ctxKind === 'attack' || ctxKind === 'endOfTurn')));
+    (t === 'anytime' && ((ctxKind === 'main' && mine) || ctxKind === 'attack' || ctxKind === 'endOfTurn')) ||
+    (t === 'event' && ctxKind === 'event' && (ab.events ?? ['action']).includes(s.window!.event!.type)) ||
+    (t === 'counter' && ctxKind === 'plot'));
   if (!ok) return `${ab.label} cannot be used right now.`;
   if (s.attack && s.window && !participants(s).includes(playerId)) return 'This attack is Privileged.';
   if (s.window && !waitingFor(s).includes(playerId)) return 'You have already passed.';
@@ -1724,10 +1931,23 @@ function useAbility(s: GameState, playerId: string, card: string, abilityId: str
     log(s, `${cardName(s, card)}: ${ab.label}.`, playerId);
     if (named) s.log.push({ turn: s.turn, player: playerId, to: playerId, text: `You chose ${cardName(s, params.target!)} for ${cardName(s, card)}.` });
   } else log(s, `${cardName(s, card)}: ${ab.label}${named}.`, playerId);
+  // Used in your main phase with nothing else going on: announced first, so others may respond (R010).
+  // A token-paid ability is the card's action, which cancelling cards may target.
+  if (canAnnounce(s)) {
+    announce(s, playerId, 'ability', { type: 'useAbility', card, ability: abilityId, params }, ab.usesToken ? [card] : [], card);
+    return;
+  }
   const effect = ab.apply(s, playerId, card, params, s.attack);
+  const w = s.window;
   if (s.attack) {
     // Recorded like a Plot so that it can be cancelled and undone live.
     s.attack.plays.push({ iid: `ability:${card}:${abilityId}:${s.version}`, player: playerId, play: { card }, effect: effect ?? { t: 'none' }, ability: card });
+  } else if (w?.kind === 'event' && w.event?.type === 'action') {
+    // A response to an announced action (a cancel, or a cancel of a cancel).
+    respondToAction(s, playerId, card, effect ?? { t: 'none' }, true);
+  } else if (w?.kind === 'plot' && effect) {
+    // A response to a Plot waiting to resolve (e.g. negating it).
+    w.plays!.push({ iid: `ability:${card}:${abilityId}:${s.version}`, player: playerId, play: { card }, effect, ability: card });
   }
   if (s.window) s.window.passed = s.window.kind === 'plot' ? [playerId] : [];
 }
@@ -1758,7 +1978,7 @@ function settleWindows(s: GameState) {
     else if (w.kind === 'event') {
       s.window = undefined;
       const then = w.event?.data?.then as string | undefined;
-      if (then) runContinuation(s, then);
+      if (then) runContinuation(s, then, w.event);
     }
   }
 }

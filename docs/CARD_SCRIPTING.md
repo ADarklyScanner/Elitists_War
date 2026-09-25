@@ -53,6 +53,29 @@ announces events with `raiseEvent(s, {type, player, card, cards, by, data}, then
 `turnStart`, `drawn`, `takeover`, `destroyed` (with `data.layout`, where the Group and its puppets were), `devastated`, `discarded`, `plotResolved`, `relief` and `failedTakeover` (a Group played from hand was not taken over).
 The `onEvent` hook runs at once for every event.
 
+**Announced actions (R009/R010).** An action outside an attack is announced before it happens: moving a
+Group, an activated ability used in your own main phase, Relief, bringing a Resource into play, linking a
+Resource, and the Illuminati's Group draw. The costs are paid, then an `action` event is raised with
+`player` (who acts), `cards` (the Groups whose token pays: the actors a cancel may target), `card` (the
+card acted on) and `data: {kind, action}` (the original action). The action itself runs as that event's
+continuation (`then: 'resolveAction'`) once its window closes. When nobody can respond, it runs at once,
+so games without such cards play exactly as before. Buying Plots is not an action and is never announced.
+Actions taken while another window is open (Relief during an attack, abilities in a window) still happen
+at once.
+- A Plot answers with `timing: ['event'], events: ['action']` and calls `respondToAction(s, pl, card, effect)`
+  from its `resolve`; `{t: 'fail'}` cancels the whole action.
+- An activated ability answers with `timing: ['event']` (optional `events`, default `['action']`) and a
+  `listens(s, pl, self, e)` test. The window opens only if some card listens, so keep `listens` precise
+  (token available, matching actor). What `apply` returns is recorded on `e.responses`.
+  `{t: 'cancelGroup', group}` cancels one actor; `{t: 'cancelPlot', target}` cancels an earlier response.
+- `announcedCancel(ok)` gives the `listens`/`check`/`apply` of "spend this card's action to cancel an action
+  of a [matching] Group" outside attacks. Use it with `needs: {target: 'actingGroup'}`.
+- Use `announcedAction(s)`, `announcedActors(e)`, `actionCancelled(e, card?)` and `actionSummary(s, e)` to
+  read the pending action. A cancelled action never happens and its costs stay paid. A once-per-turn
+  action (Resource play, Group draw, a once-per-turn ability) may be tried again.
+- An ability with timing `'counter'` may be used against a non-attack Plot waiting in its `plot` window.
+  Returning `{t: 'cancelPlot', target: window.plot.iid}` negates that Plot (MI-5).
+
 **Choices.** When a card has to ask someone to choose, call
 `askChoice(s, player, {key, question, options:[{id,label}], min, max, data})` and register
 `registerChoice(key, {resolve(s, player, picked, data), ai?})`. The answer arrives as the action

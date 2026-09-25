@@ -7,7 +7,7 @@ import { openArrows, structureCards } from './geometry';
 import { alignments, power } from './stats';
 import { PLOTS } from './plotTypes';
 import { HOOKS } from './hooks';
-import { checkAbility, disasterTarget, resourcesOf } from './game';
+import { announcedAction, announcedActors, checkAbility, disasterTarget, resourcesOf } from './game';
 
 const ALIGNMENTS: Alignment[] = ['Government', 'Corporate', 'Liberal', 'Conservative', 'Peaceful', 'Violent', 'Straight', 'Weird', 'Criminal', 'Fanatic'];
 
@@ -177,7 +177,11 @@ export function abilityOptions(s: GameState, pl: string, card: string): MoveOpti
     const n = ab.needs ?? {};
     let targets: (string | undefined)[] = [undefined];
     if (n.target === 'plot') targets = plays;
-    else if (n.target === 'actingGroup') targets = s.attack ? [s.attack.attacker, ...s.attack.aid.map((a) => a.iid), ...s.attack.oppose.map((o) => o.iid)].filter((x): x is string => !!x) : [];
+    else if (n.target === 'actingGroup') {
+      const announced = announcedAction(s);
+      targets = s.attack ? [s.attack.attacker, ...s.attack.aid.map((a) => a.iid), ...s.attack.oppose.map((o) => o.iid)].filter((x): x is string => !!x)
+        : announced ? announcedActors(announced) : [];
+    }
     else if (n.target === 'resource') targets = inPlay.filter((i) => s.cards[i].zone === 'resources');
     else if (n.target && ['handCard', 'handGroup', 'handPlot', 'destroyed', 'discardPile', 'rival', 'rivalHand', 'nwo'].includes(n.target)) targets = targetPool(s, pl, n.target, card);
     else if (n.target) targets = inPlay.filter((i) => s.cards[i].zone === 'structure');

@@ -4,7 +4,7 @@
 // (database) and call these functions from its API routes and a periodic timer.
 import {
   type Action, type GameState, type GameSettings, applyAction, createGame, hasResponse, player, waitingFor, randomDeck,
-  RuleError, def, canExpose,
+  RuleError, def, HOOKS, canExpose,
 } from '../engine';
 import { chooseAction } from '../ai/ai';
 
@@ -280,6 +280,17 @@ export function viewFor(s: GameState, viewer: string): GameState {
     if (pr?.choice && pr.player !== viewer) pr.choice = { ...pr.choice, options: [], question: 'Another player is making a choice.' };
   };
   hideChoice(v.prompt);
+  // An announced ability that secretly names a card keeps that choice from rivals while others respond.
+  const hideAnnounced = (e?: { player?: string; data?: Record<string, unknown> }) => {
+    const a = e?.data?.action as { type?: string; card?: string; ability?: string; params?: { target?: string } } | undefined;
+    if (!e || e.player === viewer || a?.type !== 'useAbility' || !a.params?.target || !a.card || !s.cards[a.card]) return;
+    const ab = HOOKS[s.cards[a.card].cardId]?.actions?.find((x) => x.id === a.ability);
+    const t = s.cards[a.params.target];
+    const hidden = t && (t.zone === 'hand' || t.zone === 'plotDeck' || t.zone === 'groupDeck') && !t.exposed;
+    if (ab?.secret || hidden) a.params = { ...a.params, target: undefined };
+  };
+  hideAnnounced(v.window?.event);
+  for (const e of v.events ?? []) hideAnnounced(e);
   for (const q of v.promptQueue ?? []) hideChoice(q);
   // Resources face down under Warehouse 23: rivals see only a card back where it lies.
   for (const c of Object.values(s.cards)) {

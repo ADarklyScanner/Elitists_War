@@ -16,8 +16,20 @@ export interface AbilityParams {
 export interface ActivatedAbility {
   id: string;
   label: string;
-  /** When it can be used: in your own main phase, during an attack window, right after a roll, or any time you have priority. */
-  timing: ('main' | 'attack' | 'roll' | 'anytime')[];
+  /**
+   * When it can be used: in your own main phase, during an attack window, right after a roll, any time
+   * you have priority, in the response window of an event (`events`, default the 'action' event that
+   * announces an action outside an attack), or against a non-attack Plot waiting to resolve ('counter').
+   */
+  timing: ('main' | 'attack' | 'roll' | 'anytime' | 'event' | 'counter')[];
+  /** Timing 'event': the event types it answers (default ['action']). */
+  events?: GameEvent['type'][];
+  /**
+   * Timing 'event': could this card answer the event `e` right now? The engine opens a response window
+   * only when some card listens, so keep it cheap and side-effect free. Without it, any event of a
+   * listed type opens the window.
+   */
+  listens?: (s: GameState, pl: string, self: string, e: GameEvent) => boolean;
   /** Does using it spend the card's own Action token? */
   usesToken: boolean;
   /** At most once per turn. */
@@ -150,8 +162,15 @@ export const CHOICES: Record<string, {
 }> = {};
 export function registerChoice(key: string, c: (typeof CHOICES)[string]) { CHOICES[key] = c; }
 
+/** Cards with an activated ability that answers events (kept up to date so the engine can skip the search). */
+export const EVENT_ABILITY_CARDS = new Set<string>();
+
 export function registerHooks(table: Record<string, CardHooks>) {
-  for (const [id, h] of Object.entries(table)) HOOKS[id] = { ...HOOKS[id], ...h };
+  for (const [id, h] of Object.entries(table)) {
+    HOOKS[id] = { ...HOOKS[id], ...h };
+    if (HOOKS[id].actions?.some((a) => a.timing.includes('event'))) EVENT_ABILITY_CARDS.add(id);
+    else EVENT_ABILITY_CARDS.delete(id);
+  }
 }
 
 /** Cards whose hooks are active: Groups in structures, Resources in play, linked Plots on the table. */

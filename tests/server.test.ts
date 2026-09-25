@@ -142,4 +142,16 @@ describe('viewFor keeps hidden cards hidden', () => {
     expect(viewFor(s, 'p2').cards[r].note).toBe('(secret)');
     expect(viewFor(s, 'p1').cards[r].note).toBe(hawaii);
   });
+
+  it('a secret choice announced for others to answer is hidden from rivals', () => {
+    const s = scenario();
+    const r = give(s, 'p1', 'the-holy-grail', { resource: true });
+    const hawaii = put(s, 'p2', 'hawaii');
+    const action = { type: 'useAbility', card: r, ability: 'name', params: { target: hawaii } };
+    s.window = { kind: 'event', passed: [], event: { type: 'action', player: 'p1', data: { action } } } as GameState['window'];
+    const seen = (v: GameState) => (v.window!.event!.data!.action as typeof action).params.target;
+    expect(seen(viewFor(s, 'p2'))).toBeUndefined();
+    expect(seen(viewFor(s, 'p1'))).toBe(hawaii);
+    expect(s.window!.event!.data!.action).toEqual(action); // the real game state is untouched
+  });
 });

@@ -6,7 +6,7 @@ import {
   goalCount, goalNeeded, hasResponse, ILLUMINATI, isImplemented, GROUP_ABILITIES, openArrows, outSides,
   plotOptions, plotsInHand, handLimit, power, resistance, globalPower, alignments, randomDeck,
   responseOptions, structureCards, subtree, takeoverOptions, tokenBarred, waitingFor, PLOTS, NWO_EFFECTS,
-  describePlay, player, leadOptions, abilitiesOf, abilityOptions, resourcesOf, canEnterPlay, HOOKS, goalsInHand, goalLimit,
+  describePlay, player, leadOptions, actionCancelled, actionSummary, abilitiesOf, abilityOptions, resourcesOf, canEnterPlay, HOOKS, goalsInHand, goalLimit,
 } from '../engine';
 import { attachRect, rectOf, ensureLayout, type Rect } from '../engine/geometry';
 import { chooseAction, successChance } from '../ai/ai';
@@ -816,6 +816,11 @@ function renderConsole(s: GameState): string {
       discarded: () => `${cn(ev?.card)} was discarded.`,
       plotResolved: () => `${cn(ev?.card)} took effect.`,
       relief: () => `Relief was sent to ${cn(ev?.card)}.`,
+      action: () => {
+        const who = ev?.player === ui.me ? 'You want' : `${pn(ev?.player)} wants`;
+        const stopped = ev && actionCancelled(ev) || (ev?.cards?.length && ev.cards.every((c) => actionCancelled(ev, c)));
+        return `${who} to ${esc(actionSummary(s, ev!))}. ${stopped ? 'It has been cancelled so far.' : 'It happens once everyone passes, unless someone cancels it.'}`;
+      },
     };
     const evText = ev ? (evTexts[ev.type]?.() ?? 'Something happened.') : '';
     const head = s.window.kind === 'event' ? `<p>${evText} You have a card that can respond.</p>`

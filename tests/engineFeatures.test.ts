@@ -2,7 +2,8 @@
 // attacks made by cards.
 import { describe, expect, it } from 'vitest';
 import {
-  advance, applyAction, askChoice, raiseEvent, registerChoice, registerPlots, revealTo, startCardAttack, waitingFor,
+  actionSummary, advance, announcedAction, applyAction, askChoice, raiseEvent, registerChoice, registerPlots, respondToAction, revealTo,
+  startCardAttack, waitingFor,
   CARDS, PLOTS, type Action, type GameState,
 } from '../src/engine';
 import { plotOptions, targetPool } from '../src/engine/moves';
@@ -109,6 +110,75 @@ describe('events', () => {
     for (let i = 0; i < 10 && s.window; i++) s = act(s, waitingFor(s)[0], { type: 'pass' });
     expect(s.cards[p].zone).toBe('discard');
     checkInvariants(s);
+  });
+});
+
+// A test-only Plot that answers announced actions by cancelling them.
+CARDS['test-action-plot'] = { ...base, id: 'test-action-plot', name: 'Test Action Plot', subtype: '' };
+registerPlots({
+  'test-action-plot': {
+    timing: ['event'], events: ['action'],
+    check: (s) => (announcedAction(s) ? null : 'Only after an action is announced.'),
+    apply: () => {},
+    resolve: (s, pl, play) => respondToAction(s, pl, play.card, { t: 'fail' }),
+  },
+});
+
+describe('announced actions', () => {
+  const passAll = (s: GameState) => { for (let i = 0; i < 20 && s.window; i++) s = act(s, waitingFor(s)[0], { type: 'pass' }); return s; };
+  const resource = CARDS['book-of-kells'];
+
+  it('opens no window and happens at once when nobody can respond', () => {
+    let s = scenario();
+    give(s, 'p2', 'test-event-plot', { hand: true }); // answers takeovers only
+    const g = give(s, 'p1', 'hollywood', { under: ill(s, 'p1'), side: 'BOTTOM' });
+    s = act(s, 'p1', { type: 'move', group: g, onto: ill(s, 'p1'), side: 'LEFT', payWith: g });
+    expect(s.window).toBeUndefined();
+    expect(s.events ?? []).toEqual([]);
+    expect(s.cards[g].side).toBe('LEFT');
+    const r = give(s, 'p1', resource.id, { hand: true });
+    s = act(s, 'p1', { type: 'playResource', card: r });
+    expect(s.window).toBeUndefined();
+    expect(s.cards[r].zone).toBe('resources');
+  });
+  it('waits for responses when a card can answer, then carries the action out', () => {
+    let s = scenario();
+    give(s, 'p2', 'test-action-plot', { hand: true });
+    const g = give(s, 'p1', 'hollywood', { under: ill(s, 'p1'), side: 'BOTTOM' });
+    s = act(s, 'p1', { type: 'move', group: g, onto: ill(s, 'p1'), side: 'LEFT', payWith: g });
+    expect(s.window?.kind).toBe('event');
+    expect(s.window?.event).toMatchObject({ type: 'action', player: 'p1', cards: [g], data: { kind: 'move' } });
+    expect(actionSummary(s, s.window!.event!)).toContain('Hollywood');
+    expect(s.cards[g].side).toBe('BOTTOM');
+    expect(s.cards[g].tokens).toBe(0); // the cost is paid when the action is announced
+    s = passAll(s);
+    expect(s.cards[g].side).toBe('LEFT');
+    checkInvariants(s);
+  });
+  it('a cancelled action never happens, but its costs stay paid and a once-per-turn action may be retried', () => {
+    let s = scenario();
+    const p = give(s, 'p2', 'test-action-plot', { hand: true });
+    const r = give(s, 'p1', resource.id, { hand: true });
+    s.cards[ill(s, 'p1')].tokens = 2;
+    s = act(s, 'p1', { type: 'playResource', card: r });
+    expect(s.window?.event?.type).toBe('action');
+    s = act(s, 'p2', { type: 'playPlot', play: { card: p } });
+    s = passAll(s);
+    expect(s.cards[p].zone).toBe('discard');
+    expect(hand(s, 'p1')).toContain(r);
+    expect(s.cards[ill(s, 'p1')].tokens).toBe(1);
+    expect(s.turnFlags.resourcePlayed).toBe(false);
+    s = act(s, 'p1', { type: 'playResource', card: r });
+    expect(s.cards[r].zone).toBe('resources');
+    checkInvariants(s);
+  });
+  it('buying a Plot is not an action and is never announced', () => {
+    let s = scenario();
+    give(s, 'p2', 'test-action-plot', { hand: true });
+    const before = hand(s, 'p1').length;
+    s = act(s, 'p1', { type: 'buyPlot', payWith: [ill(s, 'p1')] });
+    expect(s.window).toBeUndefined();
+    expect(hand(s, 'p1').length).toBe(before + 1);
   });
 });
 

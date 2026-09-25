@@ -1,4 +1,4 @@
-import type { Alignment, AttackCtx, Contribution, GameState, PlotEffect, Side } from '../types';
+import type { Action, Alignment, AttackCtx, Contribution, GameEvent, GameState, PlotEffect, Side } from '../types';
 import { abilitiesOf, attackingGroups, matches, registerAbilities, type Match } from '../abilities';
 import { registerChoice, registerHooks, type AbilityParams, type ActivatedAbility } from '../hooks';
 import { def, cardName } from '../cards';
@@ -7,7 +7,8 @@ import { openArrows, sideOf, structureCards, subtree } from '../geometry';
 import { NWO_EFFECTS } from '../nwo';
 import { nextRandom, roll2d6, shuffle } from '../rng';
 import {
-  askChoice, attackCancelled, canAid, canOppose, cancelledGroups, controllerOf2, discardCard, drawGroup, drawPlot, isCancelled,
+  actionCancelled, announcedAction, announcedCancel, askChoice, attackCancelled, canAid, canOppose, cancelledGroups, controllerOf2,
+  discardCard, drawGroup, drawPlot, isCancelled,
   isPrivileged, livePlayers, log, moveSubtree, player, protectedPlayer, raiseEvent, revealTo, tokenBarred,
 } from '../game';
 import { exposableHand, exposeCards } from '../game';
@@ -18,9 +19,7 @@ registerAbilities({
     { kind: 'attackBonus', on: 'control', target: { attributes: ['Media'] }, value: 10, scope: 'direct' },
     { kind: 'attackBonus', on: 'both', target: { attributes: ['Media'] }, value: 2, scope: 'any' },
   ],
-  'mi-5': [
-    { kind: 'pending', note: 'Negating an attempt to expose your Plots as it happens: cards expose Plots directly, with no event or response window to answer; turning exposed Plots face down is encoded' },
-  ],
+  'mi-5': [],
   'moonies': [],
   'moral-minority': [
     { kind: 'powerPer', per: { alignments: ['Straight'] }, value: 1 },
@@ -39,9 +38,7 @@ registerAbilities({
     { kind: 'selfDefense', value: 10, on: 'destroy', instant: true },
   ],
   'n-s-a': [],
-  'nuclear-power-companies': [
-    { kind: 'pending', note: 'Cancelling actions taken outside an attack (moves, Plot purchases, abilities): the engine opens no response window after them; cancelling actions in an attack is encoded' },
-  ],
+  'nuclear-power-companies': [],
   'offshore-banks': [],
   'opec': [],
   'paranoids': [
@@ -82,9 +79,7 @@ registerAbilities({
   'saturday-morning-cartoons': [
     { kind: 'attackBonus', on: 'control', target: { alignments: ['Violent'] }, value: 2, scope: 'direct' },
   ],
-  'savings-and-loans': [
-    { kind: 'pending', note: 'Cancelling Bank/Corporate/Government actions taken outside an attack: the engine opens no response window after them; the +3 and cancelling actions in an attack are encoded' },
-  ],
+  'savings-and-loans': [],
   'science-fiction-fans': [
     { kind: 'attackBonus', on: 'both', target: { attributes: ['Computer'] }, value: 2, scope: 'direct' },
     { kind: 'attackBonus', on: 'control', target: { alignments: ['Weird'] }, value: 2, scope: 'direct' },
@@ -114,9 +109,7 @@ registerAbilities({
   'subliminals': [
     { kind: 'powerPer', per: { attributes: ['Media'] }, value: 1, global: true },
   ],
-  'supreme-court': [
-    { kind: 'pending', note: 'Cancelling Government actions taken outside an attack: the engine opens no response window after them; cancelling actions in an attack is encoded' },
-  ],
+  'supreme-court': [],
   'survivalists': [],
   'tabloids': [
     // +3 on any attempt to take over Convenience Stores, a card outside this set: it never matches here.
@@ -246,15 +239,22 @@ function discardExposed(allowGoals: boolean): ActivatedAbility {
   };
 }
 
-/** "As an action, cancel an action of a [matching] Group" — during an attack. */
+/**
+ * "As an action, cancel an action of a [matching] Group": during an attack, or right after a rival
+ * announces an action outside one (a move, an ability, Relief, a Resource or Group-card draw paid by
+ * the Illuminati).
+ */
 function cancelAction(label: string, ok: (s: GameState, g: string) => boolean): ActivatedAbility {
   // Groups acting in the attack, and cards that used an ability in it.
   const actors = (ctx: AttackCtx) => [ctx.attacker, ...ctx.aid.map((a) => a.iid), ...ctx.oppose.map((o) => o.iid)].filter((x): x is string => !!x);
   const abilityPlay = (ctx: AttackCtx, card: string) => [...ctx.plays].reverse().find((pp) => pp.ability === card && !isCancelled(ctx.plays, pp.iid));
+  const outside = announcedCancel(ok);
   return {
-    id: 'cancelAction', label, timing: ['attack'], usesToken: true, ai: 'cancelAttacker',
+    id: 'cancelAction', label, timing: ['attack', 'event'], usesToken: true, ai: 'cancelAttacker',
     needs: { target: 'actingGroup' },
-    check(s, _pl, self, p, ctx) {
+    listens: outside.listens,
+    check(s, pl, self, p, ctx) {
+      if (!ctx && s.window?.kind === 'event') return outside.check(s, pl, self, p);
       if (!ctx) return 'Only during an attack.';
       const t = p.target;
       if (!t || t === self) return 'Choose another Group that is acting in this attack.';
@@ -263,7 +263,8 @@ function cancelAction(label: string, ok: (s: GameState, g: string) => boolean): 
       if (!ok(s, t)) return `${cardName(s, t)}'s action cannot be cancelled by this card.`;
       return null;
     },
-    apply(_s, _pl, _self, p, ctx): PlotEffect {
+    apply(s, pl, self, p, ctx): PlotEffect {
+      if (!ctx) return outside.apply(s, pl, self, p) as PlotEffect;
       if (actors(ctx!).includes(p.target!)) return { t: 'cancelGroup', group: p.target! };
       return { t: 'cancelPlot', target: abilityPlay(ctx!, p.target!)!.iid };
     },
@@ -346,9 +347,50 @@ function rollOpec(s: GameState, self: string) {
 const SPACE_DISASTERS = ['meteor-strike'];
 const cancelsOwnSide = (ctx: AttackCtx, self: string) => cancelledGroups(ctx).has(self);
 
+// MI-5: attempts to expose a player's hidden Plots that it can negate. Plots are negated while they
+// wait to resolve; abilities while they are announced (both before anything has been seen, R009).
+const MI5_PLOTS = ['george-the-janitor', 'the-auditor-from-hell', 'mutual-betrayal'];
+const MI5_ABILITIES: Record<string, string> = { 'cattle-mutilators': 'expose', 'phone-company': 'expose' };
+/** Players other than `actor` whose cards are aimed at (a card in hand counts for its holder; `mode` may name a player). */
+function aimedAt(s: GameState, actor: string, ids: (string | undefined)[], mode?: string): string[] {
+  const out = new Set<string>();
+  if (mode && s.players.some((x) => x.id === mode)) out.add(mode);
+  for (const id of ids) {
+    const c = id ? s.cards[id] : undefined;
+    if (!c) continue;
+    const who = c.zone === 'hand' ? s.players.find((x) => x.hand.includes(c.iid))?.id : c.controller ?? c.owner;
+    if (who) out.add(who);
+  }
+  out.delete(actor);
+  return [...out];
+}
+/** The attempt to expose `pl`'s Plots that MI-5 could negate right now, if any. */
+function mi5Attempt(s: GameState, pl: string): 'plot' | 'action' | undefined {
+  const w = s.window;
+  if (w?.kind === 'plot' && w.plot && !isCancelled(w.plays ?? [], w.plot.iid) && MI5_PLOTS.includes(s.cards[w.plot.iid].cardId) &&
+    aimedAt(s, w.plot.player, [w.plot.play.target, ...(w.plot.play.targets ?? [])]).includes(pl)) return 'plot';
+  const e = announcedAction(s);
+  if (e && !actionCancelled(e) && mi5Exposes(s, e, pl)) return 'action';
+  return undefined;
+}
+function mi5Exposes(s: GameState, e: GameEvent, pl: string): boolean {
+  const a = e.data?.action as Action | undefined;
+  if (a?.type !== 'useAbility' || MI5_ABILITIES[s.cards[a.card].cardId] !== a.ability || !e.player) return false;
+  return aimedAt(s, e.player, [a.params?.target], a.params?.mode).includes(pl);
+}
+
 registerHooks({
   'mi-5': {
     actions: [{
+      id: 'negateExpose', label: 'Block a try at revealing your hidden Plots', timing: ['event', 'counter'], usesToken: true,
+      listens: (s, pl, self, e) => s.cards[self].tokens > 0 && !tokenBarred(s, self) && e.type === 'action' && mi5Exposes(s, e, pl),
+      check: (s, pl) => (mi5Attempt(s, pl) ? null : 'Use this only while someone is trying to reveal your hidden Plots.'),
+      apply(s, pl): PlotEffect {
+        const w = s.window;
+        if (mi5Attempt(s, pl) === 'plot') return { t: 'cancelPlot', target: w!.plot!.iid };
+        return { t: 'fail' };
+      },
+    }, {
       id: 'hidePlots', label: 'Turn all your exposed Plots face down', timing: ['anytime'], usesToken: true, ai: 'never',
       check: (s, pl) => (player(s, pl).hand.some((c) => s.cards[c].exposed && def(s, c).type === 'Plot') ? null : 'You have no exposed Plots.'),
       apply(s, pl) {

@@ -189,13 +189,22 @@ export interface Choice {
 /** Something that just happened that some cards may respond to (R010 response window). */
 export interface GameEvent {
   type: 'turnStart' | 'drawn' | 'takeover' | 'destroyed' | 'devastated' | 'discarded' | 'plotResolved' | 'relief'
-    | 'failedTakeover'; // a Group played from hand failed to be taken over (Opportunity Knocks)
+    | 'failedTakeover' // a Group played from hand failed to be taken over (Opportunity Knocks)
+    | 'action';        // an action outside an attack was announced and waits for responses before it happens
   player?: string;         // whose turn / who did it
   card?: string;           // card involved
   cards?: string[];
   by?: string;             // who caused it
   data?: Record<string, unknown>;
+  /**
+   * 'action' events: responses made while the action waits (cancels, and cancels of those cancels),
+   * judged like the Plots of an attack: an entry counts unless a later live entry cancels it.
+   */
+  responses?: PlayedPlot[];
 }
+
+/** What an 'action' event announces (in `data.action`); `data.kind` names it for the interface. */
+export type AnnouncedKind = 'move' | 'ability' | 'relief' | 'resource' | 'link' | 'drawGroup';
 
 export type Phase = 'setup' | 'beginning' | 'main' | 'endOfTurn' | 'gameOver';
 

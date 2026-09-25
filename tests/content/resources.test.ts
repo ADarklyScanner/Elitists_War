@@ -173,10 +173,49 @@ describe('Bigfoot', () => {
     const hawaii = give(s, 'p1', 'hawaii', { under: ill(s, 0), side: 'BOTTOM' });
     const media = give(s, 'p1', 'big-media', { under: ill(s, 0), side: 'TOP' });
     s.cards[hawaii].devastated = true;
+    // Announced in the main phase: Bigfoot answers in the response window before the Relief lands.
+    s = act(s, 'p1', { type: 'relief', place: hawaii, payWith: [media] });
+    expect(s.window?.event?.type).toBe('action');
+    expect(s.cards[hawaii].devastated).toBe(true);
+    s = use(s, 'p2', r, 'cancel', { target: media });
+    while (s.window) s = act(s, waitingFor(s)[0], { type: 'pass' });
+    expect(s.cards[hawaii].devastated).toBe(true);
+    expect(s.cards[media].tokens).toBe(0);
+    expect(s.cards[r].tokens).toBe(0);
+    expect(s.prompt).toBeUndefined();
+  });
+  it('is offered to cancel Relief sent while another window is open', () => {
+    let s = scenario();
+    const r = give(s, 'p2', 'bigfoot', { resource: true });
+    s.cards[r].tokens = 1;
+    const hawaii = give(s, 'p1', 'hawaii', { under: ill(s, 0), side: 'BOTTOM' });
+    const media = give(s, 'p1', 'big-media', { under: ill(s, 0), side: 'TOP' });
+    s.cards[hawaii].devastated = true;
+    s = act(s, 'p1', { type: 'endTurn' });
+    expect(s.window?.kind).toBe('endOfTurn');
     s = act(s, 'p1', { type: 'relief', place: hawaii, payWith: [media] });
     expect(s.prompt?.player).toBe('p2');
     s = choose(s, 'p2', [media]);
     expect(s.cards[hawaii].devastated).toBe(true);
+    expect(s.cards[r].tokens).toBe(0);
+  });
+  it('cancels a rival Media Group\'s move outside an attack, but not a move paid by another Group', () => {
+    let s = scenario();
+    const r = give(s, 'p2', 'bigfoot', { resource: true });
+    s.cards[r].tokens = 1;
+    const media = give(s, 'p1', 'big-media', { under: ill(s, 0), side: 'BOTTOM' });
+    const fbi = give(s, 'p1', 'fbi', { under: ill(s, 0), side: 'TOP' });
+    const plain = act(s, 'p1', { type: 'move', group: fbi, onto: ill(s, 0), side: 'LEFT', payWith: fbi });
+    expect(plain.window).toBeUndefined();
+    expect(plain.cards[fbi].side).toBe('LEFT');
+    s = act(s, 'p1', { type: 'move', group: media, onto: ill(s, 0), side: 'RIGHT', payWith: media });
+    expect(s.window?.event?.type).toBe('action');
+    expect(s.cards[media].side).toBe('BOTTOM');
+    expect(() => use(s, 'p2', r, 'cancel', { target: fbi })).toThrow();
+    s = use(s, 'p2', r, 'cancel', { target: media });
+    while (s.window) s = act(s, waitingFor(s)[0], { type: 'pass' });
+    expect(s.cards[media].side).toBe('BOTTOM');
+    expect(s.cards[media].tokens).toBe(0);
     expect(s.cards[r].tokens).toBe(0);
   });
   it('is not asked about Relief without a Media Group, nor without its action', () => {
