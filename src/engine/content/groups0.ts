@@ -15,14 +15,15 @@ import { magicByCard } from '../hooks';
 registerAbilities({
   'a-m-a': [
     { kind: 'attackBonus', on: 'both', target: { attributes: ['Science'] }, value: 5, scope: 'direct' },
+    { kind: 'aidBonus', on: 'both', target: { attributes: ['Science'] }, value: 5 },
   ],
   'american-autoduel-association': [
     { kind: 'attackBonus', on: 'destroy', target: { alignments: ['Violent'] }, value: 4, scope: 'direct', replacesAlignmentPenalty: true },
     { kind: 'aidBonus', on: 'destroy', target: { alignments: ['Violent'] }, value: 4 },
   ],
   'anti-nuclear-activists': [
-    { kind: 'attackBonus', on: 'destroy', target: { attributes: ['Science'] }, value: 6, scope: 'direct' },
-    { kind: 'attackBonus', on: 'control', target: { attributes: ['Green'] }, value: 4, scope: 'direct' },
+    { kind: 'attackBonus', on: 'destroy', target: { attributes: ['Science'] }, value: 6, scope: 'any' },
+    { kind: 'attackBonus', on: 'control', target: { attributes: ['Green'] }, value: 4, scope: 'any' },
   ],
   'anti-war-activists': [
     { kind: 'structureDefense', value: 4, vs: { alignments: ['Government'] } },
@@ -30,13 +31,13 @@ registerAbilities({
   'bank-of-england': [],
   'b-a-t-f': [
     { kind: 'attackBonus', on: 'destroy', target: { alignments: ['Fanatic'] }, value: 8, scope: 'direct' },
-    { kind: 'attackBonus', on: 'both', target: { names: ['gun-lobby', 'tobacco-companies', 'liquor-companies'] }, value: 6, scope: 'direct' },
+    { kind: 'attackBonus', on: 'both', target: { names: ['gun-lobby', 'tobacco-companies', 'liquor-companies'] }, value: 6, scope: 'any' },
   ],
   'big-media': [
-    { kind: 'attackBonus', on: 'both', target: { attributes: ['Media'] }, value: 4, scope: 'direct' },
+    { kind: 'attackBonus', on: 'both', target: { attributes: ['Media'] }, value: 4, scope: 'any' },
   ],
   'black-activists': [
-    { kind: 'attackBonus', on: 'control', target: { alignments: ['Liberal'] }, value: 2, scope: 'direct' },
+    { kind: 'attackBonus', on: 'control', target: { alignments: ['Liberal'] }, value: 2, scope: 'any' },
     { kind: 'selfDefense', value: 4, vs: { alignments: ['Liberal'] } },
   ],
   'boy-sprouts': [],
@@ -53,7 +54,7 @@ registerAbilities({
     { kind: 'attackBonus', on: 'destroy', target: { alignments: ['Government'], notSelf: true }, value: 4, scope: 'direct', replacesAlignmentPenalty: true },
   ],
   'clone-arrangers': [
-    { kind: 'attackBonus', on: 'control', target: { subtypes: ['Personality'] }, value: 4, scope: 'direct' },
+    { kind: 'attackBonus', on: 'control', target: { subtypes: ['Personality'] }, value: 4, scope: 'any' },
   ],
   'comic-books': [],
   'congressional-wives': [
@@ -68,14 +69,15 @@ registerAbilities({
   'democrats': [],
   'dentists': [],
   'deprogrammers': [
-    { kind: 'attackBonus', on: 'destroy', target: { alignments: ['Weird', 'Fanatic'] }, value: 4, scope: 'direct' },
-    { kind: 'attackBonus', on: 'destroy', target: { allAlignments: ['Weird', 'Fanatic'] }, value: 4, scope: 'direct' },
+    { kind: 'attackBonus', on: 'destroy', target: { alignments: ['Weird', 'Fanatic'] }, value: 4, scope: 'any' },
+    { kind: 'attackBonus', on: 'destroy', target: { allAlignments: ['Weird', 'Fanatic'] }, value: 4, scope: 'any' },
   ],
   'druids': [
   ],
   'eco-guerrillas': [
     { kind: 'attackBonus', on: 'destroy', target: { alignments: ['Corporate'] }, value: 6, scope: 'direct' },
-    { kind: 'structureDefense', value: 2, vs: { alignments: ['Corporate'] } },
+    // It raises Resistance, which only counts against Attacks to Control.
+    { kind: 'structureDefense', value: 2, vs: { alignments: ['Corporate'] }, on: 'control' },
   ],
   'eff': [
     { kind: 'attackBonus', on: 'control', target: { attributes: ['Computer'] }, value: 4, scope: 'direct' },
@@ -84,22 +86,22 @@ registerAbilities({
   'empty-vee': [],
   'evil-geniuses-for-a-better-tomorrow': [],
   'fast-food-chains': [
-    { kind: 'attackBonus', on: 'destroy', target: { attributes: ['Green'] }, value: 6, scope: 'direct' },
+    { kind: 'attackBonus', on: 'destroy', target: { attributes: ['Green'] }, value: 6, scope: 'any' },
   ],
   'fbi': [
     { kind: 'attackBonus', on: 'destroy', target: { alignments: ['Criminal'] }, value: 10, scope: 'direct' },
     { kind: 'attackBonus', on: 'destroy', target: { alignments: ['Criminal'] }, value: 4, scope: 'any' },
-    { kind: 'attackBonus', on: 'control', target: { alignments: ['Criminal'] }, value: 2, scope: 'direct' },
+    { kind: 'attackBonus', on: 'control', target: { alignments: ['Criminal'] }, value: 2, scope: 'any' },
   ],
   'federal-reserve': [
     { kind: 'attackBonus', on: 'both', target: { attributes: ['Bank'] }, value: 6, scope: 'any' },
   ],
   'feminists': [
-    { kind: 'attackBonus', on: 'control', target: { alignments: ['Liberal'] }, value: 3, scope: 'direct' },
-    { kind: 'attackBonus', on: 'destroy', target: { alignments: ['Conservative'] }, value: 3, scope: 'direct' },
+    { kind: 'attackBonus', on: 'control', target: { alignments: ['Liberal'] }, value: 3, scope: 'any' },
+    { kind: 'attackBonus', on: 'destroy', target: { alignments: ['Conservative'] }, value: 3, scope: 'any' },
   ],
   'fiendish-fluoridators': [
-    { kind: 'attackBonus', on: 'destroy', target: { alignments: ['Straight', 'Conservative'] }, value: 5, scope: 'direct' },
+    { kind: 'attackBonus', on: 'destroy', target: { alignments: ['Straight', 'Conservative'] }, value: 5, scope: 'any' },
     { kind: 'drawPlotOnDestroy', match: { alignments: ['Straight', 'Conservative'] } },
   ],
   'flat-earthers': [],
@@ -124,7 +126,7 @@ registerAbilities({
   // this version has no player-to-player agreements.
   'international-cocaine-smugglers': [],
   'international-communist-conspiracy': [
-    { kind: 'attackBonus', on: 'control', target: { attributes: ['Communist'] }, value: 3, scope: 'direct' },
+    { kind: 'attackBonus', on: 'control', target: { attributes: ['Communist'] }, value: 3, scope: 'any' },
     { kind: 'attackBonus', on: 'control', target: { alignments: ['Fanatic'], attributes: ['Communist'] }, value: 4, scope: 'direct', replacesAlignmentPenalty: true },
   ],
   'international-weather-organization': [],
@@ -136,7 +138,7 @@ registerAbilities({
   'junk-mail': [],
   'kkk': [],
   'l-4-society': [
-    { kind: 'attackBonus', on: 'both', target: { attributes: ['Science', 'Space'] }, value: 4, scope: 'direct' },
+    { kind: 'attackBonus', on: 'both', target: { attributes: ['Science', 'Space'] }, value: 4, scope: 'any' },
   ],
   'lawyers': [
     { kind: 'structureDefense', value: 4, vs: { alignments: ['Government', 'Corporate'] } },
@@ -149,7 +151,7 @@ registerAbilities({
     { kind: 'powerPer', per: { alignments: ['Criminal'] }, value: 1 },
   ],
   'local-police-departments': [
-    { kind: 'attackBonus', on: 'destroy', target: { alignments: ['Criminal'] }, value: 4, scope: 'direct' },
+    { kind: 'attackBonus', on: 'destroy', target: { alignments: ['Criminal'] }, value: 4, scope: 'any' },
     { kind: 'cannotBeDestroyed' },
   ],
 });
@@ -176,12 +178,22 @@ function contribPower(s: GameState, c: Contribution & { useGlobal?: boolean; sel
   return v + c.amount;
 }
 
-/** Sum of the leader's own "direct" attack bonuses that already apply (for "instead of" upgrades). */
-function directBonus(s: GameState, self: string, ctx: AttackCtx): number {
-  let n = 0;
-  for (const a of abilitiesOf(s, self)) if (a.kind === 'attackBonus' && a.scope === 'direct' && (a.on === 'both' || a.on === ctx.type) && matches(s, ctx.target, a.target, self)) n += a.value;
-  return n;
+/**
+ * What `self`'s own attackBonus entries already add to this attack, as the engine counts them: the
+ * larger of its "direct" and "any attempt" totals when it leads, else its "any attempt" total
+ * (for "instead of" upgrades).
+ */
+function ownBonus(s: GameState, self: string, ctx: AttackCtx): number {
+  let direct = 0, any = 0;
+  for (const a of abilitiesOf(s, self)) {
+    if (a.kind !== 'attackBonus' || !(a.on === 'both' || a.on === ctx.type) || !matches(s, ctx.target, a.target, self)) continue;
+    if (a.scope === 'any') any += a.value; else direct += a.value;
+  }
+  return ctx.attacker === self ? Math.max(direct, any) : any;
 }
+/** A normal attack led by one of the Groups of `self`'s controller (where "any attempt" bonuses apply). */
+const ledByOwner = (s: GameState, self: string, ctx: AttackCtx) =>
+  !ctx.instant && !!ctx.attacker && ctx.attackerPlayer === ctl(s, self);
 
 const isSpaceDisaster = (s: GameState, plot?: string) =>
   !!plot && !!s.cards[plot] && ((def(s, plot).attributes ?? []).includes('Space') || /\bSpace Disaster\b/i.test(def(s, plot).text));
@@ -210,19 +222,25 @@ const isGadget = (s: GameState, iid: string) => def(s, iid).type === 'Resource' 
 /** The Groups (and, through them, their puppets) International Cocaine Smugglers gets +4 to control. */
 const COCAINE_CLIENTS = ['punk-rockers', 'cycle-gangs', 'urban-gangs', 'hollywood', 'manuel-noriega'];
 
+/** The Place cards that stand for U.S. states (Libertarians). */
+const US_STATES = ['california', 'texas', 'new-york'];
+
 registerHooks({
   'a-m-a': {
+    // May help defend or help attack any Science group, whatever the alignments.
+    mayJoin: (s, self, ctx, group) => group === self && !ctx.instant && ctx.target !== self && is(s, ctx.target, { attributes: ['Science'] }),
     // +5 when aiding a Science group against control or destruction (i.e. helping defend it).
+    // (The +5 when it helps attack one is its aidBonus.)
     attackMod: (s, self, ctx, side) =>
       side === 'defense' && !ctx.instant && ctx.target !== self && is(s, ctx.target, { attributes: ['Science'] })
         && live(ctx, self) && ctx.oppose.some((c) => c.iid === self) ? 5 : 0,
   },
 
   'anti-nuclear-activists': {
-    // +10 against Nuclear Power Companies, instead of (not on top of) its other bonuses.
+    // +10 on any attempt against Nuclear Power Companies, instead of (not on top of) its other bonuses.
     attackMod: (s, self, ctx, side) =>
-      side === 'attack' && !ctx.instant && ctx.attacker === self && s.cards[ctx.target].cardId === 'nuclear-power-companies'
-        ? Math.max(0, 10 - directBonus(s, self, ctx)) : 0,
+      side === 'attack' && ledByOwner(s, self, ctx) && s.cards[ctx.target].cardId === 'nuclear-power-companies'
+        ? Math.max(0, 10 - ownBonus(s, self, ctx)) : 0,
   },
 
   'bank-of-england': {
@@ -386,7 +404,7 @@ registerHooks({
     secretOverride: (s, self, group, secret) => !!s.attack && group === self && is(s, secret, { attributes: ['Magic'] }),
     attackMod(s, self, ctx, side) {
       const place = s.cards[self].data?.place as string | undefined;
-      return side === 'defense' && !!ctx.disaster && !!place && ctx.target === place && own(s, ctl(s, self)!, place) ? 8 : 0;
+      return side === 'defense' && !!ctx.disaster && !!place && ctx.target === place && inPlay(s, place) ? 8 : 0;
     },
     onDestroy(s, self, victim, by) {
       if (s.cards[self].data?.place !== victim || s.cards[self].zone !== 'structure') return;
@@ -395,10 +413,10 @@ registerHooks({
     },
     onCapture(s, self, victim) { if (victim === self && s.cards[self].data) s.cards[self].data = { ...s.cards[self].data, place: undefined }; },
     actions: [{
-      id: 'link', label: 'Link to one of your Places', timing: ['main'], usesToken: false, oncePerTurn: true, ai: 'never',
+      id: 'link', label: 'Link to any Place in play', timing: ['main'], usesToken: false, oncePerTurn: true, ai: 'never',
       needs: { target: 'place' },
-      check: (s, pl, self, p) =>
-        own(s, pl, p.target) && def(s, p.target!).subtype === 'Place' ? (s.cards[self].data?.place === p.target ? 'Already linked there.' : null) : 'Choose a Place you control.',
+      check: (s, _pl, self, p) =>
+        inPlay(s, p.target) && def(s, p.target!).type === 'Group' && def(s, p.target!).subtype === 'Place' ? (s.cards[self].data?.place === p.target ? 'Already linked there.' : null) : 'Choose a Place in play.',
       apply(s, pl, self, p) { s.cards[self].data = { ...s.cards[self].data, place: p.target }; log(s, `${cardName(s, self)} link to ${cardName(s, p.target!)}.`, pl); },
     }],
   },
@@ -515,14 +533,14 @@ registerHooks({
 
   'flat-earthers': {
     actions: [{
-      id: 'roll', label: 'Roll 2d6: draw that many Plots if no more than the Places in play', timing: ['main'], usesToken: true, ai: 'draw',
+      id: 'roll', label: 'Roll 2d6: draw that many Plots if no more than the Places you control', timing: ['main'], usesToken: true, ai: 'draw',
       check: () => null,
       apply(s, pl) {
-        const places = Object.values(s.cards).filter((c) => c.zone === 'structure' && def(s, c.iid).type === 'Group' && def(s, c.iid).subtype === 'Place').length;
+        const places = structureCards(s, pl).filter((g) => def(s, g).type === 'Group' && def(s, g).subtype === 'Place').length;
         const [a, b] = roll2d6(s);
         const n = a + b;
-        if (n <= places) { drawPlot(s, player(s, pl), n); log(s, `Rolled ${n} with ${places} Places in play: draw ${n} Plots.`, pl); }
-        else log(s, `Rolled ${n} with only ${places} Places in play: nothing happens.`, pl);
+        if (n <= places) { drawPlot(s, player(s, pl), n); log(s, `Rolled ${n} with ${places} Places controlled: draw ${n} Plots.`, pl); }
+        else log(s, `Rolled ${n} with only ${places} Places controlled: nothing happens.`, pl);
       },
     }],
   },
@@ -585,12 +603,14 @@ registerHooks({
       const hostile = attackingGroups(ctx).some((g) => live(ctx, g) && (hasAlign(s, g, 'Liberal') || hasAlign(s, g, 'Weird') || is(s, g, { attributes: ['Communist'] })));
       return hostile ? Math.max(0, 10 - (def(s, self).resistance ?? 0)) : 0;
     },
+    // A Plot after any attack on one of your Conservative or Violent Groups, won or lost, as long as
+    // you still control the Gun Lobby. ctx.targetPlayer is who controlled the target when the attack began.
     onAttackEnd(s, self, ctx) {
       const pl = ctl(s, self);
       if (!pl || ctx.targetPlayer !== pl || attackCancelled(ctx)) return;
-      if (!own(s, pl, ctx.target) || !(hasAlign(s, ctx.target, 'Conservative') || hasAlign(s, ctx.target, 'Violent'))) return;
+      if (!(hasAlign(s, ctx.target, 'Conservative') || hasAlign(s, ctx.target, 'Violent'))) return;
       drawPlot(s, player(s, pl));
-      log(s, `${cardName(s, self)}: ${cardName(s, ctx.target)} held, draw a Plot.`, pl);
+      log(s, `${cardName(s, self)}: ${cardName(s, ctx.target)} was attacked, draw a Plot.`, pl);
     },
   },
 
@@ -623,9 +643,9 @@ registerHooks({
   },
 
   'international-communist-conspiracy': {
-    // +3 to control puppets of Communist masters (the target's own +3 does not stack with this one).
+    // +3 on any attempt to control a puppet of a Communist master (the target's own +3 does not stack with this one).
     attackMod(s, self, ctx, side) {
-      if (side !== 'attack' || ctx.instant || ctx.type !== 'control' || ctx.attacker !== self || ctx.fromHand) return 0;
+      if (side !== 'attack' || !ledByOwner(s, self, ctx) || ctx.type !== 'control' || ctx.fromHand) return 0;
       const m = s.cards[ctx.target].master;
       return is(s, m, { attributes: ['Communist'] }) && !is(s, ctx.target, { attributes: ['Communist'] }) ? 3 : 0;
     },
@@ -668,11 +688,12 @@ registerHooks({
   },
 
   'junk-mail': {
-    // May attack, aid or oppose Secret Groups, and its +6 still counts in those attacks.
+    // May attack, aid or oppose Secret Groups, and its +6 on any attempt to control one still counts
+    // in those attacks, whichever of your Groups leads.
     secretOverride: (_s, self, group) => group === self,
     worksInSecretAttacks: true,
     attackMod: (s, self, ctx, side) =>
-      side === 'attack' && !ctx.instant && ctx.type === 'control' && ctx.attacker === self && live(ctx, self) && is(s, ctx.target, { attributes: ['Secret'] }) ? 6 : 0,
+      side === 'attack' && ledByOwner(s, self, ctx) && ctx.type === 'control' && is(s, ctx.target, { attributes: ['Secret'] }) ? 6 : 0,
   },
 
   'kkk': {
@@ -694,7 +715,7 @@ registerHooks({
     // +8 on direct control of Space groups, instead of its +4.
     attackMod: (s, self, ctx, side) =>
       side === 'attack' && !ctx.instant && ctx.type === 'control' && ctx.attacker === self && is(s, ctx.target, { attributes: ['Space'] })
-        ? Math.max(0, 8 - directBonus(s, self, ctx)) : 0,
+        ? Math.max(0, 8 - ownBonus(s, self, ctx)) : 0,
   },
 
   'libertarians': {
@@ -707,9 +728,10 @@ registerHooks({
       for (const c of ctx.aid) if (c.iid && live(ctx, c.iid)) n += contribPower(s, c);
       return n;
     },
-    // Taking a Nation: their Power becomes that Nation's Power.
+    // Taking a Nation or a Government Place that is a U.S. state: their Power becomes its Power.
     onCapture(s, self, victim) {
-      if (s.attack?.attacker !== self || !is(s, victim, { attributes: ['Nation'] })) return;
+      if (s.attack?.attacker !== self) return;
+      if (!is(s, victim, { attributes: ['Nation'] }) && !is(s, victim, { names: US_STATES, alignments: ['Government'] })) return;
       const c = s.cards[self];
       c.mods = c.mods.filter((m) => !(m.source === self && m.kind === 'setPower'));
       c.mods.push({ source: self, kind: 'setPower', value: def(s, victim).power ?? 0, until: 'permanent' });

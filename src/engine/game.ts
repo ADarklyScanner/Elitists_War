@@ -880,7 +880,9 @@ function meetsGoalNow(s: GameState, playerId: string): string | null {
     }
     if (a.goal === 'destroyCount' && player(s, playerId).destroyedCredit.length >= a.value) return `destroyed ${a.value} Groups`;
     if (a.goal === 'peacefulPower') {
-      const peaceful = mine.filter((iid) => alignments(s, iid).includes('Peaceful')).reduce((n, iid) => n + power(s, iid, { goals: true }), 0);
+      // Peaceful Groups in play count whoever controls them (Shangri-La).
+      const inPlay = livePlayers(s).flatMap((p) => structureCards(s, p.id)).filter((iid) => !tokenBarredForGoals(s, iid));
+      const peaceful = inPlay.filter((iid) => alignments(s, iid).includes('Peaceful')).reduce((n, iid) => n + power(s, iid, { goals: true }), 0);
       if (peaceful >= a.value) return `has ${a.value} Peaceful Power`;
     }
   }

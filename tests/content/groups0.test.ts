@@ -848,3 +848,241 @@ describe('International Cocaine Smugglers', () => {
     expect(line(attack(s2, ics2, put(s2, 'p2', 'punk-rockers'), 'destroy'), 'Attack', ICS)).toBe(0);
   });
 });
+
+import { CARDS } from '../../src/engine';
+
+describe('audit fixes', () => {
+  const name = (id: string) => CARDS[id].name;
+
+  describe('"any attempt" bonuses help every attack your Groups lead', () => {
+    // [card with the bonus, target, attack type, bonus]
+    const cases: [string, string, AttackType, number][] = [
+      ['anti-nuclear-activists', 'fbi', 'destroy', 6], // Science
+      ['anti-nuclear-activists', 'eco-guerrillas', 'control', 4], // Green
+      ['anti-nuclear-activists', 'nuclear-power-companies', 'destroy', 10], // +10 instead of +6
+      ['b-a-t-f', 'gun-lobby', 'control', 6],
+      ['b-a-t-f', 'tobacco-companies', 'destroy', 6],
+      ['big-media', 'madison-avenue', 'destroy', 4],
+      ['black-activists', 'feminists', 'control', 2],
+      ['clone-arrangers', 'dan-quayle', 'control', 4],
+      ['deprogrammers', 'goldfish-fanciers', 'destroy', 4], // Fanatic only
+      ['deprogrammers', 'reformed-church-of-satan', 'destroy', 8], // Weird and Fanatic
+      ['fast-food-chains', 'eco-guerrillas', 'destroy', 6],
+      ['fbi', 'loan-sharks', 'control', 2],
+      ['fbi', 'loan-sharks', 'destroy', 4], // its +10 is direct only
+      ['feminists', 'cfl-aio', 'control', 3],
+      ['feminists', 'gun-lobby', 'destroy', 3],
+      ['fiendish-fluoridators', 'dan-quayle', 'destroy', 5],
+      ['international-communist-conspiracy', 'china', 'control', 3],
+      ['l-4-society', 'moonbase', 'control', 4],
+      ['l-4-society', 'fbi', 'destroy', 4],
+      ['local-police-departments', 'loan-sharks', 'destroy', 4],
+    ];
+    for (const [id, target, type, value] of cases) {
+      it(`${name(id)}: +${value} to ${type} ${name(target)} when another of your Groups leads`, () => {
+        const s = scenario();
+        put(s, 'p1', id);
+        const mafia = put(s, 'p1', 'the-mafia');
+        expect(line(attack(s, mafia, put(s, 'p2', target), type), 'Attack', name(id))).toBe(value);
+      });
+    }
+    it('a rival\'s copy gives nothing to your attack', () => {
+      const s = scenario();
+      put(s, 'p2', 'black-activists');
+      const mafia = put(s, 'p1', 'the-mafia');
+      expect(line(attack(s, mafia, put(s, 'p2', 'feminists'), 'control'), 'Attack', 'Black Activists')).toBe(0);
+    });
+    it('a leader with a "direct" and an "any attempt" bonus uses the larger, not both', () => {
+      const s = scenario();
+      const l4 = put(s, 'p1', 'l-4-society');
+      expect(line(attack(s, l4, put(s, 'p2', 'moonbase'), 'control'), 'Attack', 'L-4 Society')).toBe(8);
+      const s2 = scenario();
+      const ana = put(s2, 'p1', 'anti-nuclear-activists');
+      expect(line(attack(s2, ana, put(s2, 'p2', 'nuclear-power-companies'), 'destroy'), 'Attack', 'Anti-Nuclear Activists')).toBe(10);
+    });
+    it('International Communist Conspiracy: +3 to control a puppet of a Communist master, whoever leads', () => {
+      const s = scenario();
+      put(s, 'p1', 'international-communist-conspiracy');
+      const mafia = put(s, 'p1', 'the-mafia');
+      const china = put(s, 'p2', 'china');
+      const puppet = put(s, 'p2', 'dentists', china);
+      expect(line(attack(s, mafia, puppet, 'control'), 'Attack', 'International Communist Conspiracy')).toBe(3);
+    });
+    it('Junk Mail: +6 when your Illuminati attacks to control a Secret Group', () => {
+      const s = scenario();
+      put(s, 'p1', 'junk-mail');
+      const secret = put(s, 'p2', 'fiendish-fluoridators');
+      expect(line(attack(s, ill(s, 'p1'), secret, 'control'), 'Attack', 'Junk Mail')).toBe(6);
+    });
+  });
+
+  describe('CFL-AIO', () => {
+    it('is Liberal and Corporate', () => {
+      const s = scenario();
+      const cfl = put(s, 'p1', 'cfl-aio');
+      expect(alignments(s, cfl)).toEqual(expect.arrayContaining(['Liberal', 'Corporate']));
+    });
+    it('its direct +10 against a Corporate Group replaces the same-alignment penalty', () => {
+      const s0 = scenario();
+      const cfl = put(s0, 'p1', 'cfl-aio');
+      const s = attack(s0, cfl, put(s0, 'p2', 'madison-avenue'), 'destroy');
+      expect(line(s, 'Attack', 'CFL-AIO')).toBe(10);
+      expect(line(s, 'Attack', 'alignments')).toBe(0);
+    });
+  });
+
+  describe('Flat Earthers', () => {
+    it('count only the Places you control', () => {
+      const s = scenario();
+      const fe = put(s, 'p1', 'flat-earthers');
+      put(s, 'p1', 'hawaii');
+      for (const p of ['switzerland', 'finland', 'moonbase']) put(s, 'p2', p);
+      let seed = 0;
+      for (let r = 1; r < 5000 && !seed; r++) {
+        s.rng = r;
+        const [a, b] = roll2d6(structuredClone(s));
+        if (a + b <= 4) seed = r;
+      }
+      s.rng = seed;
+      // With 4 Places in play the roll would pay off; with only 1 of them yours it does not.
+      expect(hand(use(s, 'p1', fe, 'roll'), 'p1').length).toBe(0);
+    });
+  });
+
+  describe('Gun Lobby', () => {
+    it('draws a Plot even when the attack on your Conservative or Violent Group succeeds', () => {
+      const s0 = scenario();
+      const mafia = put(s0, 'p1', 'the-mafia');
+      put(s0, 'p2', 'gun-lobby');
+      const kkk = put(s0, 'p2', 'kkk');
+      s0.cards[mafia].mods.push({ source: 'test', kind: 'power', value: 40, until: 'permanent' });
+      const s = resolve(attack(s0, mafia, kkk, 'destroy'), [1, 1]);
+      expect(s.cards[kkk].zone).toBe('destroyed');
+      expect(hand(s, 'p2').length).toBe(1);
+    });
+    it('and when it is taken over', () => {
+      const s0 = scenario();
+      const mafia = put(s0, 'p1', 'the-mafia');
+      put(s0, 'p2', 'gun-lobby');
+      const kkk = put(s0, 'p2', 'kkk');
+      s0.cards[mafia].mods.push({ source: 'test', kind: 'power', value: 40, until: 'permanent' });
+      const s = resolve(attack(s0, mafia, kkk, 'control'), [1, 1]);
+      expect(s.cards[kkk].controller).toBe('p1');
+      expect(hand(s, 'p2').length).toBe(1);
+    });
+  });
+
+  describe('Libertarians', () => {
+    it('take the Power of a Government Place that is a U.S. state', () => {
+      const s0 = scenario();
+      const lib = put(s0, 'p1', 'libertarians');
+      const texas = put(s0, 'p2', 'texas');
+      s0.cards[lib].mods.push({ source: 'test', kind: 'power', value: 40, until: 'permanent' });
+      const s = resolve(attack(s0, lib, texas, 'control'), [1, 1]);
+      expect(s.cards[texas].controller).toBe('p1');
+      s.cards[lib].mods = s.cards[lib].mods.filter((m) => m.source !== 'test');
+      expect(power(s, lib)).toBe(6);
+    });
+    it('not of a state that is not a Government card', () => {
+      const s0 = scenario();
+      const lib = put(s0, 'p1', 'libertarians');
+      const hawaii = put(s0, 'p2', 'hawaii');
+      s0.cards[lib].mods.push({ source: 'test', kind: 'power', value: 40, until: 'permanent' });
+      const s = resolve(attack(s0, lib, hawaii, 'control'), [1, 1]);
+      expect(s.cards[hawaii].controller).toBe('p1');
+      s.cards[lib].mods = s.cards[lib].mods.filter((m) => m.source !== 'test');
+      expect(power(s, lib)).toBe(1);
+    });
+  });
+
+  describe('A.M.A.', () => {
+    it('may help attack a Science Group regardless of alignment, with +5', () => {
+      const s0 = scenario();
+      const mafia = put(s0, 'p1', 'the-mafia');
+      const ama = put(s0, 'p1', 'a-m-a');
+      let s = attack(s0, mafia, put(s0, 'p2', 'moonbase'), 'control');
+      const can = canAid(s, 'p1', ama);
+      expect(can.ok).toBe(true);
+      expect(can.global).toBe(false);
+      s = act(s, 'p1', { type: 'aid', group: ama });
+      expect(line(s, 'Attack', 'A.M.A. ability')).toBe(5);
+    });
+    it('may help defend a Science Group regardless of alignment', () => {
+      const s0 = scenario();
+      const mafia = put(s0, 'p1', 'the-mafia');
+      const ama = put(s0, 'p2', 'a-m-a');
+      const s = attack(s0, mafia, put(s0, 'p2', 'moonbase'), 'destroy');
+      const can = canOppose(s, 'p2', ama);
+      expect(can.ok).toBe(true);
+      expect(can.global).toBe(false);
+    });
+    it('no special help against a non-Science Group', () => {
+      const s0 = scenario();
+      const mafia = put(s0, 'p1', 'the-mafia');
+      const ama = put(s0, 'p1', 'a-m-a');
+      const s = attack(s0, mafia, put(s0, 'p2', 'las-vegas'), 'control');
+      const can = canAid(s, 'p1', ama);
+      expect(can.ok && !can.global).toBe(false);
+    });
+  });
+
+  describe('Druids', () => {
+    it('may link to a rival\'s Place and protect it against Disasters', () => {
+      let s = scenario();
+      const dr = put(s, 'p1', 'druids');
+      const hawaii = put(s, 'p2', 'hawaii');
+      s = use(s, 'p1', dr, 'link', { target: hawaii });
+      disaster(s, 'p1', hawaii);
+      expect(line(s, 'Defense', 'Druids')).toBe(8);
+    });
+  });
+
+  describe('Eco-Guerrillas', () => {
+    it('+6 when they lead an Attack to Destroy a Corporate Group', () => {
+      const s = scenario();
+      const eco = put(s, 'p1', 'eco-guerrillas');
+      expect(line(attack(s, eco, put(s, 'p2', 'madison-avenue'), 'destroy'), 'Attack', 'Eco-Guerrillas')).toBe(6);
+    });
+    it('the +6 is direct: nothing when another Group leads', () => {
+      const s = scenario();
+      put(s, 'p1', 'eco-guerrillas');
+      const mafia = put(s, 'p1', 'the-mafia');
+      expect(line(attack(s, mafia, put(s, 'p2', 'madison-avenue'), 'destroy'), 'Attack', 'Eco-Guerrillas')).toBe(0);
+    });
+    it('+2 Resistance for all your Groups against a Corporate attacker', () => {
+      const s = scenario();
+      const mad = put(s, 'p1', 'madison-avenue');
+      put(s, 'p2', 'eco-guerrillas');
+      expect(line(attack(s, mad, put(s, 'p2', 'feminists'), 'control'), 'Defense', 'Eco-Guerrillas')).toBe(2);
+    });
+    it('Resistance does not count against an Attack to Destroy, or against other attackers', () => {
+      const s = scenario();
+      const mad = put(s, 'p1', 'madison-avenue');
+      put(s, 'p2', 'eco-guerrillas');
+      expect(line(attack(s, mad, put(s, 'p2', 'feminists'), 'destroy'), 'Defense', 'Eco-Guerrillas')).toBe(0);
+      const s2 = scenario();
+      const mafia = put(s2, 'p1', 'the-mafia');
+      put(s2, 'p2', 'eco-guerrillas');
+      expect(line(attack(s2, mafia, put(s2, 'p2', 'feminists'), 'control'), 'Defense', 'Eco-Guerrillas')).toBe(0);
+    });
+  });
+
+  describe('Goldfish Fanciers', () => {
+    it('Fanatic Groups cannot attack any Group in your Power Structure', () => {
+      const s = scenario();
+      const fanatic = put(s, 'p1', 'professional-sports');
+      const other = put(s, 'p1', 'the-mafia');
+      put(s, 'p2', 'goldfish-fanciers');
+      const gun = put(s, 'p2', 'gun-lobby');
+      expect(validateAttack(s, 'p1', { type: 'attack', attackType: 'destroy', attacker: fanatic, target: gun })).toMatch(/immune/);
+      expect(validateAttack(s, 'p1', { type: 'attack', attackType: 'control', attacker: fanatic, target: gun })).toMatch(/immune/);
+      expect(validateAttack(s, 'p1', { type: 'attack', attackType: 'destroy', attacker: other, target: gun })).toBeNull();
+    });
+    it('no protection without the Goldfish Fanciers', () => {
+      const s = scenario();
+      const fanatic = put(s, 'p1', 'professional-sports');
+      const gun = put(s, 'p2', 'gun-lobby');
+      expect(validateAttack(s, 'p1', { type: 'attack', attackType: 'destroy', attacker: fanatic, target: gun })).toBeNull();
+    });
+  });
+});
