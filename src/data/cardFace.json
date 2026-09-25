@@ -464,6 +464,56 @@
 "goal": "",
 "flavor": "One flower at the airport, one newspaper in the capital, and a pledge drive that never ends."
 },
+"moral-minority": {
+"rules": "Add 1 to its Power for each Straight Group you control besides this one.",
+"goal": "",
+"flavor": "Neither moral nor a minority, but the name tested beautifully with focus groups."
+},
+"mossad": {
+"rules": "Each time you draw a Plot, you may draw from the bottom of your Plot deck instead, and you may peek at that bottom card first.",
+"goal": "",
+"flavor": "Nobody sees us arrive or leave. Occasionally someone notices the tea has been rearranged."
+},
+"multinational-oil-companies": {
+"rules": "With 3 or more players: when it makes or aids an attack, you may name 1 rival not already in that attack. That rival cannot interfere in it.",
+"goal": "",
+"flavor": "Pipelines everywhere, accountability nowhere, and a donation for whichever government is in fashion."
+},
+"nasa": {
+"rules": "+4 on any attack to control a Space Group. Your turn, outside attacks: give this Group's Action token to another Government Group you control that has none.",
+"goal": "",
+"flavor": "The rocket went up, the budget came down, and the souvenir rocks cost a fortune."
+},
+"nato": {
+"rules": "+4 on any attack to control a Nation. Can join either side of any attack in which a Nation attacks or is attacked. Its Power is tripled for Relief.",
+"goal": "",
+"flavor": "Allies sworn to defend one another, provided the meeting ends before lunch."
+},
+"nephews-of-god": {
+"rules": "At the start of your turn, before your normal draw, roll 2 dice. On 6 or less, draw 1 extra card from either deck.",
+"goal": "",
+"flavor": "They expect favours from the family business. Now and then, on a technicality, they get one."
+},
+"ninjas": {
+"rules": "Your Assassinations get +4; your other non-Instant attacks to destroy get +2. Any attempt to destroy the Ninjas gets -10. When an attack on them fails, they gain 1 Action token.",
+"goal": "",
+"flavor": "Nobody saw us come in. Nobody will see us leave. That creak was the house settling."
+},
+"n-s-a": {
+"rules": "Once during your turn, free: look at the top or bottom 3 cards of any player's Plot deck. You may also spend this Group's Action token to look again any time.",
+"goal": "",
+"flavor": "We are not listening to your calls. We are listening to everyone's, which is different."
+},
+"nuclear-power-companies": {
+"rules": "Action: cancel another Group's action, including an Illuminati action.",
+"goal": "",
+"flavor": "Safe, clean and nearly free, said the brochure. The brochure warehouse now glows at night."
+},
+"offshore-banks": {
+"rules": "Government, Corporate and Criminal Groups cannot destroy this Group. Once during your turn, outside attacks, you may move one of your Groups to another open arrow for free.",
+"goal": "",
+"flavor": "Sunny beaches, shady ledgers, and no questions about where the money came from."
+},
 "opec": {
 "rules": "When it enters your Power Structure and at the start of each of your turns, its Power becomes 2 dice minus 2, +1 if you control Texas, +1 if you control Multinational Oil Companies.",
 "goal": "",
@@ -848,6 +898,136 @@
 "rules": "Your Attacks to Control on Computer Groups get +2, or +6 when Finland makes the attack.",
 "goal": "",
 "flavor": "Long winters and generous research grants have turned its ministries into very patient software houses."
+},
+"france": {
+"rules": "Once per attack, except an Instant attack, France may add its Power to the defense of another Liberal Group you control without spending an action.",
+"goal": "",
+"flavor": "The Republic will defend your values vigorously, once the cabinet survives this week's confidence vote."
+},
+"germany": {
+"rules": "Germany keeps unused Action tokens and still gets a new one each turn. In an attack it joins, each extra token spent adds its Power again. Your Attacks to Control on Science Groups get +2.",
+"goal": "",
+"flavor": "The finance ministry banks every surplus in a drawer marked later, and later never quite arrives."
+},
+"hawaii": {
+"rules": "If Hawaii's master is Corporate, that master gets 1 extra Action token each turn.",
+"goal": "",
+"flavor": "Paradise is available year-round, with a complimentary garland and a mandatory timeshare presentation."
+},
+"hollywood": {
+"rules": "It gets +2 Power and +2 Global Power for each Media Personality you control.",
+"goal": "",
+"flavor": "Every story is original, focus-grouped, sequel-ready and legally distinct from the last forty."
+},
+"israel": {
+"rules": "Your Attacks to Control on Mossad get +8. As an action, Israel may aid or oppose any attack, whatever the alignments, even a Privileged one, which then stops being Privileged.",
+"goal": "",
+"flavor": "A small state with a large intelligence budget and an open file on every crisis in the region."
+},
+"italy": {
+"rules": "Once per attack, except an Instant attack, Italy may add its Power to the defense of another Weird Group you control without spending an action.",
+"goal": "",
+"flavor": "Nearly seventy governments since the war, and the ministries have yet to notice any of them."
+},
+"japan": {
+"rules": "+6 when Japan makes an Attack to Control on a Science or Computer Group.",
+"goal": "",
+"flavor": "The trade ministry funds robotics, chip foundries and a seawall rated, for undisclosed reasons, for giant lizards."
+},
+"las-vegas": {
+"rules": "As an action, bet 1-3 Plots with a rival and roll 2 dice. 7+: you take that many off the top of their Plot deck. 6 or less: they take that many off yours.",
+"goal": "",
+"flavor": "The odds are posted clearly on the wall, right behind the velvet rope and the free shrimp."
+},
+"moonbase": {
+"rules": "Of Disasters, only Earthquake and Meteor Strike affect it. Your Attacks to Control or Destroy on Space Groups get +4. Linked Personalities get +6 against Assassination and die if Moonbase is destroyed.",
+"goal": "",
+"flavor": "The view is spectacular, the air is rationed, and the neighbours are quiet and extremely tall."
+},
+"new-york": {
+"rules": "Each other Criminal Group you control gets +1 Power.",
+"goal": "",
+"flavor": "Every permit has a fee, every fee has a middleman, and every middleman has an office at City Hall."
+},
+"orbit-one": {
+"rules": "Each Science Group that is its puppet gives you 1 extra Plot draw per turn. Of Disasters, only Nuclear Accident and Meteor Strike can affect it.",
+"goal": "",
+"flavor": "Officially a weather satellite. Unofficially a weather satellite with opinions, a minibar and a very large lens."
+},
+"pentagon": {
+"rules": "Each Corporate Group that is its puppet gives you 1 extra Plot draw per turn.",
+"goal": "",
+"flavor": "The hammer cost nine hundred dollars. The contractor who sold it now owns an island shaped like one."
+},
+"russia": {
+"rules": "Your Attacks to Control or Destroy on Communist Groups get +2, or +4 when Russia makes an Attack to Control on one. Communist Groups get +4 when they attack to control Russia.",
+"goal": "",
+"flavor": "The five-year plan was finished in four, then reclassified, then finished again under a new name."
+},
+"silicon-valley": {
+"rules": "Your Attacks to Control on Computer Groups get +4. As an action on your turn, draw 1 extra Plot.",
+"goal": "",
+"flavor": "The garage startup disrupted everything, including the garage, the neighbourhood and two regulators."
+},
+"stonehenge": {
+"rules": "While it is in your Power Structure, you are immune to Magic: Magic Groups cannot attack or aid attacks on you, and rivals' Magic Plots, Resources and abilities cannot be used against you.",
+"goal": "",
+"flavor": "Five thousand years of standing perfectly still, and it still outranks every wizard who visits."
+},
+"switzerland": {
+"rules": "The Gnomes of Zurich get +15 attacking to control it, and their player can never destroy it. Any other player controlling it gets +2 on attacks against the Gnomes' player.",
+"goal": "",
+"flavor": "Neutral in every war, discreet in every deal, and precise to the second about closing your account."
+},
+"texas": {
+"rules": "On your turn, hide or swap 1 non-Goal Plot beneath Texas. It is outside your hand limit, cannot be exposed, and works only on something involving Texas. Lost if Texas is destroyed or taken.",
+"goal": "",
+"flavor": "The legislature meets every other year, leaving the oil men ample time to draft the bills."
+},
+"vatican-city": {
+"rules": "Your entire Power Structure is immune to attacks by Peaceful Groups.",
+"goal": "",
+"flavor": "The smallest state on the map, with the oldest archive and the most discreet bank."
+},
+"18-1-2-minute-gap": {
+"rules": "Counter. Right after another player plays a Plot: it has no effect and goes into your hand. Pay by spending all Action tokens on your Illuminati (at least 1) and discarding the top card of your Plot and Group decks.",
+"goal": "",
+"flavor": "The tape is flawless, apart from the stretch where everything important apparently hummed."
+},
+"agent-in-place": {
+"rules": "Any time. Spend the action of one of your Groups with Power 4 or more. Choose a rival: look at all their hidden Plots and pick one for them to discard.",
+"goal": "",
+"flavor": "He has worked in their mailroom for eleven years. Nobody remembers hiring him."
+},
+"air-magic": {
+"rules": "During an attack. Play when a Disaster other than Earthquake or Volcano strikes a Place: triple the Place's Power for that defense. Pay with a Magic Group's action or by discarding your top Plot card unseen.",
+"goal": "",
+"flavor": "The weather was furious, so the circle politely asked the wind to take its complaint elsewhere."
+},
+"albino-alligators": {
+"rules": "One Weird Group you control gets +10 Power or +10 Resistance. Boosting an action: play it when the action is announced; it lasts for that action. On defense: it lasts until end of turn and never counts for Goals.",
+"goal": "",
+"flavor": "They live in the sewers, eat the evidence, and appear only in footnotes."
+},
+"alternate-goals": {
+"rules": "Keep this in your hand; it is never played. While you hold it, you may hold 2 Goals and win by meeting either one, but never by combining their conditions.",
+"goal": "",
+"flavor": "Plan A was world domination. Plan B was world domination with a nicer logo."
+},
+"an-offer-you-can-t-refuse": {
+"rules": "Play at the start of your turn. Take 2 extra Plots from the top of one rival's Plot deck, or the top 1 from each of 2 rivals. You draw no Group cards this turn.",
+"goal": "",
+"flavor": "Call it a friendly negotiation in which one side happens to hold all the cards."
+},
+"and-stay-dead": {
+"rules": "Play right after any player destroys or discards a Group. Pay with one of your Magic Groups' action. That Group is gone for good: no card or ability can return it to play.",
+"goal": "",
+"flavor": "The stake, the salt, the silver and the paperwork are all in order this time."
+},
+"angst": {
+"rules": "Not during an attack. Link to a Place or Organization (never an Illuminati): its Power becomes 1 for good. Pay with your Illuminati's action and the action of your Psychiatrists, Intellectuals or Orbital Mind Control Lasers.",
+"goal": "",
+"flavor": "The group woke up, reread its mission statement and wondered whether any of it mattered."
 },
 "annual-convention": {
 "rules": "Instant. Play right after a Place is destroyed or Devastated: Instant Attack to Destroy an Organization in play, at Power 12 if the Place was destroyed, 9 if Devastated. Only Magic or Weird Science Groups may join, on either side.",
