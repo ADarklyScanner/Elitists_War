@@ -236,7 +236,10 @@ function mainPhase(s: GameState, pl: string): Action {
   if (generic) return generic;
   // 2. Best attack: the most promising few are played out both ways and weighed by their odds.
   // Against a rival about to win, long shots are worth taking (Hard).
-  const minFor = (p: AttackPlan) => (P.endgame && nearWin(s, s.cards[p.action.target].controller) ? 0.12 : Math.min(0.8, Math.max(0.12, P.minChance + S.risk)));
+  // A Kingslayer accepts worse odds when the target belongs to the leader.
+  const lead = rivalsOf(s, pl).map((r) => r.id).sort((a, b) => standing(s, b) - standing(s, a))[0];
+  const minFor = (p: AttackPlan) => (P.endgame && nearWin(s, s.cards[p.action.target].controller) ? 0.12
+    : Math.min(0.8, Math.max(0.12, P.minChance + S.risk - (S.leader >= 2 && s.cards[p.action.target].controller === lead ? 0.15 : 0))));
   const plans = planAttacks(s, pl).filter((p) => p.chance >= minFor(p)).slice(0, P.plans);
   const now = evaluate(s, pl);
   let best: AttackPlan | undefined;
