@@ -4,7 +4,7 @@ import type { Action, Alignment, GameState, PlotPlay, Side } from './types';
 import { applyAction, canAid, canOppose, checkPlot, player, plotsInHand, validateAttack, waitingFor } from './game';
 import { cardName, def } from './cards';
 import { openArrows, structureCards } from './geometry';
-import { alignments, power } from './stats';
+import { alignments, attributes, power } from './stats';
 import { PLOTS } from './plotTypes';
 import { HOOKS } from './hooks';
 import { announcedAction, announcedActors, checkAbility, disasterTarget, resourcesOf } from './game';
@@ -30,6 +30,16 @@ function payCandidates(s: GameState, pl: string, exclude?: string): string[][] {
   for (const pool of pools) for (let k = 2; k <= pool.length; k++) out.push(pool.slice(0, k));
   const seen = new Set<string>();
   return out.filter((p) => { const k = p.join(); if (seen.has(k)) return false; seen.add(k); return true; });
+}
+
+/** Media Groups with a token, yours first then other players' (strongest first), until their Power reaches 6. */
+function sharedMediaPayers(s: GameState, pl: string): string[] {
+  const media = Object.values(s.cards).filter((c) => c.zone === 'structure' && c.tokens > 0 && def(s, c.iid).type === 'Group' && attributes(s, c.iid).includes('Media'))
+    .map((c) => c.iid).sort((a, b) => Number(s.cards[b].controller === pl) - Number(s.cards[a].controller === pl) || power(s, b) - power(s, a));
+  const out: string[] = [];
+  let n = 0;
+  for (const g of media) { if (n >= 6) break; out.push(g); n += power(s, g); }
+  return out;
 }
 
 /** All legal ways to play one Plot card right now. */
@@ -58,6 +68,8 @@ export function plotOptions(s: GameState, pl: string, card: string, declaring?: 
   const out: MoveOption[] = [];
   for (const targetList of targetSets) for (const target of targets) {
     const pays: (string[] | undefined)[] = needs.pay === 'tokens' ? payCandidates(s, pl, target) : [undefined];
+    // Sweeping Reforms may also be paid with other players' Media Groups (they are asked to agree).
+    if (d.id === 'sweeping-reforms') pays.push(sharedMediaPayers(s, pl));
     for (const mode of modes) for (const alignment of aligns) for (const helper of helpers) {
       let found = false;
       for (const payWith of pays) {
@@ -117,6 +129,8 @@ export function describePlay(s: GameState, p: PlotPlay): string {
   if (p.mode === 'down') parts.push('roll −2');
   if (p.mode === 'illuminati') parts.push('pay: Illuminati tokens');
   if (p.mode === 'deck') parts.push('pay: top 2 Plots of your deck');
+  if (p.mode === 'groupDeck') parts.push('pay: top card of your Group deck');
+  if (p.mode === 'hand') parts.push('pay: two Group cards from your hand');
   if (p.alignment) parts.push(`${p.alignment} Groups`);
   if (p.helper) parts.push(`with ${cardName(s, p.helper)}`);
   if (p.targets?.length) parts.push(`tokens for ${p.targets.map((g) => cardName(s, g)).join(', ')}`);

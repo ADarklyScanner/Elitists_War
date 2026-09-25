@@ -2,16 +2,17 @@
 import type { Alignment, AttackCtx, GameState, PlotEffect, PlotPlay } from '../types';
 import type { PlotHandler } from '../plotTypes';
 import { registerPlots } from '../plotTypes';
+import { registerChoice, registerHooks } from '../hooks';
 import { def } from '../cards';
 import { type Match, matches } from '../abilities';
-import { alignments, power, resistance } from '../stats';
+import { alignments, attributes, power, resistance } from '../stats';
 import { OPPOSITE } from '../cards';
 import { depth, structureCards } from '../geometry';
 import { roll2d6 } from '../rng';
 import { nwoColor } from '../nwo';
 import {
-  currentOutcome, discardCard, drawPlot, giveToken, isPrivileged, log, player, startInstantAttack,
-  disasterTarget,
+  announcedAction, announcedActors, askChoice, cancelActorEffect, currentOutcome, discardCard, drawPlot, giveToken, isPrivileged, isSecret, log,
+  player, respondToAction, startInstantAttack, disasterTarget,
 } from '../game';
 
 // ---------------------------------------------------------------- helpers
@@ -166,13 +167,15 @@ function alignmentShift(add: Alignment): PlotHandler {
 }
 
 /** Disaster: Instant Attack to Destroy a Place. */
-function disaster(opts: { power: (s: GameState, t: string) => number; destroyMargin: number | null; hugeAllowed: boolean; devastateOnly?: boolean }): PlotHandler {
+function disaster(opts: { power: (s: GameState, t: string) => number; destroyMargin: number | null; hugeAllowed: boolean; devastateOnly?: boolean; coastalOnly?: boolean }): PlotHandler {
   return {
     timing: ['instant'],
     needs: { target: 'place' },
     check(s, _pl, play) {
       if (!disasterTarget(s, play.target)) return 'Choose a Place in play.';
       if (!opts.hugeAllowed && (def(s, play.target!).attributes ?? []).includes('Huge')) return 'This Disaster cannot strike a Huge Place.';
+      // A Place in a Power Structure must be Coastal; the Hidden City may be struck by any Disaster.
+      if (opts.coastalOnly && s.cards[play.target!].zone === 'structure' && !attributes(s, play.target!).includes('Coastal')) return 'This Disaster can only strike a Coastal Place.';
       return null;
     },
     apply(s, pl, play) {
@@ -181,14 +184,15 @@ function disaster(opts: { power: (s: GameState, t: string) => number; destroyMar
   };
 }
 
-/** Assassination: Instant Attack to Destroy a Personality; one qualifying Group may join. */
-function assassination(base: number, helper: Match): PlotHandler {
+/** Assassination: Instant Attack to Destroy a Personality; one qualifying Group may join (any of the matches). */
+function assassination(base: number, helper: Match | Match[]): PlotHandler {
+  const helpers = Array.isArray(helper) ? helper : [helper];
   return {
     timing: ['instant'],
     needs: { target: 'personality', helper: true },
     check(s, pl, play) {
       if (!inPlay(s, play.target) || def(s, play.target!).subtype !== 'Personality') return 'Choose a Personality in play.';
-      if (play.helper && (!own(s, pl, play.helper) || s.cards[play.helper].tokens < 1 || !matches(s, play.helper, helper))) return `The helping Group must be your ${describe(helper)} Group with an Action token.`;
+      if (play.helper && (!own(s, pl, play.helper) || s.cards[play.helper].tokens < 1 || !helpers.some((m) => matches(s, play.helper!, m)))) return `The helping Group must be your ${helpers.map(describe).join(' or ')} Group with an Action token.`;
       return null;
     },
     apply(s, pl, play) {
@@ -248,6 +252,17 @@ function nwo(): PlotHandler {
   return { timing: ['nwo'], check: () => null, ...effectNow(place) };
 }
 
+/** Privileged Attack: may this card of the player make or pay for the privilege (Illuminati or a Secret Group)? */
+const privilegeActor = (s: GameState, pl: string, g: string) =>
+  g === player(s, pl).illuminati || (own(s, pl, g) && isGroup(s, g) && isSecret(s, g));
+/** Who spends a token for Privileged Attack when the player names nobody. */
+function privilegePayer(s: GameState, pl: string): string | undefined {
+  const ill = player(s, pl).illuminati;
+  if (s.cards[ill].tokens >= 1) return ill;
+  return structureCards(s, pl).filter((g) => privilegeActor(s, pl, g) && s.cards[g].tokens >= 1)
+    .sort((a, b) => power(s, a) - power(s, b))[0];
+}
+
 const onAttackSide = (s: GameState, pl: string, ctx: AttackCtx, m: Match) =>
   [ctx.attacker, ...ctx.aid.map((a) => a.iid)].some((g) => !!g && s.cards[g].controller === pl && matches(s, g, m));
 
@@ -304,14 +319,15 @@ registerPlots({
   'volcano': disaster({ power: () => 18, destroyMargin: 2, hugeAllowed: false }),
   'meteor-strike': disaster({ power: () => 16, destroyMargin: 5, hugeAllowed: true }),
   'earthquake': disaster({ power: (s, t) => ((def(s, t).attributes ?? []).includes('Huge') ? 12 : 16), destroyMargin: 6, hugeAllowed: true }),
-  'hurricane': disaster({ power: (s, t) => ((def(s, t).attributes ?? []).includes('Huge') ? 16 : 20), destroyMargin: null, hugeAllowed: true, devastateOnly: true }),
-  'tidal-wave': disaster({ power: (s, t) => ((def(s, t).attributes ?? []).includes('Huge') ? 20 : 24), destroyMargin: 11, hugeAllowed: true }),
+  'hurricane': disaster({ power: (s, t) => ((def(s, t).attributes ?? []).includes('Huge') ? 16 : 20), destroyMargin: null, hugeAllowed: true, devastateOnly: true, coastalOnly: true }),
+  'tidal-wave': disaster({ power: (s, t) => ((def(s, t).attributes ?? []).includes('Huge') ? 20 : 24), destroyMargin: 11, hugeAllowed: true, coastalOnly: true }),
 
   // Assassinations
   'sniper': assassination(10, { alignments: ['Government'] }),
   'hit-and-run': assassination(10, { alignments: ['Fanatic'] }),
   'car-bomb': assassination(8, { alignments: ['Violent', 'Criminal'] }),
-  'poison': assassination(8, { alignments: ['Criminal'], attributes: undefined }),
+  // A Magic helper joins the attack (as an aiding Group), which makes the attack Magic.
+  'poison': assassination(8, [{ alignments: ['Criminal'] }, { attributes: ['Magic'] }]),
 
   // Cancels
   'hoax': counter({
@@ -339,35 +355,66 @@ registerPlots({
       } else s.cards[p.illuminati].tokens = 0;
     },
   }),
+  // Cancels one action of a Group: inside an attack, or an action announced outside attacks (a move,
+  // an ability used in the main phase, Relief, ...).
   'are-we-having-fun-yet': {
-    timing: ['attack'],
+    timing: ['attack', 'event'],
+    events: ['action'],
     needs: { target: 'anyGroup', pay: 'tokens' },
     check(s, pl, play, ctx) {
-      if (!ctx || ctx.instant) return 'Play this against a Group acting in an attack.';
-      const acting = [ctx.attacker, ...ctx.aid.map((a) => a.iid), ...ctx.oppose.map((o) => o.iid)];
-      if (!play.target || !acting.includes(play.target)) return 'Choose a Group that is taking an action in this attack.';
+      if (ctx) {
+        if (ctx.instant) return 'Play this against a Group acting in an attack, or right after an action is announced.';
+        const acting = [ctx.attacker, ...ctx.aid.map((a) => a.iid), ...ctx.oppose.map((o) => o.iid)];
+        if (!play.target || !acting.includes(play.target)) return 'Choose a Group that is taking an action in this attack.';
+      } else {
+        const e = announcedAction(s);
+        if (!e) return 'Play this against a Group acting in an attack, or right after an action is announced.';
+        if (!play.target || !announcedActors(e).includes(play.target) || !cancelActorEffect(e, play.target)) return 'Choose a Group that is taking the action just announced.';
+      }
       const err = spend(s, pl, play.payWith);
       if (err) return err;
       if (!play.payWith?.length || totalPower(s, play.payWith) <= power(s, play.target)) return `Pay with Groups whose total Power is more than ${power(s, play.target)}.`;
       return null;
     },
-    apply(s, _pl, play): PlotEffect { pay(s, play.payWith); return { t: 'cancelGroup', group: play.target! }; },
+    apply(s, _pl, play, ctx): PlotEffect | void {
+      pay(s, play.payWith);
+      if (ctx) return { t: 'cancelGroup', group: play.target! };
+    },
+    resolve(s, pl, play) {
+      const e = announcedAction(s);
+      const effect = e && play.target ? cancelActorEffect(e, play.target) : undefined;
+      if (effect) respondToAction(s, pl, play.card, effect);
+    },
   },
 
   // Die rolls
-  'fnord': rollPlot((s, pl) => {
+  // Pay by discarding the top card of your Group deck (mode 'groupDeck') or two Group cards from your
+  // hand (mode 'hand': you choose which two when you hold more than two).
+  'fnord': rollPlot((s, pl, play) => {
     const p = player(s, pl);
-    const top = p.groupDeck.shift();
-    if (top) { s.cards[top].zone = 'hand'; p.hand.push(top); discardCard(s, top); }
-    else for (const g of p.hand.filter((x) => def(s, x).type === 'Group').slice(0, 2)) discardCard(s, g);
+    const inHand = p.hand.filter((x) => def(s, x).type === 'Group');
+    const fromHand = play.mode === 'hand' || (!play.mode && !p.groupDeck.length);
+    if (!fromHand) {
+      const top = p.groupDeck.shift()!;
+      s.cards[top].zone = 'hand'; p.hand.push(top); discardCard(s, top);
+    } else if (inHand.length === 2) for (const g of inHand) discardCard(s, g);
+    else {
+      askChoice(s, pl, {
+        key: 'fnord-discard', question: 'Choose two Group cards from your hand to discard.',
+        options: inHand.map((g) => ({ id: g, label: def(s, g).name })), min: 2, max: 2, source: play.card,
+      });
+    }
     const dice = roll2d6(s);
     log(s, `Re-roll: ${dice[0]} + ${dice[1]} = ${dice[0] + dice[1]}.`, pl);
     return { t: 'reroll', dice };
-  }, (s, pl, _play, ctx) => {
+  }, (s, pl, play, ctx) => {
     if (ctx.attackerPlayer !== pl) return 'You can only re-roll your own die roll.';
     const p = player(s, pl);
-    return p.groupDeck.length || p.hand.filter((x) => def(s, x).type === 'Group').length >= 2 ? null : 'You need a Group card to discard.';
-  }),
+    const handOk = p.hand.filter((x) => def(s, x).type === 'Group').length >= 2;
+    if (play.mode === 'hand') return handOk ? null : 'You need two Group cards in your hand to discard.';
+    if (play.mode === 'groupDeck') return p.groupDeck.length ? null : 'Your Group deck is empty.';
+    return p.groupDeck.length || handOk ? null : 'You need a Group card to discard.';
+  }, { mode: ['groupDeck', 'hand'] }),
   'computer-virus': rollPlot((s, _pl, play) => {
     pay(s, play.payWith);
     return { t: 'delta', value: play.mode === 'down' ? -2 : 2 };
@@ -392,17 +439,22 @@ registerPlots({
   }),
 
   // Privileged attacks
+  // Free when your Illuminati or one of your Secret Groups makes the attack; otherwise one of them
+  // spends a token (`payWith`, or the Illuminati first, then your weakest Secret Group).
   'privileged-attack': {
     timing: ['declare'],
-    check(s, pl, _play, ctx) {
+    check(s, pl, play, ctx) {
       if (!ctx || ctx.instant || ctx.attackerPlayer !== pl) return 'Play this when you declare an attack.';
-      const ill = player(s, pl).illuminati;
-      if (ctx.attacker !== ill && s.cards[ill].tokens < 1) return 'Your Illuminati must lead the attack or spend an Action token.';
-      return null;
+      if (play.payWith?.length) {
+        if (play.payWith.length !== 1 || !privilegeActor(s, pl, play.payWith[0])) return 'Only your Illuminati or one of your Secret Groups can pay for this.';
+        return s.cards[play.payWith[0]].tokens >= 1 ? null : `${def(s, play.payWith[0]).name} has no Action token to spend.`;
+      }
+      if (ctx.attacker && privilegeActor(s, pl, ctx.attacker)) return null;
+      return privilegePayer(s, pl) ? null : 'Your Illuminati or one of your Secret Groups must make the attack or spend an Action token.';
     },
-    apply(s, pl, _play, ctx): PlotEffect {
-      const ill = player(s, pl).illuminati;
-      if (ctx!.attacker !== ill) s.cards[ill].tokens--;
+    apply(s, pl, play, ctx): PlotEffect {
+      const payer = play.payWith?.[0] ?? (ctx!.attacker && privilegeActor(s, pl, ctx!.attacker) ? undefined : privilegePayer(s, pl));
+      if (payer) s.cards[payer].tokens--;
       return { t: 'privileged' };
     },
   },
@@ -443,6 +495,8 @@ registerPlots({
     apply(s, pl, play, ctx) {
       pay(s, play.payWith);
       ctx!.attackBonus.push({ player: pl, plot: play.card, amount: def(s, ctx!.target).subtype === 'Personality' ? 15 : 10, label: 'Whispering Campaign' });
+      // Stays linked to this attack so that it can keep a Personality it destroys out for good.
+      s.cards[play.card].linkedTo = `attack:${ctx!.id}`;
     },
   },
 
@@ -478,4 +532,27 @@ registerPlots({
   'don-t-forget-to-smash-the-state': nwo(),
   'chicken-in-every-pot': nwo(),
   'energy-crisis': nwo(),
+});
+
+registerChoice('fnord-discard', {
+  resolve(s, pl, picked) {
+    for (const g of picked) if (player(s, pl).hand.includes(g) && def(s, g).type === 'Group') discardCard(s, g);
+    log(s, `${player(s, pl).name} discards two Group cards to pay for Fnord!`, pl);
+  },
+  // The computer gives up its two weakest Group cards.
+  ai: (s, _pl, options) => [...options].sort((a, b) => (def(s, a.id).power ?? 0) - (def(s, b.id).power ?? 0)).slice(0, 2).map((o) => o.id),
+});
+
+registerHooks({
+  // A Personality destroyed by a Whispering Campaign leaves public life: nothing can bring it back.
+  'whispering-campaign': {
+    onAttackEnd(s, self, ctx) {
+      if (s.cards[self].linkedTo !== `attack:${ctx.id}`) return;
+      if (ctx.result === 'success' && s.cards[ctx.target].zone === 'destroyed' && def(s, ctx.target).subtype === 'Personality') {
+        s.cards[ctx.target].data = { ...s.cards[ctx.target].data, neverReturns: true };
+        log(s, `${def(s, ctx.target).name} is out of public life for good.`);
+      }
+      discardCard(s, self);
+    },
+  },
 });

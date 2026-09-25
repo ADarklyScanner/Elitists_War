@@ -225,6 +225,13 @@ describe('hands and hidden Plots', () => {
     s0.cards[ill(s0, 'p1')].tokens = 1;
     hand(s0, 'p2', 'cable-tv'); hand(s0, 'p2', 'fbi');
     s = resolved(s0, 'p1', { card: f, target: t });
+    // The player sees the two cards drawn and picks the one to discard.
+    expect(s.prompt?.choice?.key).toBe('let-s-you-and-him-fight');
+    const [pick, keep] = s.prompt!.choice!.options.map((o) => o.id);
+    expect(s.players[0].known).toEqual(expect.arrayContaining([pick, keep]));
+    s = act(s, 'p1', { type: 'choose', ids: [pick] });
+    expect(s.cards[pick].zone).toBe('discard');
+    expect(s.players[1].hand).toContain(keep);
     expect(s.players[1].hand.length).toBe(2);
   });
   it('Logic Bomb: take one of a rival\'s hidden Plots, exposed; needs a Power 6 Group', () => {
@@ -235,7 +242,9 @@ describe('hands and hidden Plots', () => {
     const weak = under(s0, 'p1', 'cable-tv');
     const big = under(s0, 'p1', 'pentagon', 'RIGHT');
     expect(() => play(s0, 'p1', { card: lb, target: t, payWith: [weak] })).toThrow(/Power 6/);
-    const s = resolved(s0, 'p1', { card: lb, target: t, payWith: [big], targets: [secret] });
+    let s = resolved(s0, 'p1', { card: lb, target: t, payWith: [big] });
+    expect(s.players[0].known).toContain(secret);
+    s = act(s, 'p1', { type: 'choose', ids: [secret] });
     expect(s.players[0].hand).toContain(secret);
     expect(s.cards[secret].exposed).toBe(true);
     expect(s.players[1].hand).not.toContain(secret);
@@ -248,8 +257,12 @@ describe('hands and hidden Plots', () => {
     const mine = hand(s0, 'p1', 'hoax');
     const mb = hand(s0, 'p1', 'mutual-betrayal');
     const g = under(s0, 'p1', 'the-mafia');
-    expect(() => play(s0, 'p1', { card: mb, target: t, payWith: [g], targets: [a, b, mine] })).toThrow(/one of your own/);
-    const s = resolved(s0, 'p1', { card: mb, target: t, payWith: [g], targets: [a, mine] });
+    let s = resolved(s0, 'p1', { card: mb, target: t, payWith: [g] });
+    // The player looks at both first, and may expose only as many as he has hidden Plots of his own.
+    expect(s.players[0].known).toEqual(expect.arrayContaining([a, b]));
+    expect(() => act(s, 'p1', { type: 'choose', ids: [a, b] })).toThrow(/between 0 and 1/);
+    s = act(s, 'p1', { type: 'choose', ids: [a] });
+    s = act(s, 'p1', { type: 'choose', ids: [mine] });
     expect([s.cards[a].exposed, s.cards[b].exposed, s.cards[mine].exposed]).toEqual([true, undefined, true]);
   });
   it('Nice Idea, It\'s Mine Now!: take a rival\'s exposed Goal on your turn', () => {
@@ -278,14 +291,15 @@ describe('hands and hidden Plots', () => {
     s0.cards[orig].killed = false;
     expect(() => play(s0, 'p1', { card: imp, payWith: [right] })).toThrow(/Assassinated/);
   });
-  it('Media Blitz: a duplicate of a destroyed Group returns, paid by a Media Group; not for Assassinated Personalities', () => {
+  it('Media Blitz: a duplicate of a destroyed Group may be played again, paid by a Media Group; not for Assassinated Personalities', () => {
     const s0 = scenario();
     const orig = destroyed(s0, 'p1', 'loan-sharks', 'p2');
     const dup = hand(s0, 'p1', 'loan-sharks');
     const mb = hand(s0, 'p1', 'media-blitz');
     const media = under(s0, 'p1', 'cable-tv');
     const s = resolved(s0, 'p1', { card: mb, payWith: [media] });
-    expect(s.cards[dup].zone).toBe('structure');
+    expect(s.cards[dup].zone).toBe('hand');
+    expect(s.cards[orig].zone).toBe('discard');
     expect(s.players[1].destroyedCredit).not.toContain(orig);
     const s1 = scenario();
     destroyed(s1, 'p1', 'ross-perot', 'p2', true);
@@ -415,5 +429,73 @@ describe('turn structure', () => {
     expect(s.cards[second].zone).toBe('structure');
     expect(s.cards[second].tokens).toBe(1);
     expect(s.phase).toBe('endOfTurn');
+  });
+});
+
+describe('audit fixes', () => {
+  it('Privatization ends a Dictatorship on the target', () => {
+    const s0 = scenario();
+    const nation = under(s0, 'p1', 'england');
+    const base = power(s0, nation);
+    s0.cards[ill(s0, 'p1')].tokens = 1;
+    const d = hand(s0, 'p1', 'dictatorship');
+    let s = resolved(s0, 'p1', { card: d, target: nation });
+    expect(power(s, nation)).toBe(base + 2);
+    const p = hand(s, 'p1', 'privatization');
+    s = resolved(s, 'p1', { card: p, target: nation, payWith: [ill(s, 'p1')] });
+    expect(s.cards[d].zone).toBe('discard');
+    expect(power(s, nation)).toBe(base);
+    expect(s.cards[nation].mods.some((m) => m.source === d)).toBe(false);
+    expect(alignments(s, nation)).toContain('Corporate');
+  });
+
+  it('Mass Murder cancels the actions of every chosen Media Group acting in the attack', () => {
+    const s0 = scenario();
+    const att = under(s0, 'p1', 'the-mafia');
+    const tgt = under(s0, 'p2', 'girlie-magazines');
+    const opp = under(s0, 'p2', 'big-media', 'RIGHT');
+    const opp2 = under(s0, 'p2', 'tabloids', 'LEFT');
+    const mm = hand(s0, 'p1', 'mass-murder');
+    s0.cards[ill(s0, 'p1')].tokens = 2;
+    let s = act(s0, 'p1', { type: 'attack', attackType: 'destroy', attacker: att, target: tgt });
+    const before = attackStrength(s, s.attack!).defense;
+    s = act(s, 'p1', { type: 'pass' });
+    s = act(s, 'p2', { type: 'oppose', group: opp });
+    s = act(s, 'p2', { type: 'oppose', group: opp2 });
+    expect(attackStrength(s, s.attack!).defense).toBeGreaterThan(before);
+    s = play(s, 'p1', { card: mm, target: opp, targets: [opp2], payWith: [ill(s, 'p1')] });
+    expect(attackStrength(s, s.attack!).defense).toBe(before);
+  });
+
+  it('Mothers\' March: nothing played after the re-roll changes the attack\'s strength', () => {
+    const s0 = scenario();
+    const att = under(s0, 'p1', 'the-mafia');
+    const t = under(s0, 'p2', 'loan-sharks');
+    const strong = under(s0, 'p2', 'fbi', 'LEFT');
+    const mm = hand(s0, 'p2', 'mother-s-march');
+    let s = act(s0, 'p1', { type: 'attack', attackType: 'destroy', attacker: att, target: t });
+    s.attack!.attackBonus.push({ player: 'p1', amount: 30, label: 'test' });
+    s = act(s, 'p1', { type: 'pass' });
+    s = act(s, 'p2', { type: 'pass' });
+    s.attack!.roll = [1, 1];
+    const before = attackStrength(s, s.attack!).strength;
+    s = play(s, 'p2', { card: mm, payWith: [strong] });
+    expect(attackStrength(s, s.attack!).strength).toBe(before - 4);
+    // A later +10 (from any card) no longer counts.
+    s.attack!.attackBonus.push({ player: 'p1', plot: 'later', amount: 10, label: 'later bonus' });
+    expect(attackStrength(s, s.attack!).strength).toBe(before - 4);
+  });
+
+  it('Logic Bomb: the player may take nothing after looking', () => {
+    const s0 = scenario();
+    const t = under(s0, 'p2', 'loan-sharks');
+    const secret = hand(s0, 'p2', 'tornado');
+    const lb = hand(s0, 'p1', 'logic-bomb');
+    const big = under(s0, 'p1', 'pentagon');
+    let s = resolved(s0, 'p1', { card: lb, target: t, payWith: [big] });
+    expect(s.prompt?.choice?.options.map((o) => o.id)).toEqual([secret, 'none']);
+    s = act(s, 'p1', { type: 'choose', ids: ['none'] });
+    expect(s.players[1].hand).toContain(secret);
+    expect(s.cards[secret].exposed).toBeFalsy();
   });
 });

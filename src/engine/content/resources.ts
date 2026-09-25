@@ -71,7 +71,7 @@ const usedInAttack = (ctx: AttackCtx, self: string, abilityIds?: string[]) =>
 function doubling(s: GameState, iid: string): number {
   const c = s.cards[iid];
   let base = def(s, iid).power ?? 0;
-  for (const m of c.mods) if (m.kind === 'setPower' && m.value !== undefined) base = Math.max(base, m.value);
+  for (const m of c.mods) if (m.kind === 'setPower' && m.value !== undefined) base = m.lower ? Math.min(base, m.value) : Math.max(base, m.value);
   const mul = Math.max(1, ...c.mods.filter((m) => m.kind === 'mulPower' && !m.defenseOnly).map((m) => m.value ?? 1));
   return mul >= 2 ? 0 : base * (2 - mul);
 }

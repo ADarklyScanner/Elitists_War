@@ -522,3 +522,41 @@ describe('Upheaval!', () => {
     expect(() => play(s, 'p1', { card })).toThrow(/Illuminati/);
   });
 });
+
+describe('Seize The Time (audit fix)', () => {
+  it('the special turn keeps the automatic takeover', () => {
+    let s = scenario();
+    const card = give(s, 'p1', 'seize-the-time', { hand: true });
+    const g = give(s, 'p1', 'loan-sharks', { hand: true });
+    s = toP2TurnStart(s);
+    s = play(s, 'p1', { card });
+    s = drain(s);
+    expect(s.players[s.active].id).toBe('p1');
+    expect(s.turnFlags.extraTurn).toBe(true);
+    expect(s.prompt?.kind).toBe('takeover');
+    expect(s.prompt?.player).toBe('p1');
+    s = act(s, 'p1', { type: 'takeover', card: g, onto: ill(s, 'p1'), side: 'BOTTOM' });
+    expect(s.cards[g].zone).toBe('structure');
+  });
+});
+
+describe('Head in a Jar (audit fix)', () => {
+  it('cannot save a Personality that is gone for good', () => {
+    const s0 = scenario();
+    const pers = give(s0, 'p1', 'nancy-reagan', { under: ill(s0, 'p1'), side: 'BOTTOM' });
+    const jar = give(s0, 'p1', 'head-in-a-jar', { hand: true });
+    const att = give(s0, 'p2', 'the-mafia', { under: ill(s0, 'p2'), side: 'BOTTOM' });
+    const media = give(s0, 'p2', 'cable-tv', { under: ill(s0, 'p2'), side: 'TOP' });
+    const wc = give(s0, 'p2', 'whispering-campaign', { hand: true });
+    s0.active = 1;
+    let s = act(s0, 'p2', { type: 'attack', attackType: 'destroy', attacker: att, target: pers, plots: [{ card: wc, payWith: [media] }] });
+    s.attack!.attackBonus.push({ player: 'p2', amount: 30, label: 'test' });
+    for (let i = 0; i < 20 && s.attack; i++) {
+      if (s.window?.kind === 'roll' && s.attack.roll) s.attack.roll = [2, 2];
+      s = act(s, waitingFor(s)[0], { type: 'pass' });
+    }
+    expect(s.cards[pers].zone).toBe('destroyed');
+    expect(s.window?.event?.type).toBe('destroyed');
+    expect(() => play(s, 'p1', { card: jar })).toThrow(/gone for good/);
+  });
+});

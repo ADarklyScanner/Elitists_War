@@ -3,18 +3,18 @@
 import type { Alignment, AttackCtx, GameState, PlotEffect, PlotPlay, Side } from '../types';
 import type { PlotHandler } from '../plotTypes';
 import { registerPlots } from '../plotTypes';
-import { hooksOf, registerHooks } from '../hooks';
+import { hooksOf, registerChoice, registerHooks } from '../hooks';
 import { OPPOSITE, cardName, def } from '../cards';
 import { abilitiesOf, attackingGroups, matches } from '../abilities';
 import { alignments, attributes, power, resistance } from '../stats';
 import { depth, openArrows, structureCards } from '../geometry';
 import { nextRandom, roll2d6 } from '../rng';
 import {
-  activePlayer, cancelledGroups, currentOutcome, discardCard, giveToken, isCancelled, isSecret, log, placeGroup,
+  activePlayer, askChoice, cancelledGroups, currentOutcome, discardCard, giveToken, isCancelled, isSecret, log, placeGroup, revealTo,
   player, playResourceCard, protectedPlayer, startInstantAttack, takeoverOptions,
   disasterTarget,
 } from '../game';
-import { exposableHand, exposeCards } from '../game';
+import { attackStrength, exposableHand, exposeCards } from '../game';
 
 // ---------------------------------------------------------------- helpers
 
@@ -64,6 +64,21 @@ function dropIfGone(s: GameState, self: string) {
   const t = s.cards[self].linkedTo;
   if (t && s.cards[t]?.zone !== 'structure' && s.cards[self].zone === 'table') discardCard(s, self);
 }
+/** Media Blitz: the destroyed original that a Group card in hand duplicates (never an Assassinated Personality). */
+const blitzOriginal = (s: GameState, dup: string) => Object.values(s.cards).find((c) => c.cardId === s.cards[dup].cardId && c.iid !== dup
+  && c.zone === 'destroyed' && !c.data?.neverReturns && !(c.killed && def(s, c.iid).subtype === 'Personality'))?.iid;
+/** Media Blitz: the Group card in hand it is used for (`target`, or the first that qualifies). */
+function blitzCard(s: GameState, pl: string, play: PlotPlay): string | undefined {
+  const ok = (i: string) => player(s, pl).hand.includes(i) && def(s, i).type === 'Group' && !!blitzOriginal(s, i);
+  if (play.target) return ok(play.target) ? play.target : undefined;
+  return player(s, pl).hand.find(ok);
+}
+
+function fightDiscard(s: GameState, pl: string, rival: string, card: string) {
+  discardCard(s, card);
+  log(s, `${player(s, rival).name} discards ${cardName(s, card)}.`, pl);
+}
+
 function moveToHand(s: GameState, card: string, to: string, exposed: boolean) {
   for (const p of s.players) p.hand = p.hand.filter((x) => x !== card);
   Object.assign(s.cards[card], { zone: 'hand', controller: undefined, linkedTo: undefined, exposed });
@@ -75,7 +90,7 @@ function moveToHand(s: GameState, card: string, to: string, exposed: boolean) {
 /** Target permanently gains an alignment (losing its opposite). Pay with an Illuminati action,
  *  or actions of [alignment] Groups whose Power totals the target's Resistance (x2 if it has the
  *  opposite alignment) plus its closeness bonus when a rival controls it. */
-function alignmentShift(add: Alignment): PlotHandler {
+function alignmentShift(add: Alignment, after?: (s: GameState, target: string) => void): PlotHandler {
   const threshold = (s: GameState, pl: string, t: string) => {
     const opp = OPPOSITE[add];
     let n = resistance(s, t) * (opp && alignments(s, t).includes(opp) ? 2 : 1);
@@ -104,7 +119,19 @@ function alignmentShift(add: Alignment): PlotHandler {
     if (!inPlay(s, play.target)) return;
     s.cards[play.target!].mods.push({ source: play.card, kind: 'addAlign', align: add, until: 'permanent' });
     s.cards[play.card].linkedTo = play.target;
+    after?.(s, play.target!);
   }
+}
+
+/** Privatization: a Group that was a Dictatorship is one no longer; the Dictatorship card and its changes go. */
+function endDictatorship(s: GameState, target: string) {
+  const dict = Object.values(s.cards).filter((c) => c.cardId === 'dictatorship' && c.zone === 'table' && c.linkedTo === target).map((c) => c.iid);
+  const t = s.cards[target];
+  const sources = new Set([...dict, ...t.mods.filter((m) => s.cards[m.source]?.cardId === 'dictatorship').map((m) => m.source)]);
+  if (!sources.size) return;
+  t.mods = t.mods.filter((m) => !sources.has(m.source));
+  for (const d of dict) discardCard(s, d);
+  log(s, `${cardName(s, target)} is no longer a Dictatorship.`);
 }
 
 /** Disaster: Instant Attack to Destroy a Place. */
@@ -130,7 +157,8 @@ function disaster(opts: { power: (s: GameState, t: string) => number; destroyMar
  * if given, facing `mode` if given), and the original stops counting as destroyed for Goals.
  */
 function duplicateReturn(kind: 'assassinated' | 'destroyed', payOk: (s: GameState, pl: string, g: string, dup: string) => boolean, payMsg: string): PlotHandler {
-  const original = (s: GameState, dup: string) => Object.values(s.cards).find((c) => c.cardId === s.cards[dup].cardId && c.iid !== dup && c.zone === 'destroyed'
+  // A Group that is gone for good (Whispering Campaign, And Stay Dead) cannot be brought back this way.
+  const original = (s: GameState, dup: string) => Object.values(s.cards).find((c) => c.cardId === s.cards[dup].cardId && c.iid !== dup && c.zone === 'destroyed' && !c.data?.neverReturns
     && (kind === 'assassinated' ? !!c.killed && def(s, c.iid).subtype === 'Personality' : !(c.killed && def(s, c.iid).subtype === 'Personality')));
   const candidates = (s: GameState, pl: string) => player(s, pl).hand.filter((i) => def(s, i).type === 'Group' && !!original(s, i)
     && !Object.values(s.cards).some((c) => c.cardId === s.cards[i].cardId && c.zone === 'structure'));
@@ -235,7 +263,7 @@ registerPlots({
 
   // ---- alignment changes (same family as Liberal Agenda etc.)
   'nationalization': alignmentShift('Government'),
-  'privatization': alignmentShift('Corporate'),
+  'privatization': alignmentShift('Corporate', endDictatorship),
   'power-corrupts': alignmentShift('Criminal'),
 
   // ---- Action tokens
@@ -279,9 +307,13 @@ registerPlots({
     apply(s, pl, play, ctx): PlotEffect | void {
       pay(s, play.payWith);
       if (!ctx) return;
+      const acting = [ctx.attacker, ...ctx.aid.map((a) => a.iid), ...ctx.oppose.map((o) => o.iid)];
+      const cancel = chosenMedia(s, pl, play).filter((g) => acting.includes(g));
       strip(s, pl, play);
-      // Cancel the just-taken action of the chosen Media Group, if it is acting in this attack.
-      if (play.target && [ctx.attacker, ...ctx.aid.map((a) => a.iid), ...ctx.oppose.map((o) => o.iid)].includes(play.target)) return { t: 'cancelGroup', group: play.target };
+      // Cancel the just-taken actions of every chosen Media Group acting in this attack. The first is this
+      // Plot's own effect; the others are recorded as parts of it, so cancelling the Plot undoes them all.
+      for (const g of cancel.slice(1)) ctx.plays.push({ iid: `${play.card}:cancel:${g}`, player: pl, play: { card: play.card }, effect: { t: 'cancelGroup', group: g }, partOf: play.card });
+      if (cancel.length) return { t: 'cancelGroup', group: cancel[0] };
     },
     resolve: (s, pl, play) => strip(s, pl, play),
   },
@@ -334,17 +366,17 @@ registerPlots({
       if (!rival) return;
       const pool = player(s, rival).hand.filter((i) => ['Group', 'Resource'].includes(def(s, i).type));
       if (!pool.length) { log(s, `${player(s, rival).name} has no Group cards in hand.`, pl); return; }
-      let lose = pool[0];
-      if (pool.length > 1) {
-        const a = pool.splice(Math.floor(nextRandom(s) * pool.length), 1)[0];
-        const b = pool[Math.floor(nextRandom(s) * pool.length)];
-        // The player picks which of the two is discarded: the more valuable card goes.
-        const worth = (i: string) => (def(s, i).power ?? 0) + (def(s, i).arrowsOut?.length ?? 0) + (def(s, i).type === 'Resource' ? 3 : 0);
-        lose = worth(b) > worth(a) ? b : a;
-        log(s, `Drawn at random: ${cardName(s, a)} and ${cardName(s, b)}.`, pl);
-      }
-      discardCard(s, lose);
-      log(s, `${player(s, rival).name} discards ${cardName(s, lose)}.`, pl);
+      if (pool.length === 1) { fightDiscard(s, pl, rival, pool[0]); return; }
+      // Two cards drawn at random; the player sees them and picks the one to discard.
+      const a = pool.splice(Math.floor(nextRandom(s) * pool.length), 1)[0];
+      const b = pool[Math.floor(nextRandom(s) * pool.length)];
+      revealTo(s, pl, [a, b], `You draw two cards at random from ${player(s, rival).name}'s hand`);
+      askChoice(s, pl, {
+        key: 'let-s-you-and-him-fight',
+        question: `Which card must ${player(s, rival).name} discard? The other goes back to their hand.`,
+        options: [a, b].map((c) => ({ id: c, label: cardName(s, c) })),
+        min: 1, max: 1, source: play.card, data: { rival },
+      });
     },
   },
   'logic-bomb': {
@@ -353,50 +385,54 @@ registerPlots({
     check(s, pl, play) {
       const rival = rivalOf(s, pl, play.target);
       if (!rival) return 'Choose a rival (one of their Groups or hidden Plots).';
-      if (play.targets?.length && (play.targets.length > 1 || !hiddenPlots(s, rival).includes(play.targets[0]))) return 'You may take one of their hidden Plots.';
       const err = spend(s, pl, play.payWith);
       if (err) return err;
       return play.payWith?.length === 1 && power(s, play.payWith[0]) >= 6 ? null : 'Pay with the action of one Group with Power 6 or more.';
     },
     apply(s, _pl, play) { pay(s, play.payWith); },
+    // The player sees the rival's hidden Plots, then may take one (which is exposed) or none.
     resolve(s, pl, play) {
       const rival = rivalOf(s, pl, play.target);
       if (!rival) return;
       const hidden = hiddenPlots(s, rival);
+      revealTo(s, pl, hidden, `The Logic Bomb shows you ${player(s, rival).name}'s hidden Plots`);
       log(s, `${player(s, pl).name} looks at ${player(s, rival).name}'s ${hidden.length} hidden Plot${hidden.length === 1 ? '' : 's'}.`, pl);
-      const take = play.targets?.[0] && hidden.includes(play.targets[0]) ? play.targets[0]
-        : def(s, play.target!).type === 'Plot' && hidden.includes(play.target!) ? play.target!
-          : hidden.length ? hidden[Math.floor(nextRandom(s) * hidden.length)] : undefined;
-      if (!take) return;
-      moveToHand(s, take, pl, true);
-      log(s, `${player(s, pl).name} takes ${cardName(s, take)} and exposes it.`, pl);
+      if (!hidden.length) return;
+      askChoice(s, pl, {
+        key: 'logic-bomb',
+        question: `Take one of ${player(s, rival).name}'s Plots? It will be exposed in your hand.`,
+        options: [...hidden.map((c) => ({ id: c, label: `Take ${cardName(s, c)}` })), { id: 'none', label: 'Take nothing' }],
+        min: 1, max: 1, source: play.card, data: { rival },
+      });
     },
   },
   'mutual-betrayal': {
     timing: ['anytime'],
     needs: { target: 'rivalGroup', pay: 'tokens' },
     check(s, pl, play) {
-      const t = play.targets ?? [];
-      const rival = rivalOf(s, pl, play.target) ?? t.map((x) => rivalOf(s, pl, x)).find(Boolean);
+      const rival = rivalOf(s, pl, play.target);
       if (!rival) return 'Choose a rival.';
       if (protectedPlayer(s, pl, rival)) return 'That player has not finished a first turn yet.';
-      const theirs = t.filter((x) => hiddenPlots(s, rival).includes(x));
-      const mine = t.filter((x) => hiddenPlots(s, pl, play.card).includes(x));
-      if (new Set(t).size !== t.length || theirs.length + mine.length !== t.length) return 'List only their hidden Plots and your own hidden Plots.';
-      if (theirs.length !== mine.length) return 'For each of their Plots you expose, expose one of your own.';
       const err = spend(s, pl, play.payWith);
       if (err) return err;
       return play.payWith?.length === 1 ? null : 'Pay with the action of one Group.';
     },
     apply(s, _pl, play) { pay(s, play.payWith); },
+    // The player sees the rival's hidden Plots first, then picks which to expose (and as many of their own).
     resolve(s, pl, play) {
-      const t = play.targets ?? [];
-      const rival = rivalOf(s, pl, play.target) ?? t.map((x) => rivalOf(s, pl, x)).find(Boolean);
-      if (rival) log(s, `${player(s, pl).name} looks at ${player(s, rival).name}'s hidden Plots.`, pl);
-      const still = t.filter((x) => s.cards[x].zone === 'hand' && !s.cards[x].exposed);
-      if (still.length !== t.length) return; // something changed hands meanwhile: expose nothing
-      const shown = exposeCards(s, t);
-      if (shown.length) log(s, `Exposed: ${shown.map((x) => cardName(s, x)).join(', ')}.`, pl);
+      const rival = rivalOf(s, pl, play.target);
+      if (!rival) return;
+      const theirs = hiddenPlots(s, rival);
+      revealTo(s, pl, theirs, `You look at ${player(s, rival).name}'s hidden Plots`);
+      log(s, `${player(s, pl).name} looks at ${player(s, rival).name}'s hidden Plots.`, pl);
+      const most = Math.min(theirs.length, hiddenPlots(s, pl, play.card).length);
+      if (!most) return;
+      askChoice(s, pl, {
+        key: 'mutual-betrayal-theirs',
+        question: `Which of ${player(s, rival).name}'s Plots do you expose? You must expose as many of your own.`,
+        options: theirs.map((c) => ({ id: c, label: cardName(s, c) })),
+        min: 0, max: most, source: play.card, data: { rival },
+      });
     },
   },
   'nice-idea-it-s-mine-now': {
@@ -418,9 +454,30 @@ registerPlots({
   'impostor': duplicateReturn('assassinated',
     (s, _pl, g, dup) => alignments(s, g).some((a) => a !== 'Fanatic' && alignments(s, dup).includes(a)),
     'Pay with the action of one of your Groups sharing an alignment with that Personality.'),
-  'media-blitz': duplicateReturn('destroyed',
-    (s, _pl, g) => hasAttr(s, g, 'Media'),
-    'Pay with the action of one of your Media Groups.'),
+  // The duplicate in hand may be played normally (a takeover attempt from hand), as if the original had
+  // never been destroyed: the original goes to the discard pile and stops counting as destroyed.
+  'media-blitz': {
+    timing: ['anytime'],
+    needs: { target: 'handGroup', pay: 'tokens' },
+    check(s, pl, play) {
+      const dup = blitzCard(s, pl, play);
+      if (!dup || !blitzOriginal(s, dup)) return 'You need a Group card in hand that duplicates a destroyed Group (not an Assassinated Personality).';
+      const err = spend(s, pl, play.payWith);
+      if (err) return err;
+      return play.payWith?.length === 1 && hasAttr(s, play.payWith[0], 'Media') ? null : 'Pay with the action of one of your Media Groups.';
+    },
+    apply(s, _pl, play) { pay(s, play.payWith); },
+    resolve(s, pl, play) {
+      const dup = blitzCard(s, pl, play);
+      const orig = dup && blitzOriginal(s, dup);
+      if (!dup || !orig) return;
+      const c = s.cards[orig];
+      Object.assign(c, { zone: 'discard', killed: false, controller: undefined, master: undefined, linkedTo: undefined, tokens: 0 });
+      player(s, c.owner).discard.push(orig);
+      for (const p of s.players) p.destroyedCredit = p.destroyedCredit.filter((x) => x !== orig);
+      log(s, `${cardName(s, dup)} may now be played as if it had never been destroyed; the original no longer counts as destroyed.`, pl);
+    },
+  },
 
   // ---- attacks
   'mistaken-identity': {
@@ -441,6 +498,9 @@ registerPlots({
     apply(s, pl, play, ctx): PlotEffect {
       pay(s, play.payWith);
       ctx!.attackBonus.push({ player: pl, plot: play.card, amount: -4, label: "Mothers' March" });
+      // No one may change the strength of the re-rolled attack: fix it now.
+      const { attack, defense } = attackStrength(s, ctx!);
+      ctx!.strengthLock = { attack, defense, by: play.card };
       const dice = roll2d6(s);
       log(s, `Re-roll at −4: ${dice[0]} + ${dice[1]} = ${dice[0] + dice[1]}.`, pl);
       return { t: 'reroll', dice };
@@ -534,10 +594,14 @@ function linkForTurn(s: GameState, play: PlotPlay) {
   s.cards[play.card].data = { turn: s.turn };
 }
 
-function strip(s: GameState, pl: string, play: PlotPlay) {
+/** Mass Murder: the Media Groups chosen (`target` and `targets`; by default every rival Media Group). */
+function chosenMedia(s: GameState, pl: string, play: PlotPlay): string[] {
   const list = play.targets ?? Object.values(s.cards).filter((c) => c.zone === 'structure' && c.controller !== pl && def(s, c.iid).type === 'Group'
     && hasAttr(s, c.iid, 'Media') && !protectedPlayer(s, pl, c.controller)).map((c) => c.iid);
-  const all = [...new Set([...(play.target ? [play.target] : []), ...list])].filter((g) => inPlay(s, g));
+  return [...new Set([...(play.target ? [play.target] : []), ...list])].filter((g) => inPlay(s, g));
+}
+function strip(s: GameState, pl: string, play: PlotPlay) {
+  const all = chosenMedia(s, pl, play);
   for (const g of all) s.cards[g].tokens = 0;
   log(s, all.length ? `Media Groups lose their Action tokens: ${all.map((g) => cardName(s, g)).join(', ')}.` : 'No Media Groups lose tokens.', pl);
 }
@@ -623,4 +687,57 @@ registerHooks({
   'nationalization': { onTurnStart: dropIfGone },
   'privatization': { onTurnStart: dropIfGone },
   'power-corrupts': { onTurnStart: dropIfGone },
+});
+
+// ---------------------------------------------------------------- choices
+
+registerChoice('let-s-you-and-him-fight', {
+  resolve(s, pl, picked, data) {
+    const rival = data.rival as string;
+    const c = picked[0];
+    if (!c || !player(s, rival).hand.includes(c)) return;
+    fightDiscard(s, pl, rival, c);
+  },
+  // The computer discards the more valuable card.
+  ai: (s, _pl, options) => {
+    const worth = (i: string) => (def(s, i).power ?? 0) + (def(s, i).arrowsOut?.length ?? 0) + (def(s, i).type === 'Resource' ? 3 : 0);
+    return [[...options].sort((a, b) => worth(b.id) - worth(a.id))[0].id];
+  },
+});
+
+registerChoice('logic-bomb', {
+  resolve(s, pl, picked, data) {
+    const rival = data.rival as string;
+    const c = picked[0];
+    if (!c || c === 'none' || !hiddenPlots(s, rival).includes(c)) { log(s, `${player(s, pl).name} takes nothing.`, pl); return; }
+    moveToHand(s, c, pl, true);
+    log(s, `${player(s, pl).name} takes ${cardName(s, c)} from ${player(s, rival).name} and exposes it.`, pl);
+  },
+});
+
+registerChoice('mutual-betrayal-theirs', {
+  resolve(s, pl, picked, data) {
+    const rival = data.rival as string;
+    const theirs = picked.filter((c) => hiddenPlots(s, rival).includes(c));
+    const source = data.source as string | undefined;
+    const mine = hiddenPlots(s, pl, source);
+    if (!theirs.length || mine.length < theirs.length) return;
+    askChoice(s, pl, {
+      key: 'mutual-betrayal-mine',
+      question: `Choose ${theirs.length} of your own Plots to expose.`,
+      options: mine.map((c) => ({ id: c, label: cardName(s, c) })),
+      min: theirs.length, max: theirs.length, source, data: { rival, theirs },
+    });
+  },
+});
+
+registerChoice('mutual-betrayal-mine', {
+  resolve(s, pl, picked, data) {
+    const rival = data.rival as string;
+    const theirs = (data.theirs as string[]).filter((c) => hiddenPlots(s, rival).includes(c));
+    const mine = picked.filter((c) => hiddenPlots(s, pl).includes(c));
+    if (theirs.length !== mine.length) return; // something changed hands meanwhile: expose nothing
+    const shown = exposeCards(s, [...theirs, ...mine]);
+    if (shown.length) log(s, `Exposed: ${shown.map((x) => cardName(s, x)).join(', ')}.`, pl);
+  },
 });

@@ -3,7 +3,7 @@
 import type { Alignment, AttackCtx, GameState, PlotEffect, PlotPlay } from '../types';
 import type { PlotHandler } from '../plotTypes';
 import { registerGoals, registerPlots } from '../plotTypes';
-import { HOOKS, registerHooks } from '../hooks';
+import { HOOKS, registerChoice, registerHooks } from '../hooks';
 import { def } from '../cards';
 import { matches } from '../abilities';
 import { alignments, attributes, power } from '../stats';
@@ -12,7 +12,7 @@ import { nwoColor } from '../nwo';
 import {
   attackCancelled, destroyGroup, discardCard, drawPlot, giveToken, goalAlignWeight, goalCount, goalNeeded, isCancelled,
   livePlayers, log, player, startInstantAttack, tokenBarred,
-  disasterTarget,
+  disasterTarget, askChoice, revealTo,
 } from '../game';
 import { exposableHand } from '../game';
 
@@ -273,13 +273,19 @@ registerPlots({
       return null;
     },
     apply(s, _pl, play) { pay(s, play.payWith); },
+    // The player sees the rival's hidden Plots, then picks the one to discard.
     resolve(s, pl, play) {
       const rival = agentRival(s, play)!;
       const cards = hidden(s, rival);
-      const pick = [play.target, play.mode].find((x): x is string => !!x && cards.includes(x)) ?? cards[0];
-      if (!pick) return;
-      log(s, `${player(s, pl).name} looks at ${player(s, rival).name}'s hidden Plots; ${def(s, pick).name} is discarded.`, pl);
-      discardCard(s, pick);
+      if (!cards.length) return;
+      revealTo(s, pl, cards, `Your agent reports ${player(s, rival).name}'s hidden Plots`);
+      log(s, `${player(s, pl).name} looks at ${player(s, rival).name}'s hidden Plots.`, pl);
+      askChoice(s, pl, {
+        key: 'agent-in-place',
+        question: `Which of ${player(s, rival).name}'s Plots must be discarded?`,
+        options: cards.map((c) => ({ id: c, label: def(s, c).name })),
+        min: 1, max: 1, source: play.card, data: { rival },
+      });
     },
   },
 
@@ -326,7 +332,8 @@ registerPlots({
     resolve(s, _pl, play) {
       const t = play.target!;
       if (!inPlay(s, t)) return;
-      s.cards[t].mods.push({ source: play.card, kind: 'power', value: 1 - power(s, t), until: 'permanent' });
+      // Set to 1 before multipliers and additions (R047), so later bonuses still count and expire normally.
+      s.cards[t].mods.push({ source: play.card, kind: 'setPower', value: 1, lower: true, until: 'permanent' });
       s.cards[play.card].linkedTo = t;
     },
   },
@@ -454,6 +461,16 @@ function agentRival(s: GameState, play: PlotPlay): string | undefined {
 function hidden(s: GameState, pl: string): string[] {
   return exposableHand(s, pl, 'Plot');
 }
+
+registerChoice('agent-in-place', {
+  resolve(s, pl, picked, data) {
+    const rival = data.rival as string;
+    const c = picked[0];
+    if (!c || !hidden(s, rival).includes(c)) return;
+    log(s, `${player(s, pl).name}'s agent makes ${player(s, rival).name} discard ${def(s, c).name}.`, pl);
+    discardCard(s, c);
+  },
+});
 
 function undo(s: GameState, play: PlotPlay) {
   const t = play.target!;
