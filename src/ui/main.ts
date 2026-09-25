@@ -36,7 +36,9 @@ interface Ui {
   autoPass: boolean;
   thinking: boolean;
   /** Guide mode: green outlines on what you can use now, red on what you can't, and the next area to go to. */
+  /** Follows `help`: outlines and next steps are on in Tutorial and Guided. */
   guide: boolean;
+  help: HelpMode;
   view?: { x: number; y: number; z: number; auto: boolean };
   sheetMin?: boolean;
   handMin?: boolean;
@@ -52,11 +54,28 @@ interface Ui {
   showRules?: string;
 }
 
-const ui: Ui = { game: null, me: 'p1', sel: { kind: 'none' }, autoPass: true, thinking: false, guide: loadGuidePref() };
+type HelpMode = 'tutorial' | 'guided' | 'off';
+const HELP_MODES: HelpMode[] = ['tutorial', 'guided', 'off'];
+const HELP_LABEL: Record<HelpMode, string> = { tutorial: 'Tutorial', guided: 'Guided', off: 'Help off' };
+const HELP_TITLE: Record<HelpMode, string> = {
+  tutorial: 'Tutorial: outlines and next steps, plus why things can\'t be done, when Plots can be played, and what happens automatically. Tap for Guided.',
+  guided: 'Guided: green/red outlines and the next step. Tap to turn help off.',
+  off: 'Help off: the plain game. Tap for Tutorial.',
+};
 
-function loadGuidePref(): boolean {
-  try { return localStorage.getItem('elitists-war.guide') !== 'off'; } catch { return true; }
+const ui: Ui = { game: null, me: 'p1', sel: { kind: 'none' }, autoPass: true, thinking: false, help: loadHelpPref(), guide: true };
+ui.guide = ui.help !== 'off';
+
+/** New players start in Tutorial; someone who had turned the old Guide on/off keeps Guided/Off. */
+function loadHelpPref(): HelpMode {
+  try {
+    const m = localStorage.getItem('elitists-war.help') as HelpMode | null;
+    if (m && HELP_MODES.includes(m)) return m;
+    const old = localStorage.getItem('elitists-war.guide');
+    return old === 'off' ? 'off' : old === 'on' ? 'guided' : 'tutorial';
+  } catch { return 'tutorial'; }
 }
+const tutorial = () => ui.help === 'tutorial';
 const app = document.getElementById('app')!;
 
 // ------------------------------------------------------------------ saved games
@@ -279,9 +298,9 @@ function render() {
   }
   const rivals = s.players.filter((p) => p.id !== ui.me);
   const me = player(s, ui.me);
-  const recent = s.log.filter((l) => !l.to || l.to === ui.me).slice(-2).reverse();
+  const recent = s.log.filter((l) => (!l.to || l.to === ui.me) && (!l.info || tutorial())).slice(-2).reverse();
   app.innerHTML = `
-  <div class="shell ${ui.guide ? 'guide' : ''}">
+  <div class="shell ${ui.guide ? 'guide' : ''} ${tutorial() ? 'tutorial' : ''}">
     <header class="hud">
       <button class="linkish" data-act="home" aria-label="Back to games">‹</button>
       <div class="players">${s.players.map((p) => playerChip(s, p.id)).join('')}</div>
@@ -289,7 +308,7 @@ function render() {
       ${phaseTracker(s)}
       <button class="hud-btn" data-rules="goal">Rules</button>
       <button class="hud-btn" data-act="log">Log</button>
-      <button class="guide-toggle ${ui.guide ? 'on' : ''}" data-act="guide" aria-pressed="${ui.guide}" title="Outline what you can do now">Guide ${ui.guide ? 'on' : 'off'}</button>
+      <button class="guide-toggle ${ui.guide ? 'on' : ''} ${ui.help}" data-act="guide" title="${esc(HELP_TITLE[ui.help])}" aria-label="Help level: ${HELP_LABEL[ui.help]} (tap to change)">${HELP_LABEL[ui.help]}</button>
     </header>
     <main class="tablearea">
       <div class="viewport" id="vp"><div class="world" id="world">
@@ -570,7 +589,7 @@ function handCard(s: GameState, iid: string): string {
     <button class="hcard ${isPlot ? 'plot' : 'group'} ${selected ? 'selected' : ''} ${targetable ? 'targetable' : ''} ${isPlot && !playable ? 'inactive' : ''} ${gcls(iid)}" data-hand="${iid}">
       <span class="kind">${isPlot ? esc(d.subtype === 'Plot' ? 'Plot' : d.subtype) : d.type === 'Resource' ? 'Resource' : esc(d.subtype)}</span>
       <span class="name">${esc(d.name)}</span>
-      ${isPlot && plotTiming(d.id, d.subtype, true) ? `<span class="timing">${esc(plotTiming(d.id, d.subtype, true))}</span>` : ''}
+      ${tutorial() && isPlot && plotTiming(d.id, d.subtype, true) ? `<span class="timing">${esc(plotTiming(d.id, d.subtype, true))}</span>` : ''}
       ${isPlot || d.type === 'Resource' ? `<span class="txt">${esc(d.modifier ?? d.text)}</span>` : `
         <span class="aligns">${(d.alignments ?? []).map(chip).join('')}</span>
         <span class="stats"><span class="pw">${d.power}${d.globalPower ? `<small>/${d.globalPower}</small>` : ''}</span><span class="rs">${d.resistance}</span></span>`}
@@ -621,7 +640,7 @@ function rulesHtml(s: GameState): string {
     <li>To oppose it must share an alignment with the target, or be the target's master or puppet, or be the target itself (the target defending itself counts double).</li>
     <li>A Group without the right alignment may still help using its <b>Global Power</b> (the second number).</li></ul>
     <p>A card in your hand that is a copy of the attacked Group is an <b>agent</b>: play it for +10 to the attack or −6 against it.</p>`)}
-  ${sec('plots', 'Plots', `<p>Plots are your secret cards. Each says when it can be played (the tag on the card). Costs on the card are paid when you play it.</p>
+  ${sec('plots', 'Plots', `<p>Plots are your secret cards. Each says when it can be played (shown in its details, and as a tag on the card in Tutorial mode). Costs on the card are paid when you play it.</p>
     <ul><li>Outside your own turn you may hold at most <b>${handLimit(s, ui.me)}</b> Plots; in your turn there is no limit.</li>
     <li><b>New World Orders</b> sit in the middle and change the rules for everyone; only one of each colour at a time.</li>
     <li>Nobody may use two copies of the same Plot in one attack.</li></ul>`)}
@@ -835,7 +854,7 @@ function renderMainConsole(s: GameState): string {
         <button class="linkish" data-act="clear">Cancel</button>
       </div>
       ${abilityButtons(s, sel.iid)}
-      ${!canControl || !canDestroy ? `<p class="why">${esc(whyNot(s, sel.iid, { control: canControl, destroy: canDestroy }) ?? '')}</p>` : ''}`;
+      ${tutorial() && (!canControl || !canDestroy) ? `<p class="why">${esc(whyNot(s, sel.iid, { control: canControl, destroy: canDestroy }) ?? '')}</p>` : ''}`;
   }
   if (sel.kind === 'attack') {
     return `<h2>Attack to ${sel.type}</h2><p>Tap a highlighted target${sel.type === 'control' ? ' — a rival Group, or a Group card in your hand' : ''}.</p>
@@ -880,7 +899,7 @@ function renderMainConsole(s: GameState): string {
     const opts = plotOptions(s, ui.me, sel.card);
     (window as unknown as { __popts: typeof opts }).__popts = opts;
     return `<h2>${esc(d.name)}</h2><p class="small">${esc(d.text)}</p>
-      ${PLOTS[d.id] ? (opts.length ? `<div class="opts">${opts.map((o, i) => `<button data-popt="${i}">${esc(o.label)}</button>`).join('')}</div>` : `<p class="why">${esc(whyNot(s, sel.card) ?? 'Not playable right now.')}</p>`) : '<p class="muted">This card is not in this version of the game yet.</p>'}
+      ${PLOTS[d.id] ? (opts.length ? `<div class="opts">${opts.map((o, i) => `<button data-popt="${i}">${esc(o.label)}</button>`).join('')}</div>` : (tutorial() ? `<p class="why">${esc(whyNot(s, sel.card) ?? 'Not playable right now.')}</p>` : '<p class="muted">Not playable right now.</p>')) : '<p class="muted">This card is not in this version of the game yet.</p>'}
       <div class="btns"><button class="linkish" data-act="clear">Close</button></div>`;
   }
   const ill = me.illuminati;
@@ -926,7 +945,7 @@ function renderInspect(s: GameState): string {
     <div class="label">${esc(d.subtype)}</div><h3>${esc(d.name)}</h3>${stats}
     <p class="small">${esc(d.text)}</p>
     ${d.type === 'Plot' ? `<p class="small"><span class="timing">${esc(plotTiming(d.id, d.subtype))}</span></p>` : ''}
-    ${whyNot(s, iid) ? `<p class="why">${esc(whyNot(s, iid)!)}</p>` : ''}
+    ${tutorial() && whyNot(s, iid) ? `<p class="why">${esc(whyNot(s, iid)!)}</p>` : ''}
     ${pending.length ? `<p class="small warn">Not active yet in this version: ${esc(pending.join('; '))}.</p>` : ''}
     ${d.type === 'Plot' && !PLOTS[d.id] ? '<p class="small warn">This Plot is not in this version yet.</p>' : ''}
     ${d.subtype === 'NWO' && NWO_EFFECTS[d.id] ? '<p class="small muted">In effect for everyone while on the table.</p>' : ''}
@@ -935,7 +954,7 @@ function renderInspect(s: GameState): string {
 
 function renderLog(s: GameState): string {
   // Private lines (what a player saw with a card) are shown only to that player.
-  const lines = s.log.filter((l) => !l.to || l.to === ui.me).slice(-120).reverse();
+  const lines = s.log.filter((l) => (!l.to || l.to === ui.me) && (!l.info || tutorial())).slice(-120).reverse();
   // The human player is called "You", so fix the verb: "You leads" -> "You lead".
   const you = (t: string) => t.replace(/(^|\s)You (has|\w+?)s\b/g, (_m, pre, v) => `${pre}You ${v === 'has' ? 'have' : v}`);
   return `<div class="panel log"><div class="label">Log</div><ol>${lines.map((l) => `<li class="${l.player === ui.me ? 'me' : l.player ? 'them' : ''} ${l.text.startsWith('—') ? 'turnline' : ''}">${esc(you(l.text))}</li>`).join('')}</ol></div>`;
@@ -1111,8 +1130,9 @@ function bind() {
       case 'log': ui.showLog = !ui.showLog; render(); break;
       case 'closeInspect': ui.inspect = undefined; render(); break;
       case 'guide':
-        ui.guide = !ui.guide;
-        try { localStorage.setItem('elitists-war.guide', ui.guide ? 'on' : 'off'); } catch { /* storage unavailable */ }
+        ui.help = HELP_MODES[(HELP_MODES.indexOf(ui.help) + 1) % HELP_MODES.length];
+        ui.guide = ui.help !== 'off';
+        try { localStorage.setItem('elitists-war.help', ui.help); } catch { /* storage unavailable */ }
         render(); break;
       case 'clearSlot': ui.slotChoice = undefined; render(); break;
       case 'skipTakeover': act({ type: 'skipTakeover' }); break;
