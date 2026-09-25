@@ -55,7 +55,7 @@ registerHooks({
     // Each Magic Resource (a "Magic Artifact") in play counts as one more controlled Group.
     goalBonus: (s, self) => {
       const pl = controllerOf2(s, self);
-      return pl ? resourcesOf(s, pl).filter((r) => isMagicResource(s, r)).length : 0;
+      return pl ? resourcesOf(s, pl).filter((r) => !s.cards[r].hiddenUnder && isMagicResource(s, r)).length : 0;
     },
   },
 

@@ -4,7 +4,7 @@
 // (database) and call these functions from its API routes and a periodic timer.
 import {
   type Action, type GameState, type GameSettings, applyAction, createGame, hasResponse, player, waitingFor, randomDeck,
-  RuleError, def,
+  RuleError, def, canExpose,
 } from '../engine';
 import { chooseAction } from '../ai/ai';
 
@@ -253,8 +253,10 @@ async function notifyStart(rec: GameRecord, actor: string, notifier?: Notifier) 
 // ------------------------------------------------------------------ what each player may see
 
 /**
- * The game as `viewer` is allowed to see it: rivals' hidden hand cards and every deck become
- * anonymous backs, and the random seed is removed so dice cannot be predicted.
+ * The game as `viewer` is allowed to see it: rivals' hidden hand cards, Plots hidden beneath a card
+ * (Texas, Fidel Castro), Resources face down under Warehouse 23, and every deck become anonymous
+ * backs; secret notes (a card named in secret) are masked; and the random seed is removed so dice
+ * cannot be predicted.
  */
 export function viewFor(s: GameState, viewer: string): GameState {
   const v: GameState = structuredClone(s);
@@ -267,7 +269,8 @@ export function viewFor(s: GameState, viewer: string): GameState {
   const known = new Set(s.players.find((p) => p.id === viewer)?.known ?? []);
   for (const p of v.players) {
     for (const iid of [...p.plotDeck, ...p.groupDeck]) if (!known.has(iid)) hide(iid);
-    if (p.id !== viewer) for (const iid of p.hand) if (!v.cards[iid].exposed && !known.has(iid)) hide(iid);
+    // A Plot hidden beneath a card is never shown to rivals, even if it was exposed or seen before.
+    if (p.id !== viewer) for (const iid of p.hand) if ((!v.cards[iid].exposed && !known.has(iid)) || !canExpose(s, iid)) hide(iid);
     if (p.id !== viewer) p.known = [];
   }
   // Private log lines (what a player saw with a card) go only to that player.
@@ -278,8 +281,14 @@ export function viewFor(s: GameState, viewer: string): GameState {
   };
   hideChoice(v.prompt);
   for (const q of v.promptQueue ?? []) hideChoice(q);
-  // A Goal or note written under a card stays secret.
-  for (const c of Object.values(v.cards)) if (c.note && c.controller !== viewer) c.note = '(secret)';
+  // Resources face down under Warehouse 23: rivals see only a card back where it lies.
+  for (const c of Object.values(s.cards)) {
+    if (c.zone !== 'resources' || !c.hiddenUnder || c.controller === viewer) continue;
+    v.cards[c.iid] = { iid: c.iid, cardId: 'hidden-resource', owner: c.owner, zone: c.zone, controller: c.controller, linkedTo: c.linkedTo, hiddenUnder: c.hiddenUnder, tokens: 0, mods: [] };
+  }
+  // A Goal or note written under a card (a card named in secret) stays secret, even once the card has
+  // left play: only its controller (or, out of play, its owner) sees it.
+  for (const c of Object.values(v.cards)) if (c.note && (c.controller ?? c.owner) !== viewer) c.note = '(secret)';
   if (v.setup) for (const k of Object.keys(v.setup.picks)) if (k !== viewer && v.setup.picks[k]) v.setup.picks[k] = 'chosen';
   return v;
 }

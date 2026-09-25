@@ -9,6 +9,8 @@ import {
   attackCancelled, cancelledGroups, canEnterPlay, controllerOf2, currentOutcome, destroyGroup, discardCard,
   drawGroup, drawPlot, livePlayers, log, placeGroup, player, playResourceCard, protectedPlayer,
 } from '../game';
+import { disasterTarget, exposableHand, exposeCards } from '../game';
+import { magicByCard } from '../hooks';
 
 registerAbilities({
   'a-m-a': [
@@ -268,12 +270,11 @@ registerHooks({
         const r = rivalFor(s, pl, p);
         const err = rivalError(s, pl, r);
         if (err) return err;
-        return player(s, r!).hand.some((c) => def(s, c).type === 'Plot' && !s.cards[c].exposed) ? null : 'That rival has no hidden Plots.';
+        return exposableHand(s, r!, 'Plot').length ? null : 'That rival has no hidden Plots.';
       },
       apply(s, pl, _self, p) {
         const r = player(s, rivalFor(s, pl, p)!);
-        const plots = r.hand.filter((c) => def(s, c).type === 'Plot' && !s.cards[c].exposed);
-        for (const c of plots) s.cards[c].exposed = true;
+        const plots = exposeCards(s, exposableHand(s, r.id, 'Plot'));
         log(s, `${r.name} must expose ${plots.length} Plot${plots.length === 1 ? '' : 's'}: ${plots.map((c) => cardName(s, c)).join(', ')}.`, pl);
       },
     }],
@@ -380,7 +381,7 @@ registerHooks({
 
   'druids': {
     mayJoin: (s, self, ctx, group) =>
-      group === self && (is(s, ctx.attacker, { attributes: ['Magic'] }) || is(s, ctx.target, { attributes: ['Magic'] })),
+      group === self && (is(s, ctx.attacker, { attributes: ['Magic'] }) || is(s, ctx.target, { attributes: ['Magic'] }) || magicByCard(s, ctx)),
     // They may help in attacks by or against Magic Groups even when those are Secret (not lead an attack on one).
     secretOverride: (s, self, group, secret) => !!s.attack && group === self && is(s, secret, { attributes: ['Magic'] }),
     attackMod(s, self, ctx, side) {
@@ -632,7 +633,7 @@ registerHooks({
 
   'international-weather-organization': {
     attackMod(s, self, ctx, side) {
-      if (!ctx.disaster || def(s, ctx.target).subtype !== 'Place') return 0;
+      if (!ctx.disaster || !disasterTarget(s, ctx.target)) return 0;
       const pl = ctl(s, self);
       if (side === 'defense' && ctx.targetPlayer === pl) return 6;
       if (side === 'attack' && ctx.attackerPlayer === pl && ctx.targetPlayer && ctx.targetPlayer !== pl && !isSpaceDisaster(s, ctx.instantCard)) return 4;

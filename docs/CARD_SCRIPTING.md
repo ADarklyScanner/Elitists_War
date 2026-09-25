@@ -60,6 +60,23 @@ The `onEvent` hook runs at once for every event.
 
 **Private information.** `revealTo(s, player, cards, why)` lets one player see cards, such as a rival's hand.
 Those cards stay visible to that player in their online view, and the log line goes only to them.
+- Never set `exposed = true` directly: call `exposeCards(s, cards)`, which skips Plots that cannot be exposed
+  (`preventExpose`: a Plot hidden beneath Texas or Fidel Castro) and returns the cards it did expose. Log
+  only those names. `exposableHand(s, player, 'Plot')` lists the hidden cards other cards may expose,
+  look at or take; `canExpose(s, iid)` checks one card.
+- An activated ability with `secret: true` (naming a card in secret, like the Holy Grail) logs its target
+  only to its user. A target that is still hidden in a hand or deck is never named publicly either.
+- A Resource with `hiddenUnder` set is face down under that card (Warehouse 23): its hooks and abilities
+  are off, rivals' cards cannot target it, and rivals' online view shows a card back.
+- `viewFor` masks `note` for everyone except the card's controller (its owner once it is out of play).
+
+**Magic attacks.** A card's `magicAttack(s, self, ctx)` hook makes the whole attack Magic (the Spear of
+Longinus, even for a Disaster with no attacking Group). Code that asks "is this attack Magic?" should
+also check `magicByCard(s, ctx)`.
+
+**Resources as Disaster targets.** `disasterTargetPower: n` lets Disasters strike a Resource in play,
+which defends as a Place of Power `n` and is never Devastated (Hidden City). Disaster Plots validate
+their target with `disasterTarget(s, iid)`.
 
 **Attacks started by cards.**
 - `startCardAttack(s, player, {plot, target, power, disaster?, aidRule?})` is an attack that has no attacking Group; its strength is `power`.

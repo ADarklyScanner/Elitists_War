@@ -12,6 +12,7 @@ import {
   activePlayer, attackCancelled, attackStrength, canEnterPlay, controllerOf2, currentOutcome, destroyGroup,
   discardCard, drawGroup, finalRoll, isPrivileged, livePlayers, log, player, playResourceCard, protectedPlayer,
   startInstantAttack, tokenBarred,
+  disasterTarget,
 } from '../game';
 
 // ---------------------------------------------------------------- helpers (copied from plots.ts)
@@ -97,7 +98,7 @@ function disaster(opts: { power: number; destroyMargin: number; hugeAllowed: boo
     timing: ['instant'],
     needs: { target: 'place' },
     check(s, _pl, play) {
-      if (!inPlay(s, play.target) || def(s, play.target!).subtype !== 'Place') return 'Choose a Place in play.';
+      if (!disasterTarget(s, play.target)) return 'Choose a Place in play.';
       if (!opts.hugeAllowed && (def(s, play.target!).attributes ?? []).includes('Huge')) return 'This Disaster cannot strike a Huge Place.';
       return null;
     },

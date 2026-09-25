@@ -27,6 +27,11 @@ export interface ActivatedAbility {
   check: (s: GameState, pl: string, self: string, p: AbilityParams, ctx?: AttackCtx) => string | null;
   /** Do it. During an attack, return a live effect or push onto ctx.attackBonus / ctx.defenseBonus. */
   apply: (s: GameState, pl: string, self: string, p: AbilityParams, ctx?: AttackCtx) => PlotEffect | void;
+  /**
+   * The choice is secret (the Holy Grail naming a Place): the log line naming the target goes only to
+   * the player using it; everyone else only sees that the ability was used.
+   */
+  secret?: boolean;
   /** Hint for the computer player. */
   ai?: 'boostAttack' | 'boostDefense' | 'cancelAttacker' | 'draw' | 'never';
 }
@@ -113,6 +118,13 @@ export interface CardHooks {
   beforeAttackResult?: (s: GameState, self: string, ctx: AttackCtx) => boolean | void;
   /** A Unique Resource that another copy may replace once this one is destroyed (Hidden City). */
   replaceableWhenDestroyed?: boolean;
+  /**
+   * Static: Disasters may strike this Resource while it is in play. It defends as a Place with this
+   * Power and is never Devastated (Hidden City).
+   */
+  disasterTargetPower?: number;
+  /** This card makes the attack in progress Magic, so defenses against Magic apply (Spear of Longinus). */
+  magicAttack?: (s: GameState, self: string, ctx: AttackCtx) => boolean;
 
   // ---- triggers
   onTurnStart?: (s: GameState, self: string) => void;
@@ -147,7 +159,7 @@ export function activeHookCards(s: GameState): string[] {
   const out: string[] = [];
   const table: string[] = [];
   for (const c of Object.values(s.cards)) {
-    if (!HOOKS[c.cardId]) continue;
+    if (!HOOKS[c.cardId] || c.hiddenUnder) continue; // face down under Warehouse 23: inactive
     if (c.zone === 'table' && c.linkedTo) table.push(c.iid);
     else if (c.zone === 'structure' || c.zone === 'resources') out.push(c.iid);
   }
@@ -180,6 +192,11 @@ export function sumHooks(s: GameState, fn: (h: CardHooks, self: string) => numbe
 export function anyHook(s: GameState, fn: (h: CardHooks, self: string) => boolean | undefined): boolean {
   for (const self of activeHookCards(s)) if (fn(HOOKS[s.cards[self].cardId], self)) return true;
   return false;
+}
+
+/** Does a card in play make this attack Magic (as well as any Magic Group taking part)? */
+export function magicByCard(s: GameState, ctx: AttackCtx | undefined): boolean {
+  return !!ctx && anyHook(s, (h, self) => !!h.magicAttack?.(s, self, ctx));
 }
 
 export function fireHooks(s: GameState, fn: (h: CardHooks, self: string) => void) {

@@ -240,6 +240,37 @@ export function revealTo(s: GameState, playerId: string, cards: string[], why: s
   s.log.push({ turn: s.turn, player: playerId, to: playerId, text: `${why}: ${cards.map((c) => cardName(s, c)).join(', ') || 'nothing'}.` });
 }
 
+/**
+ * May this card in a hand be exposed? Not a Plot hidden beneath a card (Texas, Fidel Castro): it is
+ * not really in the hand, so no card can expose it or let anyone look at it.
+ */
+export function canExpose(s: GameState, iid: string): boolean {
+  return !anyHook(s, (h, self) => !!h.preventExpose?.(s, self, iid));
+}
+
+/**
+ * Expose cards in a hand. Cards that cannot be exposed stay hidden. Returns the cards that are now
+ * exposed, so log lines only ever name those.
+ */
+export function exposeCards(s: GameState, cards: string[]): string[] {
+  const shown = cards.filter((c) => s.cards[c] && canExpose(s, c));
+  for (const c of shown) s.cards[c].exposed = true;
+  return shown;
+}
+
+/** A player's hidden hand cards of one kind that could be exposed (or looked at) by another card. */
+export function exposableHand(s: GameState, playerId: string, kind?: 'Plot' | 'Group'): string[] {
+  return player(s, playerId).hand.filter((c) => (!kind || def(s, c).type === kind) && !s.cards[c].exposed && canExpose(s, c));
+}
+
+/** Can a Disaster strike this card: a Place in a Power Structure, or a Resource that allows it (Hidden City)? */
+export function disasterTarget(s: GameState, iid: string | undefined): boolean {
+  const c = iid ? s.cards[iid] : undefined;
+  if (!c) return false;
+  if (c.zone === 'structure') return def(s, c.iid).subtype === 'Place';
+  return c.zone === 'resources' && !!c.controller && !c.hiddenUnder && HOOKS[c.cardId]?.disasterTargetPower !== undefined;
+}
+
 function removeFromHand(s: GameState, iid: string) {
   for (const p of s.players) p.hand = p.hand.filter((x) => x !== iid);
 }
@@ -256,6 +287,7 @@ function forbiddenUse(s: GameState, playerId: string, card: string, target: stri
     if (why) return why;
   }
   if (target && resourceProtected(s, target) && s.cards[target].controller !== playerId) return `${cardName(s, target)} is protected and cannot be affected.`;
+  if (target && s.cards[target]?.hiddenUnder && s.cards[target].controller !== playerId) return 'That Resource is face down under Warehouse 23: only its controller can reach it.';
   return null;
 }
 
@@ -443,12 +475,36 @@ export function controllerOf2(s: GameState, iid: string): string | undefined {
   return c.zone === 'structure' || c.zone === 'resources' || c.zone === 'table' ? c.controller : undefined;
 }
 
-/** Put a Resource into play beside its owner's Power Structure, linked to his Illuminati. */
-export function playResourceCard(s: GameState, iid: string, controller: string) {
+/**
+ * Put a Resource into play beside its owner's Power Structure, linked to his Illuminati. With
+ * `hiddenUnder` it goes face down under that card (Warehouse 23): only its controller learns which
+ * card it is, and it does nothing until turned face up.
+ */
+export function playResourceCard(s: GameState, iid: string, controller: string, opts: { hiddenUnder?: string } = {}) {
   removeFromHand(s, iid);
-  Object.assign(s.cards[iid], { zone: 'resources', controller, linkedTo: player(s, controller).illuminati, tokens: 0 });
+  Object.assign(s.cards[iid], { zone: 'resources', controller, linkedTo: player(s, controller).illuminati, tokens: 0, hiddenUnder: opts.hiddenUnder });
+  if (opts.hiddenUnder) {
+    log(s, `${player(s, controller).name} hides a Resource face down under ${cardName(s, opts.hiddenUnder)}.`, controller);
+    s.log.push({ turn: s.turn, player: controller, to: controller, text: `The hidden Resource is ${cardName(s, iid)}.` });
+    return;
+  }
   log(s, `${player(s, controller).name} brings ${cardName(s, iid)} into play.`, controller);
   hooksOf(s, iid)?.onEnterPlay?.(s, iid);
+}
+
+/** Face-down Resources follow the card hiding them: its new controller, or its fate if it leaves play. */
+function syncHiddenResources(s: GameState) {
+  for (const c of Object.values(s.cards)) {
+    if (!c.hiddenUnder || c.zone !== 'resources') { if (c.hiddenUnder) c.hiddenUnder = undefined; continue; }
+    const box = s.cards[c.hiddenUnder];
+    if (box?.zone === 'resources' && box.controller) {
+      if (c.controller !== box.controller) Object.assign(c, { controller: box.controller, linkedTo: player(s, box.controller).illuminati });
+      continue;
+    }
+    c.hiddenUnder = undefined;
+    if (box?.zone === 'destroyed') Object.assign(c, { zone: 'destroyed', controller: undefined, linkedTo: undefined, tokens: 0 });
+    else discardCard(s, c.iid);
+  }
 }
 
 function endTurnCleanup(s: GameState) {
@@ -980,8 +1036,9 @@ function finishAttack(s: GameState) {
       for (const pp of ctx.plays) {
         const card = s.cards[pp.iid];
         if (!card || pp.player === ctx.attackerPlayer || card.zone !== 'table' || pp.effect.t === 'cancelGroup' || card.linkedTo) continue;
-        card.zone = 'hand'; card.controller = undefined; card.exposed = true;
+        card.zone = 'hand'; card.controller = undefined;
         player(s, card.owner).hand.push(pp.iid);
+        exposeCards(s, [pp.iid]);
       }
     }
     // A cancelled Disaster gives back the token it took from its target (R036).
@@ -989,7 +1046,16 @@ function finishAttack(s: GameState) {
   }
   else if (ctx.result === 'success') {
     const margin = attackStrength(s, ctx).strength - finalRoll(ctx);
-    if (ctx.disaster) {
+    if (ctx.disaster && s.cards[tgt].zone === 'resources') {
+      // A Resource struck like a Place (Hidden City) is never Devastated: only a big enough margin destroys it.
+      if (ctx.disaster.destroyMargin !== null && margin >= ctx.disaster.destroyMargin && !ctx.disaster.devastateOnly
+        && !anyHook(s, (h, self) => !!h.preventDestroy?.(s, self, tgt, ctx))) {
+        log(s, `${cardName(s, tgt)} is destroyed!`);
+        const owner = s.cards[tgt].controller;
+        Object.assign(s.cards[tgt], { zone: 'destroyed', controller: undefined, linkedTo: undefined, tokens: 0, mods: [] });
+        raiseEvent(s, { type: 'destroyed', card: tgt, by: ctx.attackerPlayer, player: owner });
+      } else log(s, `${cardName(s, tgt)} cannot be Devastated and survives.`);
+    } else if (ctx.disaster) {
       if (ctx.disaster.destroyMargin !== null && margin >= ctx.disaster.destroyMargin && !ctx.disaster.devastateOnly) {
         log(s, `${cardName(s, tgt)} is destroyed!`);
         destroyGroup(s, tgt, ctx.attackerPlayer);
@@ -1357,6 +1423,7 @@ export function applyAction(state: GameState, playerId: string, action: Action):
       if (s.phase !== 'main' || activePlayer(s).id !== playerId || s.window || s.attack) throw new RuleError('Only in your own main phase.');
       const r = inst(s, action.resource);
       if (r.zone !== 'resources' || r.controller !== playerId) throw new RuleError('Choose one of your Resources.');
+      if (r.hiddenUnder) throw new RuleError(`${cardName(s, action.resource)} is face down under ${cardName(s, r.hiddenUnder)}: turn it face up first.`);
       const to = inst(s, action.to);
       if (to.zone !== 'structure' || to.controller !== playerId) throw new RuleError('Link it to a Group in your Power Structure.');
       if (s.turnFlags.restricted) throw new RuleError('This turn you may only draw cards and place Action tokens.');
@@ -1602,7 +1669,8 @@ export function applyAction(state: GameState, playerId: string, action: Action):
   enforceHandLimits(s);
   advance(s);
   // Plots that cannot be exposed (hidden beneath a card) are never left face up.
-  for (const c of Object.values(s.cards)) if (c.exposed && c.zone === 'hand' && anyHook(s, (h, self) => !!h.preventExpose?.(s, self, c.iid))) c.exposed = false;
+  for (const c of Object.values(s.cards)) if (c.exposed && c.zone === 'hand' && !canExpose(s, c.iid)) c.exposed = false;
+  syncHiddenResources(s);
   s.version++;
   return s;
 }
@@ -1619,6 +1687,7 @@ export function checkAbility(s: GameState, playerId: string, card: string, abili
   if (activePlayer(s).id === playerId && s.turnFlags.restricted) return 'This turn you may only draw cards and place Action tokens.';
   const c = s.cards[card];
   if (!c || (c.zone !== 'structure' && c.zone !== 'resources') || c.controller !== playerId) return 'You can only use your own cards in play.';
+  if (c.hiddenUnder) return `${cardName(s, card)} is face down under ${cardName(s, c.hiddenUnder)}: turn it face up before using it.`;
   const ab = HOOKS[c.cardId]?.actions?.find((a) => a.id === abilityId);
   if (!ab) return 'That card has no such ability.';
   if (abilitiesDisabled(s, card)) return `${cardName(s, card)} cannot use its special abilities right now.`;
@@ -1646,7 +1715,15 @@ function useAbility(s: GameState, playerId: string, card: string, abilityId: str
   const ab = HOOKS[c.cardId]!.actions!.find((a) => a.id === abilityId)!;
   if (ab.usesToken) c.tokens--;
   c.abilityTurns = { ...c.abilityTurns, [abilityId]: s.turn };
-  log(s, `${cardName(s, card)}: ${ab.label}${params.target && s.cards[params.target] ? ` (${cardName(s, params.target)})` : ''}.`, playerId);
+  const named = params.target && s.cards[params.target] ? ` (${cardName(s, params.target)})` : '';
+  // A card still hidden in a hand or deck is never named publicly either.
+  const t = params.target ? s.cards[params.target] : undefined;
+  const hiddenTarget = !!t && (t.zone === 'hand' || t.zone === 'plotDeck' || t.zone === 'groupDeck') && !t.exposed;
+  if (ab.secret || hiddenTarget) {
+    // A secret choice: rivals only learn that the ability was used, not what it named.
+    log(s, `${cardName(s, card)}: ${ab.label}.`, playerId);
+    if (named) s.log.push({ turn: s.turn, player: playerId, to: playerId, text: `You chose ${cardName(s, params.target!)} for ${cardName(s, card)}.` });
+  } else log(s, `${cardName(s, card)}: ${ab.label}${named}.`, playerId);
   const effect = ab.apply(s, playerId, card, params, s.attack);
   if (s.attack) {
     // Recorded like a Plot so that it can be cancelled and undone live.
@@ -1704,7 +1781,7 @@ export function startCardAttack(s: GameState, playerId: string, opts: {
   const ctx: AttackCtx = {
     id: ++s.attackCounter, type: 'destroy', instant: false, instantCard: opts.plot, cardPower: opts.power,
     disaster: opts.disaster, attackerPlayer: playerId, aidRule: opts.aidRule,
-    target: opts.target, targetPlayer: controllerOf(s, opts.target), fromHand: false, privileged: false,
+    target: opts.target, targetPlayer: controllerOf(s, opts.target) ?? controllerOf2(s, opts.target), fromHand: false, privileged: false,
     aid: [], oppose: [], attackBonus: [], defenseBonus: [], plays: [],
   };
   if (opts.disaster && s.cards[opts.target].tokens > 0) { s.cards[opts.target].tokens--; ctx.tokenTaken = true; }
@@ -1719,7 +1796,7 @@ export function startInstantAttack(s: GameState, playerId: string, opts: {
   const ctx: AttackCtx = {
     id: ++s.attackCounter, type: 'destroy', instant: true, instantCard: opts.plot, instantPower: opts.power,
     disaster: opts.disaster, assassination: opts.assassination, attackerPlayer: playerId,
-    target: opts.target, targetPlayer: controllerOf(s, opts.target), fromHand: false, privileged: false,
+    target: opts.target, targetPlayer: controllerOf(s, opts.target) ?? controllerOf2(s, opts.target), fromHand: false, privileged: false,
     aid: [], oppose: [], attackBonus: [], defenseBonus: [], plays: [],
   };
   if (opts.helper) {

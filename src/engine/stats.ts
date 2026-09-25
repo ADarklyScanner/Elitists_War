@@ -84,7 +84,8 @@ export function power(s: GameState, iid: string, opts: ValueOpts = {}): number {
   }
   if (d.type === 'Group') for (const nwo of activeNwos(s)) adds.push(NWO_EFFECTS[s.cards[nwo].cardId]?.power?.(s, iid) ?? 0);
   adds.push(sumHooks(s, (h, self) => h.powerMod?.(s, self, iid)));
-  const v = combine(d.power ?? 0, activeMods(s, iid, opts), { set: 'setPower', mul: 'mulPower', add: 'power' }, { adds }, opts);
+  // A Resource that defends as a Place (Hidden City) uses that Power.
+  const v = combine(d.power ?? HOOKS[d.id]?.disasterTargetPower ?? 0, activeMods(s, iid, opts), { set: 'setPower', mul: 'mulPower', add: 'power' }, { adds }, opts);
   return Math.max(0, v);
 }
 

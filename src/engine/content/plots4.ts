@@ -12,7 +12,9 @@ import { nextRandom, roll2d6 } from '../rng';
 import {
   activePlayer, cancelledGroups, currentOutcome, discardCard, giveToken, isCancelled, isSecret, log, placeGroup,
   player, playResourceCard, protectedPlayer, startInstantAttack, takeoverOptions,
+  disasterTarget,
 } from '../game';
+import { exposableHand, exposeCards } from '../game';
 
 // ---------------------------------------------------------------- helpers
 
@@ -46,8 +48,8 @@ function rivalOf(s: GameState, pl: string, iid?: string): string | undefined {
   const who = c.zone === 'hand' ? s.players.find((p) => p.hand.includes(iid))?.id : c.controller;
   return who && who !== pl && !player(s, who).eliminated ? who : undefined;
 }
-const hiddenPlots = (s: GameState, pl: string, except?: string) =>
-  player(s, pl).hand.filter((i) => i !== except && def(s, i).type === 'Plot' && !s.cards[i].exposed);
+/** Hidden Plots that other cards can reach (not one hidden beneath Texas or Fidel Castro). */
+const hiddenPlots = (s: GameState, pl: string, except?: string) => exposableHand(s, pl, 'Plot').filter((i) => i !== except);
 
 /** A linked Plot's target, unless the Plot was cancelled in the attack under way. */
 function liveLink(s: GameState, self: string): string | undefined {
@@ -111,7 +113,7 @@ function disaster(opts: { power: (s: GameState, t: string) => number; destroyMar
     timing: ['instant'],
     needs: { target: 'place' },
     check(s, _pl, play) {
-      if (!inPlay(s, play.target) || def(s, play.target!).subtype !== 'Place') return 'Choose a Place in play.';
+      if (!disasterTarget(s, play.target)) return 'Choose a Place in play.';
       if (!opts.hugeAllowed && hasAttr(s, play.target!, 'Huge')) return 'This Disaster cannot strike a Huge Place.';
       return null;
     },
@@ -393,8 +395,8 @@ registerPlots({
       if (rival) log(s, `${player(s, pl).name} looks at ${player(s, rival).name}'s hidden Plots.`, pl);
       const still = t.filter((x) => s.cards[x].zone === 'hand' && !s.cards[x].exposed);
       if (still.length !== t.length) return; // something changed hands meanwhile: expose nothing
-      for (const x of t) s.cards[x].exposed = true;
-      if (t.length) log(s, `Exposed: ${t.map((x) => cardName(s, x)).join(', ')}.`, pl);
+      const shown = exposeCards(s, t);
+      if (shown.length) log(s, `Exposed: ${shown.map((x) => cardName(s, x)).join(', ')}.`, pl);
     },
   },
   'nice-idea-it-s-mine-now': {
@@ -466,7 +468,7 @@ registerPlots({
         return null;
       }
       if (ctx) return 'The Disaster is an Instant Attack: play it when no attack is under way.';
-      if (!inPlay(s, play.target) || def(s, play.target!).subtype !== 'Place') return 'Choose a Place in play.';
+      if (!disasterTarget(s, play.target)) return 'Choose a Place in play.';
       if (hasAttr(s, play.target!, 'Huge')) return 'Plague of Demons cannot strike a Huge Place.';
       const err = spend(s, pl, play.payWith);
       if (err) return err;

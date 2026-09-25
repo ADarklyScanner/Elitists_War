@@ -9,6 +9,7 @@ export const ALL_CARDS: CardDef[] = rawCards as CardDef[];
 
 // Face-down cards in an online player's view of a rival's hand or a deck.
 CARDS['hidden-plot'] = { id: 'hidden-plot', name: 'Plot card', type: 'Plot', subtype: 'Hidden', rarity: null, text: 'A face-down Plot card.' };
+CARDS['hidden-resource'] = { id: 'hidden-resource', name: 'Resource card', type: 'Resource', subtype: 'Hidden', rarity: null, text: 'A face-down Resource card.' };
 CARDS['hidden-group'] = { id: 'hidden-group', name: 'Group card', type: 'Group', subtype: 'Hidden', rarity: null, text: 'A face-down card.' };
 
 export const OPPOSITE: Partial<Record<Alignment, Alignment>> = {

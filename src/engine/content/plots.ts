@@ -11,6 +11,7 @@ import { roll2d6 } from '../rng';
 import { nwoColor } from '../nwo';
 import {
   currentOutcome, discardCard, drawPlot, giveToken, isPrivileged, log, player, startInstantAttack,
+  disasterTarget,
 } from '../game';
 
 // ---------------------------------------------------------------- helpers
@@ -170,7 +171,7 @@ function disaster(opts: { power: (s: GameState, t: string) => number; destroyMar
     timing: ['instant'],
     needs: { target: 'place' },
     check(s, _pl, play) {
-      if (!inPlay(s, play.target) || def(s, play.target!).subtype !== 'Place') return 'Choose a Place in play.';
+      if (!disasterTarget(s, play.target)) return 'Choose a Place in play.';
       if (!opts.hugeAllowed && (def(s, play.target!).attributes ?? []).includes('Huge')) return 'This Disaster cannot strike a Huge Place.';
       return null;
     },
