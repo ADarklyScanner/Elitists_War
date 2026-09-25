@@ -501,7 +501,7 @@ describe('R026 / R029 tokens, aiding and opposing', () => {
     const s = act(s0, 'p1', { type: 'buyPlot', payWith: [s0.players[0].illuminati] });
     expect(s.cards[g].tokens).toBe(0);
   });
-  it('to aid an Attack to Destroy a Group needs an opposite alignment, or else uses Global Power (R029)', () => {
+  it('helping a destroy attack takes an opposite alignment, or else uses Global Power (R029)', () => {
     const s0 = scenario();
     const ill = s0.players[0].illuminati;
     const att = give(s0, 'p1', 'the-mafia', { under: ill, side: 'BOTTOM' });
