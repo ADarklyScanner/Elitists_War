@@ -694,3 +694,16 @@ html.rb-open, html.rb-open body { overflow: hidden; }
   .rb-cover-toc { grid-template-columns: minmax(0, 1fr); }
   .rb-table { font-size: 14px; }
 }
+/* Deals, trades and gifts */
+.modal.deals { width: min(640px, calc(100% - 24px)); max-height: 86vh; }
+.modal.deals h3 { margin: 12px 0 6px; font-size: 14px; }
+.modal.deals h4 { margin: 10px 0 4px; font-size: 13px; color: var(--muted); }
+.deal { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; margin: 6px 0; }
+.deal p { margin: 0 0 6px; }
+.deal-picks button.on { border-color: var(--brass); background: var(--brass-soft); }
+.deal-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 13px; margin: 6px 0; }
+.deal-row select, .deal-row input { max-width: 100%; padding: 4px 6px; }
+.deal-row input { flex: 1 1 200px; }
+.deal-banner { border-left: 3px solid var(--brass); background: var(--brass-soft); padding: 6px 10px; border-radius: 4px; margin-bottom: 8px; }
+.deal-banner p { margin: 0 0 6px; }
+.hud-btn.alert { border-color: var(--brass); color: var(--brass); }

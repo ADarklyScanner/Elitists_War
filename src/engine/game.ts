@@ -16,6 +16,7 @@ import { NWO_EFFECTS } from './nwo';
 import { PLOTS, GOALS } from './plotTypes';
 import { HOOKS, CHOICES, EVENT_ABILITY_CARDS, abilitiesDisabled, activeHookCards, anyHook, fireHooks, goalCheck, hooksOf, sumHooks, type AbilityParams, type ActivatedAbility } from './hooks';
 import type { AiLevel, AnnouncedKind, Choice, GameEvent, PlotEffect } from './types';
+import { dealAction, isDealAction, lapseDeals, tidyDeals } from './deals';
 
 // ---------------------------------------------------------------- setup
 
@@ -810,6 +811,7 @@ export function handLimit(s: GameState, playerId: string) {
 
 function finishTurn(s: GameState) {
   s.prompt = undefined;
+  lapseDeals(s); // offers not answered by the end of the turn lapse
   const p = activePlayer(s);
   if (!s.turnFlags.extraTurn) p.turnsTaken++;
   // Claims were decided in the end-of-turn window, before "until end of turn" changes expire:
@@ -1922,7 +1924,9 @@ const REORG_ENDERS = new Set<Action['type']>(['attack', 'playPlot', 'useAbility'
 export function applyAction(state: GameState, playerId: string, action: Action): GameState {
   const s: GameState = structuredClone(state);
   ensureLayout(s); // games saved before cards had real shapes
-  assertPriority(s, playerId);
+  // Offers and answers to offers never wait for priority: anyone may make or answer one at any time.
+  if (isDealAction(action)) { if (s.phase === 'gameOver') throw new RuleError('The game is over.'); }
+  else assertPriority(s, playerId);
   const p = player(s, playerId);
   if (p.eliminated) throw new RuleError('You have been eliminated.');
   // A one-step reorganization (Elders of Zion) is over once its player does anything but move Groups.
@@ -2057,6 +2061,12 @@ export function applyAction(state: GameState, playerId: string, action: Action):
 
     case 'setAutoPass':
       p.autoPass = action.value;
+      break;
+
+    case 'offerDeal':
+    case 'respondDeal':
+    case 'cancelDeal':
+      dealAction(s, playerId, action);
       break;
 
     case 'takeover': {
@@ -2218,6 +2228,7 @@ export function applyAction(state: GameState, playerId: string, action: Action):
   // Plots that cannot be exposed (hidden beneath a card) are never left face up.
   for (const c of Object.values(s.cards)) if (c.exposed && c.zone === 'hand' && !canExpose(s, c.iid)) c.exposed = false;
   syncHiddenResources(s);
+  tidyDeals(s);
   s.version++;
   return s;
 }

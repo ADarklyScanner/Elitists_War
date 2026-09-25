@@ -7,6 +7,7 @@ import {
   alignments, globalPower, abilitiesOf, PLOTS, subtree, goalCount, goalNeeded, depth, bestLead, plotOptions,
   HOOKS, CHOICES, checkAbility, resourcesOf, canEnterPlay, goalsInHand, goalLimit, type AbilityParams,
   type AiLevel, declareOptions, type GoalOption,
+  type Deal, type DealGroup, I_LIED, sideEmpty, dealsAllowed, tokenBarred, offersFrom,
 } from '../engine';
 import { OPPOSITE } from '../engine/cards';
 import { abilityOptions, attackOptions, responseOptions } from '../engine/moves';
@@ -280,6 +281,9 @@ function mainPhase(s: GameState, pl: string): Action {
     const a: Action = { type: 'drawGroup' };
     if (tryAction(s, pl, a)) return a;
   }
+  // 3c. Now and then, a simple offer to another player (at most one a turn).
+  const deal = dealOffer(s, pl);
+  if (deal) return deal;
   // 4. Buy a Plot with a spare Illuminati token.
   if (s.cards[me.illuminati].tokens > 0 && plotsInHand(s, pl).length < S.plotHand && me.plotDeck.length) {
     const a: Action = { type: 'buyPlot', payWith: [me.illuminati] };
@@ -419,6 +423,16 @@ function respondToRoll(s: GameState, pl: string): Action {
 }
 
 export function chooseAction(s: GameState, pl: string): Action {
+  useHabits(s, pl);
+  // A computer never lets a win go by: it declares as soon as it may (even the wild cards).
+  const claim = declareMove(s, pl);
+  if (claim) return claim;
+  if (player(s, pl).aiStyle === 'chaos') return chaosMove(s, pl);
+  return decide(s, pl);
+}
+
+/** Take on this computer player's level and habits. */
+function useHabits(s: GameState, pl: string) {
   const me = player(s, pl);
   const level = me.aiLevel ?? 'normal';
   P = PROFILES[level] ?? PROFILES.normal;
@@ -430,11 +444,6 @@ export function chooseAction(s: GameState, pl: string): Action {
     S = { ...BASE_STYLE, ...knobs };
     if (level === 'normal' && mistakes !== undefined) P = { ...P, mistakes };
   }
-  // A computer never lets a win go by: it declares as soon as it may (even the wild cards).
-  const claim = declareMove(s, pl);
-  if (claim) return claim;
-  if (player(s, pl).aiStyle === 'chaos') return chaosMove(s, pl);
-  return decide(s, pl);
 }
 
 /**
@@ -655,10 +664,135 @@ function windowMove(s: GameState, pl: string): Action {
   return bestBySimulation(s, pl, spread(opts, 24), baseline, 1.5, 24) ?? { type: 'pass' };
 }
 
+// ------------------------------------------------------------------ deals
+
+/** A Plot's worth to keep: Goals and Plots this version plays are worth more than the rest. */
+function plotKeep(s: GameState, c: string): number {
+  const d = def(s, c);
+  return (d.subtype === 'Goal' ? 3 : 0) + (PLOTS[d.id] ? 1 : 0) + (d.id === I_LIED ? 2 : 0);
+}
+
+/** Could this player bring a Group card from hand into play (an open arrow and no copy in play)? */
+function usableGroupCard(s: GameState, pl: string, c: string): boolean {
+  return def(s, c).type === 'Group' && canEnterPlay(s, c) && structureCards(s, pl).some((g) => openArrows(s, g).length > 0);
+}
+
+/** What the look-ahead misses: a Group card someone can actually take over is worth more than a card. */
+function cardBonus(s: GameState, pl: string, cards: string[]): number {
+  return cards.filter((c) => usableGroupCard(s, pl, c)).reduce((n, c) => n + 0.5 * (def(s, c).power ?? 0) + 1, 0);
+}
+
+/** Accept an offer, making the choices it leaves open the plain way: cheapest cards, shallowest arrows. */
+function acceptMove(s: GameState, pl: string, d: Deal): Extract<Action, { type: 'respondDeal' }> | undefined {
+  const me = player(s, pl);
+  const hand = me.hand.filter((c) => !(d.get.cards ?? []).includes(c) && s.cards[c].cardId !== I_LIED);
+  const plots = hand.filter((c) => def(s, c).type === 'Plot').sort((a, b) => plotKeep(s, a) - plotKeep(s, b));
+  const others = hand.filter((c) => def(s, c).type !== 'Plot').sort((a, b) => groupValue(s, a) - groupValue(s, b));
+  if (plots.length < (d.get.anyPlots ?? 0) || others.length < (d.get.anyCards ?? 0)) return undefined;
+  const choose = [...plots.slice(0, d.get.anyPlots ?? 0), ...others.slice(0, d.get.anyCards ?? 0)];
+  const groups: DealGroup[] = [];
+  const taken = new Set<string>();
+  const spots = structureCards(s, pl).flatMap((m) => openArrows(s, m).map((side) => ({ onto: m, side }))).sort((a, b) => depth(s, a.onto) - depth(s, b.onto));
+  const payer = (xs: (string | undefined)[]) => xs.find((x): x is string => !!x && s.cards[x]?.controller === pl && s.cards[x].tokens > 0 && !tokenBarred(s, x));
+  for (const g of d.give.groups ?? []) {
+    const spot = spots.find((o) => !taken.has(`${o.onto}:${o.side}`));
+    if (!spot) return undefined;
+    taken.add(`${spot.onto}:${spot.side}`);
+    const payWith = g.payWith ?? payer([spot.onto, me.illuminati]);
+    if (!payWith) return undefined;
+    groups.push({ group: g.group, onto: spot.onto, side: spot.side, payWith });
+  }
+  for (const g of d.get.groups ?? []) {
+    if (g.payWith) continue;
+    const payWith = payer([g.group, s.cards[g.group]?.master, me.illuminati]);
+    if (!payWith) return undefined;
+    groups.push({ group: g.group, payWith });
+  }
+  return { type: 'respondDeal', deal: d.id, accept: true, choose, groups };
+}
+
+/**
+ * Answer an offer made to a computer player. It accepts when the deal leaves it better placed by a
+ * margin and does not feed the leader or a rival about to win; a Meddler or Kingslayer deals more
+ * readily with anyone but the leader. With I Lied in hand it sometimes keeps its own side. Wild cards
+ * accept or refuse at random.
+ */
+export function answerOffer(s: GameState, pl: string, d: Deal): Action {
+  useHabits(s, pl);
+  const no: Action = { type: 'respondDeal', deal: d.id, accept: false };
+  const yes = acceptMove(s, pl, d);
+  if (!yes) return no;
+  let after: GameState;
+  try { after = applyAction(s, pl, yes); } catch { return no; }
+  if (player(s, pl).aiStyle === 'chaos') return roll01(s, pl, `deal${d.id}`) < 0.5 ? yes : no;
+  const given = [...(d.get.cards ?? []), ...(yes.choose ?? [])];
+  const gain = evaluate(after, pl) - evaluate(s, pl) + cardBonus(s, pl, d.give.cards ?? []) - cardBonus(s, pl, given);
+  const theirGain = standing(after, d.from) - standing(s, d.from) + cardBonus(s, d.from, given);
+  // A rival close to winning gets nothing from us but his own gifts: we cannot see what a card is worth to him.
+  if (!sideEmpty(d.get) && (nearWin(s, d.from) || nearWin(after, d.from))) return no;
+  const leader = rivalsOf(s, pl).map((r) => r.id).sort((a, b) => standing(s, b) - standing(s, a))[0];
+  const againstLeader = (S.meddler || S.leader >= 2) && d.from !== leader;
+  let margin = sideEmpty(d.get) ? 0 : againstLeader ? 0.4 : 1;
+  if (d.from === leader && theirGain > 0) margin += 2;
+  if (gain <= margin) return no;
+  const lie = player(s, pl).hand.find((c) => s.cards[c].cardId === I_LIED && !(yes.choose ?? []).includes(c));
+  if (lie && !sideEmpty(d.get) && roll01(s, pl, `lie${d.id}`) < 0.5) {
+    const lying: Action = { ...yes, lie };
+    if (tryAction(s, pl, lying)) return lying;
+  }
+  return yes;
+}
+
+/**
+ * A computer's own offers, kept simple: a Group card it has no room for, traded for a Plot of the
+ * other player's choice; or, for a Meddler or Kingslayer, a Plot given to the rival best placed to
+ * stop a leader who is about to win. Never to the leader or a rival close to winning.
+ */
+function dealOffer(s: GameState, pl: string): Action | undefined {
+  if (!dealsAllowed(s) || s.turnFlags.dealOffers?.includes(pl) || offersFrom(s, pl).length) return undefined;
+  const me = player(s, pl);
+  const rivals = rivalsOf(s, pl).filter((r) => r.turnsTaken > 0).map((r) => r.id).sort((a, b) => standing(s, b) - standing(s, a));
+  if (rivals.length < 1) return undefined;
+  const leader = rivals[0];
+  const safe = rivals.filter((r) => (rivals.length === 1 || r !== leader) && !nearWin(s, r));
+  const groupsInHand = me.hand.filter((c) => def(s, c).type === 'Group' && s.cards[c].failedTakeoverTurn !== s.turn);
+  const noRoom = !structureCards(s, pl).some((g) => openArrows(s, g).length > 0);
+  if (safe.length && groupsInHand.length && (noRoom || groupsInHand.length > 3) && roll01(s, pl, 'offer') < 0.35) {
+    const card = [...groupsInHand].sort((a, b) => groupValue(s, a) - groupValue(s, b))[0];
+    const to = safe[safe.length - 1]; // the weakest: least dangerous to strengthen
+    const a: Action = { type: 'offerDeal', to, give: { cards: [card] }, get: { anyPlots: 1 } };
+    if (tryAction(s, pl, a)) return a;
+  }
+  if ((S.meddler || S.leader >= 2) && rivals.length > 1 && nearWin(s, leader) && roll01(s, pl, 'gift') < 0.3) {
+    const plots = plotsInHand(s, pl).filter((c) => s.cards[c].cardId !== I_LIED && def(s, c).subtype !== 'Goal');
+    const to = safe[0];
+    if (to && plots.length >= 2) {
+      const card = [...plots].sort((a, b) => plotKeep(s, b) - plotKeep(s, a))[0];
+      const a: Action = { type: 'offerDeal', to, give: { cards: [card] }, get: {}, note: 'Use it to stop the leader.' };
+      if (tryAction(s, pl, a)) return a;
+    }
+  }
+  return undefined;
+}
+
+/** An offer waiting on a computer player, and its answer (computers answer at once, so they never hold a deal up). */
+export function computerDealAnswer(s: GameState): { player: string; action: Action } | undefined {
+  const d = (s.deals ?? []).find((x) => { const p = s.players.find((q) => q.id === x.to); return !!p && p.isAI && !p.eliminated; });
+  return d ? { player: d.to, action: answerOffer(s, d.to, d) } : undefined;
+}
+
+/** Apply a computer's answer to an offer; if it turns out not to be legal, it declines instead. */
+export function applyDealAnswer(s: GameState, ans: { player: string; action: Action }): GameState {
+  try { return applyAction(s, ans.player, ans.action); }
+  catch { return applyAction(s, ans.player, { type: 'respondDeal', deal: (ans.action as { deal: string }).deal, accept: false }); }
+}
+
 /** Let every computer player act until a human is needed (or the game ends). */
 export function runComputerPlayers(state: GameState, maxSteps = 500): GameState {
   let s = state;
   for (let i = 0; i < maxSteps; i++) {
+    const ans = computerDealAnswer(s);
+    if (ans) { s = applyDealAnswer(s, ans); continue; }
     const ai = waitingFor(s).map((id) => player(s, id)).find((p) => p.isAI);
     if (!ai) return s;
     let a = chooseAction(s, ai.id);

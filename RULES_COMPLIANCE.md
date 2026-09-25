@@ -15,8 +15,8 @@ Status key:
 
 Tests are named as `file › "test name"`. `compliance` is `tests/compliance.test.ts`, `rules` is
 `tests/rules.test.ts`, `features` is `tests/engineFeatures.test.ts`, `server` is `tests/server.test.ts`,
-`geometry` is `tests/geometry.test.ts`, `victory` is `tests/victory.test.ts`, `data` is `tests/data.test.ts` and `content/…` is a file in
-`tests/content/`. Where a rule has several parts, one or two representative tests are named.
+`geometry` is `tests/geometry.test.ts`, `victory` is `tests/victory.test.ts`, `data` is `tests/data.test.ts`, `deals` is
+`tests/deals.test.ts`, `dealsAi` is `tests/dealsAi.test.ts` and `content/…` is a file in `tests/content/`. Where a rule has several parts, one or two representative tests are named.
 
 ## Rule by rule
 
@@ -43,7 +43,7 @@ Tests are named as `file › "test name"`. `compliance` is `tests/compliance.tes
 | R019 Reload cards | Tested | Reload-type Plots cost an Illuminati action and refresh up to 5 Power of Groups (or any single Group), never one captured this turn. | compliance › "Reload costs an Illuminati action and refreshes at most 5 Power of Groups (errata)" |
 | R020 Permanent and temporary | Tested | Every change is a modifier with a lifetime (this attack, end of turn, start of the owner's next turn, permanent); expired ones are removed at that moment. Claims are decided before end-of-turn changes expire, so a temporary change helps only a claim made while it lasts, at the close of that same turn. | compliance › "\"until end of turn\" changes expire when the turn ends; permanent ones stay (R020)" |
 | R021 Resources are not Groups | Tested | Resources live in their own zone beside the structure, cannot be attacked, have their own play, link and uniqueness rules. | compliance › "the Illuminati can never be attacked, and Resources cannot be attacked (R003, R021)", "a second copy of a Unique Resource cannot come into play (R041)" |
-| R022 Deals | Choice | Players may talk and agree what they like; the engine binds nobody to a promise. Cards cannot be traded yet (see R040). | not tested |
+| R022 Deals | Tested | A player offers another a deal (what he gives, what he asks for, and an optional promise). Offers are private to the two players and never hold up the game. On acceptance the exchange happens at once and is binding; the promise is only shown, never enforced. I Lied lets a player keep his side of a deal just agreed. | deals › "a promise about the future is shown but never enforced", "a trade swaps cards at once, as one step: if either part is no longer possible nothing changes"; deals › "I Lied" › "accepting with I Lied: you receive the other side at once and keep your own" |
 | R023 Two players | Tested | Goal never below 12; neither player may attack the other until both have had a turn; an automatic takeover costs that turn's Illuminati token. | rules › "two-player: nobody attacks the other before both have had a full turn (R023)"; compliance › "two-player: an automatic takeover costs that turn's Illuminati token (R023)", "the Basic Goal is 12 Groups in a two-player game" |
 | R024 Later corrections | Tested | Card data and scripts use the corrected values where a later correction exists (for example Volcano at Power 18). | rules › "Volcano uses Power 18 (errata) and Devastates or destroys a Place" |
 | R025 Setup | Tested | 45-card decks split into Plot and Group decks; 3 Plots dealt; each player picks a lead Group (people choose, computers pick the best), identical picks are set aside and picked again; lead placed on the Illuminati; 6 Group cards dealt, then set-aside cards shuffled back; highest 2d6 starts (ties re-roll). Undrawn cards stay hidden from everyone. | compliance › "decks are 45 cards including the Illuminati", "each player starts with a lead Group on the Illuminati, 3 Plots and 6 Groups in hand", "lead Groups are chosen by the players, and duplicate picks are set aside and re-picked (R025)" |
@@ -59,9 +59,9 @@ Tests are named as `file › "test name"`. `compliance` is `tests/compliance.tes
 | R035 Assassinations | Tested | An Instant attack on a Personality; if it succeeds the Personality is marked killed, and only cards that restore killed Personalities bring it back. | compliance › "a successful Assassination kills the Personality (R035)"; content/groups0 › "C.I.A., Clone Arrangers and Joggers" › "C.I.A. turns an attack on a Personality into an Assassination; Clone Arrangers bring it back" |
 | R036 Disasters | Tested | An Instant attack on a Place that takes one of its tokens when played (given back if the Disaster is cancelled). Success Devastates the Place, or destroys it when the card's margin is reached. | compliance › "a cancelled Disaster gives back the token it took (R036, R009)"; rules › "Volcano uses Power 18 (errata) and Devastates or destroys a Place" |
 | R037 Devastation and Relief | Tested | A Devastated Place and everything below it lose their tokens, get none, and do not count for Goals; Devastating it again does nothing; moving a Group under it strips its tokens. Relief by one player's Groups with Power totalling 3× the printed Power clears it, at any moment that player may act. | compliance › "a Devastated Place and its puppets do not count toward the goal (R037)", "Relief needs actions totalling three times the Place's printed Power"; content/groups2 › "Center for Disease Control" › "sends Relief to a Devastated Place with its action" |
-| R038 Moving Groups | Tested | In his own main phase a player moves a Group, with its puppets in the same layout, to an open arrow in his own structure (house ruling), for a token from the Group, its old or new master, or the Illuminati. Puppets that no longer fit are placed elsewhere under the same master or returned to hand. | compliance › "costs one token from the Group, a master, or the Illuminati", "a Group moves with its puppets, and only within its own Power Structure (R038)"; geometry › "moves keep every puppet centred on its master's arrow" |
+| R038 Moving Groups | Tested | In his own main phase a player moves a Group, with its puppets in the same layout, to an open arrow in his own structure (house ruling), for a token from the Group, its old or new master, or the Illuminati. Puppets that no longer fit are placed elsewhere under the same master or returned to hand. A Group is handed to another player through a deal both agree to, in the main phase of either of them, onto an open arrow the receiver chooses, for a token from the Group, its old or new master, or either Illuminati; its puppets and linked Resources go with it. | compliance › "costs one token from the Group, a master, or the Illuminati", "a Group moves with its puppets, and only within its own Power Structure (R038)"; geometry › "moves keep every puppet centred on its master's arrow"; deals › "a Group handed over takes its puppets and linked Resources onto the open arrow the receiver picks, for one token" |
 | R039 No dropping | Tested | Same as R013: nothing lets a player remove his own Group. | compliance › "a Group in play can never be discarded or dropped (R013, R039)" |
-| R040 Gifts and trades | Gap | Players cannot give or trade cards, Resources or Groups. | not tested |
+| R040 Gifts and trades | Tested | Cards in hand (hidden or exposed Plots, Group and Resource cards) may be given or traded whenever a player likes, but not during a decision or draw, nor while a Plot waits to resolve, nor from outside a Privileged attack to a player in it; they go to the receiver's hand, and a hidden card is known only to the two players. Undrawn cards never change hands. A Resource in play not used this turn may be given in the main phase of either player; it is linked to the receiver's Illuminati. Groups change hands as in R038. A trade is two gifts made at once. You may ask only for cards you can see, or for cards of the other player's choice. | deals › "a hidden Plot given away goes to the receiver's hand and is revealed only to the two players", "no cards may be given to a player in a Privileged attack by someone outside it", "a Resource given away is linked to the receiver's Illuminati; a Resource used this turn cannot be given"; dealsAi › "an offer goes through the service like any move; only the two players see it, and the answer completes it" |
 | R041 Resources | Tested | Drawn from the Group deck; played by automatic takeover, once per turn for an Illuminati token, or by cards; linked to the Illuminati at first and relinkable to own Groups. They follow a captured Group and are destroyed with a destroyed one. Unique ones allow a single copy, never again once destroyed (unless the card says so); "one per player" limits are honoured. Warehouse 23 holds Resources face down: inactive, unreachable by rivals, and shown to them only as a card back. | compliance › "a captured Group brings its linked Resources along (R041)", "a second copy of a Unique Resource cannot come into play (R041)"; server › "a Resource face down under Warehouse 23 is a card back to rivals only"; content/hiddenInfo › "Warehouse 23" › "a Resource hidden under it is face down: unnamed in the public log and inactive" |
 | R042 Links | Tested | In his main phase a player links his Resource to one of his Groups; a link moves at most once per turn; a card's own link restriction and locked links are honoured; linked Plots stay with their Group and are discarded if it is destroyed. | compliance › "a Resource link may be moved only once per turn (R042)"; content/resources › "Cyborg Soldiers" › "cannot link to a non-Violent Group"; content/groups0 › "Evil Geniuses: linked Resources are locked" › "a Resource linked to them cannot be moved" |
 | R043 Duplicate Groups | Tested | A Group cannot enter play while a copy is in play or destroyed (unless its card allows several); a copy only discarded may be played. A duplicate of a rival's Group is used as agents. Identical lead picks are re-picked. | compliance › "a Group already in play or destroyed cannot be played again; one merely discarded can (R043)", "lead Groups are chosen by the players, and duplicate picks are set aside and re-picked (R025)" |
@@ -73,8 +73,7 @@ Tests are named as `file › "test name"`. `compliance` is `tests/compliance.tes
 | R049 Elimination | Tested | After his third turn, a player whose Illuminati has no puppets is out at once: his hand and decks leave the game, and his Resources leave play (or pass to a same-Illuminati faction that knocked him out). A player of the destroy-count Illuminati who destroys his own last Group for his winning total is not knocked out and may declare victory at the end of the turn (if he does not, or the claim fails, he is out once play passes on). | compliance › "a player with no Groups after his third turn is eliminated at once (R049)", "an eliminated player's Resources leave play (R049)", "the Servants of Cthulhu destroying their own last Group as the 8th may declare victory at the end of the turn instead (R049)" |
 | R050 Special card kinds | Tested | Not a rule of its own: Illuminati, NWOs, Goal cards and the Plot families follow their own rows (R016, R028, R044, R045). | see those rows |
 
-Totals: 48 Tested (R050 among them, though it only points to other rows), 0 Untested, 1 Choice (R022),
-1 Gap (R040).
+Totals: 50 Tested (R050 among them, though it only points to other rows), 0 Untested, 0 Choice, 0 Gap.
 Parts of several tested rows are missing; they are listed under *Known gaps*.
 
 ## Deliberate choices
@@ -86,6 +85,7 @@ House rulings chosen by the owner (Research Needed tab):
 - **Secret Groups** have no way to be exposed: they are face up and only have the protections in R014,
   since the rules never say how exposure would work.
 - **Moving Groups** only within your own Power Structure, reading "any Group" in the rules as your own.
+  Handing a Group to another player is done with a deal (R038, R040).
 - **Taking over Resources**: by capturing the Group they are linked to, or by spending an Illuminati
   action to put one from hand into play (the later rules update).
 - **Celebrity Spokesman**: the Organization may not have an alignment opposite to one of the
@@ -143,6 +143,24 @@ Engine choices, made so the game can be played on screens, in pieces and online:
 - **The I.R.S. tax** is a once-per-turn ability used in its controller's main phase. Under Tax Reform
   the same tax takes the top Plot of every rival's deck; the controller's own deck is never taxed
   (content/plots2 › "New World Orders").
+- **Deals** (R022, R040): offers are seen only by the two players (deals may be secret), never hold up
+  the game, and lapse when the turn they were made in ends (a trade binds only when made on the spot, so
+  nothing carries over). An accepted offer is carried out as one step: if any part is not legal at that
+  moment, nothing changes. Cards in hand do not change hands while any player is in the middle of a
+  decision or a draw, or while any Plot waits to resolve (it may be looking at or taking cards from a
+  hand); Groups and Resources in play only when nothing else is going on, as with moves. Handing a
+  Group over is not announced as an action, so cards that cancel actions cannot stop it. You can ask for
+  a rival's cards in hand only if you can see them, or ask for a number of Plots or Group cards of his
+  choice; the Group of yours you give goes where the receiver chooses. A Resource counts as used this
+  turn once one of its activated abilities has been used. Computer players answer offers at once, and
+  make a simple offer now and then (a Group card they have no room for, traded for a Plot; or, for a
+  Meddler or Kingslayer, a Plot given to a rival best placed to stop a leader about to win).
+- **I Lied** (deals › "I Lied"): the player accepting an offer plays it with his acceptance; the player
+  making an offer can attach it to the offer in secret, and it is played the moment the offer is
+  accepted (online games are played a move at a time, so he is not asked again). The other side is
+  delivered at once; the liar's side is held back while the Plot can be countered, and delivered after
+  all if I Lied is cancelled. It cannot be played while an attack is under way; an offerer's I Lied
+  that cannot be played when his offer is accepted is simply not played, and he hands over his side.
 - **Computer difficulty** (Easy, Normal, Hard) only changes how well the computer chooses; every level
   plays by the same rules (tests/aiLevels.test.ts › "Easy, Normal and Hard all play complete, legal games").
 
@@ -203,8 +221,8 @@ Calls the engine makes where the book is silent or a screen needs a rule:
 
 ## Known gaps
 
-- **Gifts and trades** (R040, R022): no giving or trading of cards in hand or in-play Resources, and no
-  handing a Group to another player (the transfer part of R038).
+- **Resources used this turn** (R040): only a Resource's activated abilities mark it as used; a
+  Resource that only lent its bonus to an attack this turn may still be given away that turn.
 - **Relief from several players at once** (R037): only one player's Groups can pay for a Relief.
 - **Spare Illuminati as agents** (R006e, R044): decks never hold extra Illuminati cards, so the +3 agent
   and the "one agent per Illuminati" rules do not exist yet.

@@ -842,7 +842,7 @@ ${ex('a deal and a promise', `<p>“Give me your Punk Rockers from your hand now
 <p>A Group can be moved into another player's structure if both agree (${see('structure', 'Moving Groups')}).</p>
 <h4>Borrowed cards</h4>
 <p>Cards keep their owner. If one of your cards ends up with someone else, make a note (or mark it with one of your tokens) so it comes back to you after the game.</p>
-${app('players may talk and agree whatever they like online, but the game holds nobody to anything. Giving and trading cards, Resources and Groups is not available yet; it is being added.')}
+${app('use the <i>Deals</i> button to offer cards from your hand, Resources and Groups, and to ask for things in return; the other player accepts, declines or counters. Anything handed over on the spot happens for real; a promise about later is shown with the offer but never enforced. Offers lapse when the turn they were made in ends. Computer players answer offers at once, and sometimes make their own.')}
 `,
   },
   // ------------------------------------------------------------------ Beyond the basics

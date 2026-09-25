@@ -8,9 +8,10 @@ import {
   responseOptions, structureCards, subtree, takeoverOptions, tokenBarred, waitingFor, PLOTS, NWO_EFFECTS,
   describePlay, player, leadOptions, type AiLevel, actionCancelled, actionSummary, abilitiesOf, abilityOptions, resourcesOf, canEnterPlay, HOOKS, goalsInHand, goalLimit,
   declareOptions, victoryReminder,
+  type Deal, type DealGroup, type DealSide, dealText, dealsAllowed, offersTo, offersFrom, I_LIED, MAX_NOTE, sideEmpty,
 } from '../engine';
 import { attachRect, rectOf, ensureLayout, type Rect } from '../engine/geometry';
-import { chooseAction, successChance } from '../ai/ai';
+import { applyDealAnswer, chooseAction, computerDealAnswer, successChance } from '../ai/ai';
 import { suggestBots, type TableLevel } from './botMix';
 import { mirrorName, styleById, STYLES, WILD_CARDS } from '../ai/personas';
 import { foldGame, habitsIn, habitsReport, MIN_GAMES, mirrorSeats, normalizeProfile, observeHuman, type PlayProfile, type ProfileSummary } from '../ai/profile';
@@ -51,6 +52,10 @@ interface Ui {
   sheetMin?: boolean;
   handMin?: boolean;
   showLog?: boolean;
+  /** The Deals panel: offers to answer, your own offers, and a new offer being put together. */
+  showDeals?: boolean;
+  draft?: DealDraft;
+  answers?: Record<string, DealAnswer>;
   showStyle?: boolean;
   lastKey?: string;
   /** The latest attack roll, shown as tumbling dice. */
@@ -62,6 +67,22 @@ interface Ui {
   /** Open section of the rules reference ('' = closed). */
   showRules?: string;
 }
+
+/** An offer being put together in the Deals panel. */
+interface DealDraft {
+  to: string;
+  counterOf?: string;
+  give: string[];                 // your cards in hand, Resources and Groups in play
+  pay: Record<string, string>;    // your Group -> your card paying for its handover ('' = leave it to them)
+  get: string[];                  // their cards you can see, their Resources and Groups
+  place: Record<string, string>;  // their Group -> "onto:side" in your Power Structure
+  anyPlots: number;
+  anyCards: number;
+  note: string;
+  lie: boolean;
+}
+/** The choices an offer made to you leaves open. */
+interface DealAnswer { choose: string[]; place: Record<string, string>; pay: Record<string, string>; lie: boolean }
 
 type HelpMode = 'tutorial' | 'guided' | 'off';
 const HELP_MODES: HelpMode[] = ['tutorial', 'guided', 'off'];
@@ -172,6 +193,16 @@ function schedule() {
   const ai = waiting.map((id) => player(s, id)).find((p) => p.isAI);
   const diceLeft = ui.dice ? ui.dice.start + DICE_MS - Date.now() : 0;
   if (diceLeft > 0) { timer = window.setTimeout(schedule, diceLeft + 30); return; } // let everyone see the roll
+  // A computer player answers an offer made to it at once, so offers never hold up the game.
+  const ans = computerDealAnswer(s);
+  if (ans) {
+    timer = window.setTimeout(() => {
+      const next = applyDealAnswer(s, ans);
+      ui.game = next; foldFinished(next); saveGame(next); render();
+      timer = window.setTimeout(schedule, 0);
+    }, 300);
+    return;
+  }
   if (ai) {
     ui.thinking = true;
     timer = window.setTimeout(() => {
@@ -538,6 +569,7 @@ function render() {
       ${phaseTracker(s)}
       <button class="hud-btn" data-rules="goal">Rules</button>
       <button class="hud-btn" data-act="log">Log</button>
+      ${dealsAllowed(s) && s.phase !== 'gameOver' ? `<button class="hud-btn ${offersTo(s, ui.me).length ? 'alert' : ''}" data-act="deals" title="Offer trades and gifts to other players">Deals${offersTo(s, ui.me).length ? ` (${offersTo(s, ui.me).length})` : ''}</button>` : ''}
       <button class="hud-btn" data-act="style" title="Deck style" aria-label="Deck style">🎨</button>
       <button class="guide-toggle ${ui.guide ? 'on' : ''} ${ui.help}" data-act="guide" title="${esc(HELP_TITLE[ui.help])}" aria-label="Help level: ${HELP_LABEL[ui.help]} (tap to change)">${HELP_LABEL[ui.help]}</button>
     </header>
@@ -573,6 +605,7 @@ function render() {
     ${diceOverlay()}
     ${ui.showRules ? `<div class="modal-back" data-rules=""></div><div class="modal rules" role="dialog" aria-label="Rules">${rulesHtml(s)}<div class="btns"><button data-rules="">Close</button></div></div>` : ''}
     ${ui.showStyle ? `<div class="modal-back" data-act="style"></div><div class="modal style" role="dialog" aria-label="Deck style">${styleHtml()}<div class="btns"><button data-act="style">Done</button></div></div>` : ''}
+    ${ui.showDeals ? `<div class="modal-back" data-act="deals"></div><div class="modal deals" role="dialog" aria-label="Deals">${renderDeals(s)}<div class="btns"><button data-act="deals">Close</button></div></div>` : ''}
     ${ui.showLog ? `<div class="modal-back" data-act="log"></div><div class="modal" role="dialog" aria-label="Game log">${renderLog(s)}<div class="btns"><button data-act="log">Close</button></div></div>` : ''}
   </div>`;
   bind();
@@ -1026,6 +1059,7 @@ function rulesHtml(s: GameState): string {
     <li>A <b>Privileged</b> attack allows only the attacker and defender to take part.</li>
     <li><b>Devastated</b> Places lose their tokens and stop counting until someone sends Relief (spending actions worth three times the Place's printed Power).</li>
     <li>You may <b>move</b> a Group (with its puppets) to another open arrow in your Power Structure in your main phase for one token. Groups cannot be dropped.</li>
+    <li><b>Deals:</b> use the Deals button to give or trade cards from your hand (hidden or exposed), Resources in play, or Groups in play with their puppets. An exchange made on the spot is binding; a promise about later is not, and nobody has to keep it. Groups and Resources in play change hands only in the main phase of one of the two players, and handing over a Group costs one Action token. Nobody may hand cards to a player in a Privileged attack from outside it. Offers lapse at the end of the turn.</li>
     <li>When a card and a rule disagree, the card wins.</li></ul>`)}`;
 }
 
@@ -1039,6 +1073,7 @@ function fullRules(id: string): string {
 function plotTiming(id: string, subtype: string, short = false): string {
   if (subtype === 'Goal') return short ? '' : 'Goal card: not played. When you meet it at the end of a turn, declare victory and show it (hold at most one).';
   if (subtype === 'NWO') return short ? '' : 'New World Order: play any time except during an Instant or Privileged attack; it affects everyone until replaced by another of its colour.';
+  if (id === I_LIED) return short ? 'With a deal' : 'Play as you accept a deal, or add it to an offer you make (Deals button at the top).';
   const t = PLOTS[id]?.timing ?? [];
   const words: Record<string, [string, string]> = {
     anytime: ['Any time', 'any time you could act'],
@@ -1237,7 +1272,10 @@ function renderConsole(s: GameState): string {
     const names = waiting.map((id) => player(s, id).name).join(', ');
     body = `${s.claims?.length && !s.attack ? claimPanel(s, false) : ''}${declarePanel(s, false)}${s.attack ? attackPanel(s) : ''}<p class="muted thinking">${online ? (online.busy ? 'Sending…' : `Waiting for ${esc(names)}. You'll see their move here as soon as it's made.`) : ui.thinking ? 'The Computer is thinking…' : 'Waiting…'}</p>`;
   }
-  return `<div class="panel now">${err}${body}</div>`;
+  const offers = s.phase === 'gameOver' ? [] : offersTo(s, ui.me);
+  const banner = offers.length && !ui.showDeals
+    ? `<div class="deal-banner"><p>${esc(player(s, offers[0].from).name)} offers you a deal${offers.length > 1 ? ` (and ${offers.length - 1} more)` : ''}. It lapses at the end of this turn.</p><div class="btns"><button class="primary" data-act="deals">See the offer</button></div></div>` : '';
+  return `<div class="panel now">${err}${banner}${body}</div>`;
 }
 
 function renderMainConsole(s: GameState): string {
@@ -1418,6 +1456,189 @@ function renderInspect(s: GameState): string {
   </div>`;
 }
 
+// ------------------------------------------------------------------ deals, trades and gifts (R040)
+
+const rivalsLive = (s: GameState) => s.players.filter((p) => p.id !== ui.me && !p.eliminated);
+const cardKind = (s: GameState, iid: string) => {
+  const c = s.cards[iid];
+  return c.zone === 'resources' ? 'res' : c.zone === 'structure' ? 'group' : 'hand';
+};
+/** Your open arrows, as "onto:side" choices. */
+function mySpots(s: GameState): { key: string; label: string }[] {
+  return structureCards(s, ui.me).flatMap((m) => openArrows(s, m).map((side) => ({ key: `${m}:${side}`, label: `${cardName(s, m)} (its ${side.toLowerCase()} arrow)` })));
+}
+/** Your cards whose Action token could pay for a Group changing hands. */
+const myPayers = (s: GameState) => structureCards(s, ui.me).filter((g) => s.cards[g].tokens > 0);
+const myLie = (s: GameState) => player(s, ui.me).hand.find((c) => s.cards[c].cardId === I_LIED);
+const cardLabel = (s: GameState, iid: string) => {
+  const c = s.cards[iid];
+  const d = def(s, iid);
+  const where = c.zone === 'hand' ? (d.type === 'Plot' ? (c.exposed ? 'exposed Plot' : 'hidden Plot') : `${d.type} card in hand`) : c.zone === 'resources' ? 'Resource in play' : 'Group in play';
+  const n = c.zone === 'structure' ? subtree(s, iid).length - 1 : 0;
+  return `${cardName(s, iid)} (${where}${n ? `, with ${n} puppet${n === 1 ? '' : 's'}` : ''})`;
+};
+
+function newDraft(s: GameState, to?: string): DealDraft {
+  return { to: to ?? rivalsLive(s)[0]?.id ?? '', give: [], pay: {}, get: [], place: {}, anyPlots: 0, anyCards: 0, note: '', lie: false };
+}
+
+/** A counter-offer starts from the offer turned around. */
+function counterDraft(s: GameState, d: Deal): DealDraft {
+  const spot = mySpots(s)[0]?.key ?? '';
+  return {
+    ...newDraft(s, d.from), counterOf: d.id,
+    give: [...(d.get.cards ?? []), ...(d.get.resources ?? []), ...(d.get.groups ?? []).map((g) => g.group)],
+    get: [...(d.give.cards ?? []), ...(d.give.resources ?? []), ...(d.give.groups ?? []).map((g) => g.group)],
+    place: Object.fromEntries((d.give.groups ?? []).map((g) => [g.group, spot])),
+  };
+}
+
+function sendDraft(s: GameState) {
+  const d = ui.draft;
+  if (!d) return;
+  const note = app.querySelector<HTMLInputElement>('#deal-note')?.value ?? d.note;
+  const mine = (k: string) => d.give.filter((c) => s.cards[c] && cardKind(s, c) === k);
+  const theirs = (k: string) => d.get.filter((c) => s.cards[c] && cardKind(s, c) === k);
+  const spot = mySpots(s)[0]?.key ?? '';
+  const give: DealSide = { cards: mine('hand'), resources: mine('res'), groups: mine('group').map((g) => ({ group: g, payWith: d.pay[g] || undefined })) };
+  const get: DealSide = {
+    cards: theirs('hand'), resources: theirs('res'), anyPlots: d.anyPlots, anyCards: d.anyCards,
+    groups: theirs('group').map((g): DealGroup => { const [onto, side] = (d.place[g] ?? spot).split(':'); return { group: g, onto: onto || undefined, side: (side || undefined) as Side | undefined }; }),
+  };
+  const lie = d.lie ? myLie(s) : undefined;
+  d.note = note;
+  act({ type: 'offerDeal', to: d.to, give, get, note: note.trim() || undefined, lie, counterOf: d.counterOf });
+  // Offline the move is made at once; online, the reply clears the draft once the offer is through.
+  if (!online && !ui.error) { ui.draft = undefined; render(); }
+}
+
+function answerFor(id: string): DealAnswer {
+  return ((ui.answers ??= {})[id] ??= { choose: [], place: {}, pay: {}, lie: false });
+}
+
+function acceptDeal(s: GameState, d: Deal) {
+  const a = answerFor(d.id);
+  const groups: DealGroup[] = [
+    ...(d.give.groups ?? []).map((g) => {
+      const [onto, side] = (a.place[g.group] ?? mySpots(s)[0]?.key ?? '').split(':');
+      return { group: g.group, onto, side: side as Side, payWith: g.payWith ?? (a.pay[g.group] || undefined) };
+    }),
+    ...(d.get.groups ?? []).filter((g) => !g.payWith).map((g) => ({ group: g.group, payWith: a.pay[g.group] || undefined })),
+  ];
+  act({ type: 'respondDeal', deal: d.id, accept: true, choose: a.choose, groups, lie: a.lie ? myLie(s) : undefined });
+}
+
+/** The choices an offer to you leaves open: which cards of yours, where its Groups go, who pays. */
+function answerForm(s: GameState, d: Deal): string {
+  const a = answerFor(d.id);
+  const me = player(s, ui.me);
+  const out: string[] = [];
+  const pick = (kind: 'Plot' | 'other', n: number) => {
+    const cards = me.hand.filter((c) => (kind === 'Plot') === (def(s, c).type === 'Plot') && !(d.get.cards ?? []).includes(c) && s.cards[c].cardId !== I_LIED);
+    return `<p class="small">Choose ${n} ${kind === 'Plot' ? `Plot${n === 1 ? '' : 's'}` : `Group or Resource card${n === 1 ? '' : 's'}`} to hand over:</p>
+      <div class="btns deal-picks">${cards.map((c) => `<button class="${a.choose.includes(c) ? 'on' : ''}" data-ans-pick="${d.id}|${c}">${esc(cardName(s, c))}</button>`).join('') || '<span class="muted small">You have none.</span>'}</div>`;
+  };
+  if (d.get.anyPlots) out.push(pick('Plot', d.get.anyPlots));
+  if (d.get.anyCards) out.push(pick('other', d.get.anyCards));
+  const spots = mySpots(s);
+  for (const g of d.give.groups ?? []) {
+    out.push(`<label class="deal-row">${esc(cardName(s, g.group))} goes onto <select data-ans-place="${d.id}|${g.group}">${spots.map((o) => `<option value="${o.key}" ${a.place[g.group] === o.key ? 'selected' : ''}>${esc(o.label)}</option>`).join('')}</select></label>`);
+    if (!g.payWith) out.push(`<label class="deal-row">Its handover costs an Action token, paid by <select data-ans-pay="${d.id}|${g.group}">${myPayers(s).map((x) => `<option value="${x}" ${a.pay[g.group] === x ? 'selected' : ''}>${esc(cardName(s, x))}</option>`).join('')}</select></label>`);
+  }
+  for (const g of (d.get.groups ?? []).filter((x) => !x.payWith)) {
+    const payers = [g.group, s.cards[g.group]?.master, me.illuminati].filter((x): x is string => !!x && s.cards[x]?.tokens > 0);
+    out.push(`<label class="deal-row">Handing over ${esc(cardName(s, g.group))} costs an Action token, paid by <select data-ans-pay="${d.id}|${g.group}">${payers.map((x) => `<option value="${x}" ${a.pay[g.group] === x ? 'selected' : ''}>${esc(cardName(s, x))}</option>`).join('')}</select></label>`);
+  }
+  if (myLie(s) && !sideEmpty(d.get)) out.push(`<label class="toggle"><input type="checkbox" data-ans-lie="${d.id}" ${a.lie ? 'checked' : ''}> Play I Lied as you accept: you get their side and keep yours (others may cancel it)</label>`);
+  return out.join('');
+}
+
+function renderDeals(s: GameState): string {
+  const err = ui.error ? `<div class="error" role="alert">${esc(ui.error)}</div>` : '';
+  const incoming = offersTo(s, ui.me);
+  const mine = offersFrom(s, ui.me);
+  const offerBox = (d: Deal) => `<div class="deal">
+      <p><b>From ${esc(player(s, d.from).name)}:</b> ${esc(dealText(s, d, ui.me))}.</p>
+      ${answerForm(s, d)}
+      <div class="btns"><button class="primary" data-deal-accept="${d.id}">Accept</button><button data-deal-decline="${d.id}">Decline</button><button data-deal-counter="${d.id}">Counter</button></div></div>`;
+  const myBox = (d: Deal) => `<div class="deal"><p><b>To ${esc(player(s, d.to).name)}:</b> ${esc(dealText(s, d, ui.me))}.${d.lie ? ' You will play I Lied if it is accepted.' : ''}</p>
+      <div class="btns"><button data-deal-cancel="${d.id}">Withdraw</button></div></div>`;
+  return `<div class="panel deals">${err}
+    <h2>Deals</h2>
+    <p class="small muted">Trades and gifts take effect the moment both players agree, and cannot be undone. A promise about later is only words: nobody has to keep it. Offers are seen only by the two players and lapse at the end of the turn. You can hand over cards from your hand whenever you like, but not during a draw or a choice, nor while a Plot waits to take effect. Groups and Resources in play change hands only in the main phase of one of the two players; handing over a Group costs one Action token.</p>
+    ${incoming.length ? `<h3>Offers to you</h3>${incoming.map(offerBox).join('')}` : ''}
+    ${mine.length ? `<h3>Your offers</h3>${mine.map(myBox).join('')}` : ''}
+    ${ui.draft ? draftForm(s, ui.draft) : `<div class="btns"><button class="primary" data-act="deal-new" ${rivalsLive(s).length ? '' : 'disabled'}>Make an offer</button></div>`}
+  </div>`;
+}
+
+function draftForm(s: GameState, d: DealDraft): string {
+  const me = player(s, ui.me);
+  const them = s.players.find((p) => p.id === d.to);
+  const pick = (attr: string, list: string[], on: string[]) => list.length
+    ? `<div class="btns deal-picks">${list.map((c) => `<button class="${on.includes(c) ? 'on' : ''}" data-${attr}="${c}">${esc(cardLabel(s, c))}</button>`).join('')}</div>` : '<p class="muted small">Nothing.</p>';
+  const myCards = [...me.hand.filter((c) => s.cards[c].cardId !== I_LIED || !d.lie), ...resourcesOf(s, ui.me).filter((r) => !s.cards[r].hiddenUnder), ...structureCards(s, ui.me).filter((g) => def(s, g).type === 'Group')];
+  const theirCards = them ? [
+    ...them.hand.filter((c) => s.cards[c].exposed || me.known?.includes(c)),
+    ...resourcesOf(s, them.id).filter((r) => !s.cards[r].hiddenUnder),
+    ...structureCards(s, them.id).filter((g) => def(s, g).type === 'Group'),
+  ].filter((c) => s.cards[c] && !s.cards[c].cardId.startsWith('hidden')) : [];
+  const spots = mySpots(s);
+  const pays = d.give.filter((g) => s.cards[g]?.zone === 'structure').map((g) => {
+    const payers = [g, s.cards[g].master, me.illuminati].filter((x): x is string => !!x && s.cards[x]?.tokens > 0);
+    return `<label class="deal-row">Pay for handing over ${esc(cardName(s, g))} with <select data-dpay="${g}"><option value="">(leave it to them)</option>${payers.map((x) => `<option value="${x}" ${d.pay[g] === x ? 'selected' : ''}>${esc(cardName(s, x))}</option>`).join('')}</select></label>`;
+  }).join('');
+  const places = d.get.filter((g) => s.cards[g]?.zone === 'structure').map((g) => `<label class="deal-row">${esc(cardName(s, g))} would go onto <select data-dplace="${g}">${spots.map((o) => `<option value="${o.key}" ${(d.place[g] ?? spots[0]?.key) === o.key ? 'selected' : ''}>${esc(o.label)}</option>`).join('')}</select></label>`).join('');
+  const num = (id: string, v: number) => `<select id="${id}">${[0, 1, 2, 3].map((n) => `<option ${n === v ? 'selected' : ''}>${n}</option>`).join('')}</select>`;
+  return `<h3>${d.counterOf ? 'Your counter-offer' : 'Make an offer'}</h3>
+    <label class="deal-row">To <select id="deal-to" ${d.counterOf ? 'disabled' : ''}>${rivalsLive(s).map((p) => `<option value="${p.id}" ${p.id === d.to ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select></label>
+    <h4>You give</h4>${pick('dgive', myCards, d.give)}${pays}
+    <h4>You ask for</h4>
+    <p class="small muted">Their hidden cards are secret: ask for exposed cards and things in play by name, or for cards of their choice.</p>
+    ${pick('dget', theirCards, d.get)}${places}
+    <label class="deal-row">Plots of their choice ${num('deal-anyplots', d.anyPlots)}</label>
+    <label class="deal-row">Group or Resource cards of their choice ${num('deal-anycards', d.anyCards)}</label>
+    <label class="deal-row">Promise (optional, not binding) <input id="deal-note" maxlength="${MAX_NOTE}" value="${esc(d.note)}" placeholder="e.g. I will not attack you next turn"></label>
+    ${myLie(s) ? `<label class="toggle"><input type="checkbox" id="deal-lie" ${d.lie ? 'checked' : ''}> Play I Lied if they accept: they hand over their side, you keep yours (they will not see this coming; others may cancel it)</label>` : ''}
+    <div class="btns"><button class="primary" data-act="deal-send">${!d.get.length && !d.anyPlots && !d.anyCards ? 'Send as a gift' : 'Send offer'}</button><button class="linkish" data-act="deal-drop">Cancel</button></div>`;
+}
+
+function bindDeals(s: GameState) {
+  const d = ui.draft;
+  const keepNote = () => { if (ui.draft) ui.draft.note = app.querySelector<HTMLInputElement>('#deal-note')?.value ?? ui.draft.note; };
+  const toggle = (list: string[], x: string) => (list.includes(x) ? list.filter((y) => y !== x) : [...list, x]);
+  app.querySelectorAll<HTMLElement>('[data-dgive]').forEach((b) => b.onclick = () => { if (!d) return; keepNote(); d.give = toggle(d.give, b.dataset.dgive!); render(); });
+  app.querySelectorAll<HTMLElement>('[data-dget]').forEach((b) => b.onclick = () => { if (!d) return; keepNote(); d.get = toggle(d.get, b.dataset.dget!); render(); });
+  app.querySelectorAll<HTMLSelectElement>('[data-dpay]').forEach((el) => el.onchange = () => { if (d) d.pay[el.dataset.dpay!] = el.value; });
+  app.querySelectorAll<HTMLSelectElement>('[data-dplace]').forEach((el) => el.onchange = () => { if (d) d.place[el.dataset.dplace!] = el.value; });
+  const to = app.querySelector<HTMLSelectElement>('#deal-to');
+  if (to && d) to.onchange = () => { keepNote(); ui.draft = { ...newDraft(s, to.value), give: d.give, pay: d.pay, note: d.note }; render(); };
+  const ap = app.querySelector<HTMLSelectElement>('#deal-anyplots');
+  if (ap && d) ap.onchange = () => { keepNote(); d.anyPlots = Number(ap.value); render(); };
+  const ac = app.querySelector<HTMLSelectElement>('#deal-anycards');
+  if (ac && d) ac.onchange = () => { keepNote(); d.anyCards = Number(ac.value); render(); };
+  const lie = app.querySelector<HTMLInputElement>('#deal-lie');
+  if (lie && d) lie.onchange = () => { keepNote(); d.lie = lie.checked; d.give = d.give.filter((c) => s.cards[c]?.cardId !== I_LIED); render(); };
+  const deal = (id: string) => (s.deals ?? []).find((x) => x.id === id);
+  app.querySelectorAll<HTMLElement>('[data-ans-pick]').forEach((b) => b.onclick = () => {
+    const [id, c] = b.dataset.ansPick!.split('|');
+    const a = answerFor(id);
+    a.choose = toggle(a.choose, c);
+    render();
+  });
+  app.querySelectorAll<HTMLSelectElement>('[data-ans-place]').forEach((el) => el.onchange = () => { const [id, g] = el.dataset.ansPlace!.split('|'); answerFor(id).place[g] = el.value; });
+  app.querySelectorAll<HTMLSelectElement>('[data-ans-pay]').forEach((el) => {
+    const [id, g] = el.dataset.ansPay!.split('|');
+    if (!answerFor(id).pay[g]) answerFor(id).pay[g] = el.value; // the first choice shown is the default
+    el.onchange = () => { answerFor(id).pay[g] = el.value; };
+  });
+  app.querySelectorAll<HTMLInputElement>('[data-ans-lie]').forEach((el) => el.onchange = () => { answerFor(el.dataset.ansLie!).lie = el.checked; });
+  app.querySelectorAll<HTMLElement>('[data-deal-accept]').forEach((b) => b.onclick = () => { const x = deal(b.dataset.dealAccept!); if (x) acceptDeal(s, x); });
+  app.querySelectorAll<HTMLElement>('[data-deal-decline]').forEach((b) => b.onclick = () => act({ type: 'respondDeal', deal: b.dataset.dealDecline!, accept: false }));
+  app.querySelectorAll<HTMLElement>('[data-deal-cancel]').forEach((b) => b.onclick = () => act({ type: 'cancelDeal', deal: b.dataset.dealCancel! }));
+  app.querySelectorAll<HTMLElement>('[data-deal-counter]').forEach((b) => b.onclick = () => { const x = deal(b.dataset.dealCounter!); if (x) { ui.draft = counterDraft(s, x); ui.showDeals = true; render(); } });
+}
+
 function renderLog(s: GameState): string {
   // Private lines (what a player saw with a card) are shown only to that player.
   const lines = s.log.filter((l) => (!l.to || l.to === ui.me) && (!l.info || tutorial())).slice(-120).reverse();
@@ -1596,6 +1817,7 @@ function bind() {
   const priv = app.querySelector<HTMLInputElement>('#priv');
   if (priv) priv.onchange = () => { if (ui.sel.kind === 'confirm') { ui.sel = { ...ui.sel, privileged: priv.checked }; render(); } };
   if (online) bindOrders();
+  bindDeals(s);
   const auto = app.querySelector<HTMLInputElement>('#autopass');
   if (auto) auto.onchange = () => { ui.autoPass = auto.checked; };
   app.querySelectorAll<HTMLElement>('[data-act]').forEach((b) => b.onclick = () => {
@@ -1607,6 +1829,10 @@ function bind() {
       case 'dice': if (ui.dice) ui.dice.start = 0; render(); schedule(); break;
       case 'hand': ui.handMin = !ui.handMin; render(); break;
       case 'log': ui.showLog = !ui.showLog; render(); break;
+      case 'deals': ui.showDeals = !ui.showDeals; ui.error = undefined; render(); break;
+      case 'deal-new': ui.draft = newDraft(s); render(); break;
+      case 'deal-send': sendDraft(s); break;
+      case 'deal-drop': ui.draft = undefined; render(); break;
       case 'style': ui.showStyle = !ui.showStyle; render(); break;
       case 'closeInspect': ui.inspect = undefined; render(); break;
       case 'guide':
@@ -1663,7 +1889,7 @@ declare const __ONLINE__: boolean;
 declare const __SB_URL__: string;
 declare const __SB_KEY__: string;
 
-interface GameSummary { id: string; invite: string; seats: { id: string; name: string; isAI: boolean; joined: boolean }[]; me?: string; host?: boolean; started: boolean; finished: boolean; yourMove: boolean; progress: string; illuminati?: string; updatedAt: number }
+interface GameSummary { id: string; invite: string; seats: { id: string; name: string; isAI: boolean; joined: boolean }[]; me?: string; host?: boolean; started: boolean; finished: boolean; yourMove: boolean; offers?: number; progress: string; illuminati?: string; updatedAt: number }
 interface Online {
   client: any; // eslint-disable-line @typescript-eslint/no-explicit-any
   userId?: string;
@@ -1709,7 +1935,7 @@ async function loadProfileSummary() {
 
 async function onlineMove(a: Action) {
   online!.busy = true; ui.error = undefined; render();
-  try { applyReply(await api({ op: 'move', gameId: online!.gameId, action: a })); ui.sel = { kind: 'none' }; }
+  try { applyReply(await api({ op: 'move', gameId: online!.gameId, action: a })); ui.sel = { kind: 'none' }; if (a.type === 'offerDeal') ui.draft = undefined; }
   catch (e) { ui.error = (e as Error).message; if (/moved first/.test(ui.error)) await refreshGame(); }
   online!.busy = false; render();
 }
@@ -1796,7 +2022,7 @@ function renderOnline() {
     <header class="bar"><div class="brand">Elitists War</div><button class="rb-bar-btn" data-rulebook="">Rulebook</button><div class="turn">${esc(o.name)} · <button class="linkish" data-o="signout">Sign out</button></div></header>
     ${msg}
     <section><div class="label">Your games</div><div class="saves">${o.games.map((g) => `
-      <div class="save"><button data-open="${g.id}"><b>${g.yourMove ? '● Your move — ' : ''}${esc(g.seats.map((x) => x.name || 'Open seat').join(' vs '))}</b>
+      <div class="save"><button data-open="${g.id}"><b>${g.yourMove ? '● Your move — ' : g.offers ? '● An offer for you — ' : ''}${esc(g.seats.map((x) => x.name || 'Open seat').join(' vs '))}</b>
       <span class="muted">${g.finished ? 'Finished' : g.started ? `${esc(g.illuminati ?? '')} · ${esc(g.progress)}` : `Waiting for players · invite ${esc(g.invite)}`}</span></button>${g.host || !g.started ? `<button class="del" data-del="${g.id}" data-host="${g.host ? 1 : ''}" aria-label="${g.host ? 'Delete game' : 'Leave game'}">${g.host ? 'Delete' : 'Leave'}</button>` : ''}</div>`).join('') || '<p class="muted">No games yet.</p>'}</div></section>
     ${alertsPanel()}
     ${mirrorPanel()}

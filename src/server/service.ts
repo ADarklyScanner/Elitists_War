@@ -6,7 +6,7 @@ import {
   type Action, type AiLevel, type GameState, type GameSettings, applyAction, createGame, hasResponse, player, waitingFor, randomDeck,
   RuleError, def, HOOKS, canExpose,
 } from '../engine';
-import { chooseAction } from '../ai/ai';
+import { applyDealAnswer, chooseAction, computerDealAnswer } from '../ai/ai';
 import { seatComputers, styleById, WILD_CARDS } from '../ai/personas';
 import { foldGame, habitsIn, mirrorSeats, noteAttacks, normalizeProfile, observeHuman, type MirrorSeat, type PlayProfile } from '../ai/profile';
 import { resolveLineup, type BotSpec } from '../ui/lineup';
@@ -242,6 +242,9 @@ export async function setOrders(store: Store, gameId: string, userId: string, or
 export function settle(rec: GameRecord, state: GameState): GameState {
   let s = state;
   for (let i = 0; i < 2000 && s.phase !== 'gameOver'; i++) {
+    // Computer players answer offers made to them at once, so no offer ever waits on them.
+    const ans = computerDealAnswer(s);
+    if (ans) { s = applyDealAnswer(s, ans); continue; }
     const waiting = waitingFor(s);
     const ai = waiting.find((id) => player(s, id).isAI);
     if (ai) {
@@ -407,6 +410,9 @@ export function viewFor(s: GameState, viewer: string): GameState {
   // A Goal or note written under a card (a card named in secret) stays secret, even once the card has
   // left play: only its controller (or, out of play, its owner) sees it.
   for (const c of Object.values(v.cards)) if (c.note && (c.controller ?? c.owner) !== viewer) c.note = '(secret)';
+  // Deal offers are private to their two players, and an offerer's secret I Lied stays secret.
+  if (v.deals) v.deals = v.deals.filter((d) => d.from === viewer || d.to === viewer).map((d) => (d.from === viewer ? d : { ...d, lie: undefined }));
+  if (v.dealWaits) v.dealWaits = v.dealWaits.filter((w) => w.deal.from === viewer || w.deal.to === viewer);
   // Each player sees only their own habits.
   if (v.habits) for (const k of Object.keys(v.habits)) if (k !== viewer) delete v.habits[k];
   if (v.setup) for (const k of Object.keys(v.setup.picks)) if (k !== viewer && v.setup.picks[k]) v.setup.picks[k] = 'chosen';

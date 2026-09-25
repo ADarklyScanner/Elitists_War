@@ -42,6 +42,8 @@ function summary(rec: GameRecord, userId: string) {
     started: !!s,
     finished: s?.phase === 'gameOver',
     yourMove: !!s && !!seat && waitingFor(s).includes(seat.id),
+    /** Deal offers waiting for this player's answer (they never hold up the game). */
+    offers: s && seat ? (s.deals ?? []).filter((d) => d.to === seat.id).length : 0,
     progress: s && seat ? `${goalCount(s, seat.id)}/${goalNeeded(s, seat.id)} Groups` : '',
     illuminati: s && seat ? cardName(s, s.players.find((p) => p.id === seat.id)!.illuminati) : undefined,
   };
