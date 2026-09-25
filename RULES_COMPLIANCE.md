@@ -1,6 +1,6 @@
 # Rules compliance
 
-How the engine matches the INWO rules (v1.2 plus the official Rules Update). Rule numbers are
+How the engine matches the rules it follows (version 1.2 plus the later rules update). Rule numbers are
 the Core Rules tab of `data/Elitists_War.xlsx`. "Tested" means `tests/compliance.test.ts` or
 `tests/rules.test.ts` checks it.
 

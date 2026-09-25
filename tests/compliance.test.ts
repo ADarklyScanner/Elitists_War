@@ -1,4 +1,4 @@
-// One test per checkable rule in the INWO rulebook (v1.2 + official Rules Update).
+// One test per checkable rule in the rulebook the game follows (v1.2 plus the later rules update).
 // Rule numbers refer to the Core Rules tab of the workbook.
 import { describe, expect, it } from 'vitest';
 import {

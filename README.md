@@ -1,6 +1,6 @@
 # Elitists War
 
-A digital version of the INWO card game, built from the rules and card database in
+A digital strategy card game of secret societies, built from the rules and card database in
 `data/Elitists_War.xlsx`.
 
 - `src/engine/` — the rules engine. The whole game is one JSON `GameState`; `applyAction(state, player, action)`

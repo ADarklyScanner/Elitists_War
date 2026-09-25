@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check that nothing we ship repeats the wording of the original INWO cards or rulebook.
+"""Check that nothing we ship repeats the wording of the original cards or rulebook this game is based on.
 
 Usage: python3 tools/check_originality.py <card_text.json> [rules.txt]
 
