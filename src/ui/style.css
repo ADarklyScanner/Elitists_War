@@ -383,3 +383,18 @@ p { margin: 0; }
 .card-legend ul { flex: 1; min-width: 220px; margin: 0; }
 .legend-card { position: relative; width: 84px; height: 118px; flex: none; margin: 12px 8px; cursor: default; }
 .vs .info-btn { margin-left: 4px; }
+/* Hand in two sections: Plots, then Groups & Resources */
+.dock .hand { align-items: stretch; gap: 0; }
+.hand-sec { display: flex; flex-direction: column; gap: 4px; flex: none; padding-right: 12px; }
+.hand-sec + .hand-sec { padding-left: 12px; border-left: 1px dashed var(--line); }
+.sec-label { font: 600 11px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); white-space: nowrap; }
+.sec-label b { color: var(--ink); font-family: var(--mono); margin-left: 2px; }
+.sec-label .muted { text-transform: none; letter-spacing: 0; font-family: var(--body); font-weight: 400; }
+.hand-sec.plots .sec-label { color: #c6b4e4; }
+.sec-cards { display: flex; gap: 8px; }
+.sec-empty { align-self: center; padding: 0 8px; }
+@media (max-width: 480px) { .sec-label .muted { display: none; } }
+.dock .hand-head { align-items: center; }
+.dock .hand-head .jump { border: 1px solid var(--line); background: var(--panel-2); border-radius: 999px; padding: 2px 9px; font-size: 12px; white-space: nowrap; }
+.dock .hand-head .jump.plots { color: #c6b4e4; border-color: #4b3d5c; }
+.dock .hand-head .fold { margin-left: auto; border: 0; background: none; color: var(--muted); padding: 2px 6px; }

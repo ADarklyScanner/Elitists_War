@@ -360,11 +360,14 @@ function render() {
       </aside>
     </main>
     <footer class="dock ${gnext('hand')} ${ui.handMin ? 'min' : ''}">
-      <button class="hand-head" data-act="hand" aria-expanded="${!ui.handMin}">
+      <div class="hand-head">
         <span class="label">Your hand</span>
-        <span class="muted small">${plotsInHand(s, ui.me).length} Plots (limit ${handLimit(s, ui.me)} outside your turn) · decks: ${me.plotDeck.length} Plots, ${me.groupDeck.length} Groups</span><i>${ui.handMin ? '▴' : '▾'}</i>
-      </button>
-      <div class="hand">${me.hand.map((iid) => handCard(s, iid)).join('') || '<span class="muted">No cards in hand.</span>'}</div>
+        <button class="jump plots" data-handjump="plots">Plots ${plotsInHand(s, ui.me).length}</button>
+        <button class="jump groups" data-handjump="groups">Groups ${me.hand.length - plotsInHand(s, ui.me).length}</button>
+        <span class="muted small">decks: ${me.plotDeck.length} Plots, ${me.groupDeck.length} Groups</span>
+        <button class="fold" data-act="hand" aria-expanded="${!ui.handMin}" aria-label="${ui.handMin ? 'Show' : 'Hide'} your hand">${ui.handMin ? '▴' : '▾'}</button>
+      </div>
+      <div class="hand">${handSections(s)}</div>
     </footer>
     ${diceOverlay()}
     ${ui.showRules ? `<div class="modal-back" data-rules=""></div><div class="modal rules" role="dialog" aria-label="Rules">${rulesHtml(s)}<div class="btns"><button data-rules="">Close</button></div></div>` : ''}
@@ -434,6 +437,20 @@ function onDeck(deck: 'plot' | 'group') {
     ? 'You draw from your Plot deck at the start of your turn. In your main phase you can also buy a Plot with an Action token.'
     : 'You draw from your Group deck at the start of your turn. In your main phase your Illuminati can also draw one Group card per turn.';
   render();
+}
+
+/** Your hand in two parts, as you'd hold it: secret Plots, and the Groups and Resources waiting to come into play. */
+function handSections(s: GameState): string {
+  const me = player(s, ui.me);
+  const plots = me.hand.filter((i) => def(s, i).type === 'Plot');
+  const groups = me.hand.filter((i) => def(s, i).type !== 'Plot');
+  const sec = (cls: string, label: string, note: string, cards: string[], empty: string) => `
+    <section class="hand-sec ${cls}" aria-label="${label}">
+      <div class="sec-label">${label} <b>${cards.length}</b> <span class="muted">${note}</span></div>
+      <div class="sec-cards">${cards.map((iid) => handCard(s, iid)).join('') || `<span class="muted small sec-empty">${empty}</span>`}</div>
+    </section>`;
+  return sec('plots', 'Plots', `· limit ${handLimit(s, ui.me)} outside your turn`, plots, 'No Plots.')
+    + sec('groups', 'Groups & Resources', '· no limit', groups, 'No Groups.');
 }
 
 function sheetTitle(s: GameState): string {
@@ -1210,6 +1227,10 @@ function bind() {
     ui.showRules = b.dataset.rules || undefined;
     render();
     if (ui.showRules) app.querySelector(`#rule-${ui.showRules}`)?.scrollIntoView({ block: 'start' });
+  });
+  app.querySelectorAll<HTMLElement>('[data-handjump]').forEach((b) => b.onclick = () => {
+    if (ui.handMin) { ui.handMin = false; render(); }
+    app.querySelector<HTMLElement>(`.hand-sec.${b.dataset.handjump}`)?.scrollIntoView({ inline: 'start', block: 'nearest', behavior: 'smooth' });
   });
   app.querySelectorAll<HTMLElement>('[data-deck]').forEach((b) => b.onclick = () => onDeck(b.dataset.deck as 'plot' | 'group'));
   app.querySelectorAll<HTMLElement>('[data-info]').forEach((b) => b.onclick = (e) => { e.stopPropagation(); ui.info = ui.info === b.dataset.info ? undefined : b.dataset.info; render(); });
