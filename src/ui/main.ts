@@ -37,6 +37,15 @@ interface Ui {
   thinking: boolean;
   /** Guide mode: green outlines on what you can use now, red on what you can't, and the next area to go to. */
   guide: boolean;
+  view?: { x: number; y: number; z: number; auto: boolean };
+  sheetMin?: boolean;
+  handMin?: boolean;
+  showLog?: boolean;
+  lastKey?: string;
+  /** The latest attack roll, shown as tumbling dice. */
+  dice?: { a: number; b: number; need: number; start: number };
+  logSeen?: number;
+  logGame?: string;
 }
 
 const ui: Ui = { game: null, me: 'p1', sel: { kind: 'none' }, autoPass: true, thinking: false, guide: loadGuidePref() };
@@ -104,6 +113,8 @@ function schedule() {
   if (!s || s.phase === 'gameOver') { ui.thinking = false; return; }
   const waiting = waitingFor(s);
   const ai = waiting.map((id) => player(s, id)).find((p) => p.isAI);
+  const diceLeft = ui.dice ? ui.dice.start + DICE_MS - Date.now() : 0;
+  if (diceLeft > 0) { timer = window.setTimeout(schedule, diceLeft + 30); return; } // let everyone see the roll
   if (ai) {
     ui.thinking = true;
     timer = window.setTimeout(() => {
@@ -124,7 +135,9 @@ function schedule() {
   }
   ui.thinking = false;
   // Nothing you could do in this window? Pass for you (can be turned off).
-  if (ui.autoPass && s.window && waiting.includes(ui.me) && !hasResponse(s, ui.me)) {
+  // Your own attack always waits for you to press "Roll the dice".
+  const myRoll = s.window?.kind === 'attack' && s.attack?.attackerPlayer === ui.me;
+  if (ui.autoPass && s.window && waiting.includes(ui.me) && !hasResponse(s, ui.me) && !myRoll) {
     timer = window.setTimeout(() => act({ type: 'pass' }), 250);
   }
 }
@@ -181,7 +194,7 @@ function computeGuide(s: GameState): Guide {
   const sel = ui.sel;
   const pr = s.prompt?.player === ui.me ? s.prompt : undefined;
   if (ui.slotChoice) { g.next = 'console'; g.text = 'Pick which arrow the card attaches to.'; return g; }
-  if (pr?.kind === 'choose' || pr?.kind === 'chooseLead') { g.next = 'console'; g.text = 'Make your choice on the right.'; return g; }
+  if (pr?.kind === 'choose' || pr?.kind === 'chooseLead') { g.next = 'console'; g.text = 'Make your choice in the panel.'; return g; }
   if (pr?.kind === 'takeover') {
     const opts = takeoverOptions(s, ui.me);
     if (sel.kind === 'takeover') {
@@ -190,13 +203,13 @@ function computeGuide(s: GameState): Guide {
     } else {
       mark(hand, (h) => opts.some((o) => o.card === h) || (def(s, h).type === 'Resource' && canEnterPlay(s, h, ui.me)));
       g.next = opts.length ? 'hand' : 'console';
-      g.text = opts.length ? 'Step 1 of 2: pick a green Group in your hand to take over for free (or Skip on the right).' : 'No Group in your hand fits an open arrow: tap Skip takeover.';
+      g.text = opts.length ? 'Step 1 of 2: pick a green Group in your hand to take over for free (or Skip).' : 'No Group in your hand fits an open arrow: tap Skip takeover.';
     }
     return g;
   }
   if (pr?.kind === 'discardToLimit') {
     mark(hand, (h) => def(s, h).type === 'Plot');
-    g.next = 'hand'; g.text = 'Tap the green Plots you want to get rid of, then confirm on the right.';
+    g.next = 'hand'; g.text = 'Tap the green Plots you want to get rid of, then confirm in the panel.';
     return g;
   }
   if (s.window && waitingFor(s).includes(ui.me)) {
@@ -205,7 +218,7 @@ function computeGuide(s: GameState): Guide {
     const acting = new Set(opts.flatMap((o) => o.action.type === 'aid' || o.action.type === 'oppose' ? [o.action.group] : o.action.type === 'useAbility' ? [o.action.card] : []));
     mark(mine, (c) => acting.has(c));
     g.next = 'console';
-    g.text = opts.length ? 'Green cards can respond: pick a response on the right, or Pass when you are done.' : 'Nothing you can do here: tap Pass.';
+    g.text = opts.length ? 'Green cards can respond: pick a response , or Pass when you are done.' : 'Nothing you can do here: tap Pass.';
     return g;
   }
   if (!idle(s)) { g.text = s.prompt || s.window ? 'Waiting for your rival.' : ''; return g; }
@@ -217,14 +230,14 @@ function computeGuide(s: GameState): Guide {
     mark(rivalCards, (c) => targets.has(c));
     if (sel.type === 'control') mark(hand.filter((h) => def(s, h).type === 'Group'), (h) => targets.has(h));
     g.next = [...targets].some((t) => s.cards[t].zone === 'hand') && ![...targets].some((t) => s.cards[t].zone === 'structure') ? 'hand' : 'rival';
-    g.text = targets.size ? `Step 3: tap a green target to attack to ${sel.type}.` : 'No legal targets for this attack: Cancel on the right.';
+    g.text = targets.size ? `Step 3: tap a green target to attack to ${sel.type}.` : 'No legal targets for this attack: Cancel.';
     return g;
   }
   if (sel.kind === 'move') { g.ok.add('slots'); g.next = 'board'; g.text = 'Tap a green + to move the Group there.'; return g; }
   if (sel.kind === 'link') { mark(mine, (c) => def(s, c).type !== 'Illuminati'); g.next = 'board'; g.text = 'Tap a green Group to link the Resource to it.'; return g; }
-  if (sel.kind === 'group') { g.next = 'console'; g.text = 'Step 2: choose what this Group does (green buttons on the right).'; return g; }
+  if (sel.kind === 'group') { g.next = 'console'; g.text = 'Step 2: choose what this Group does (green buttons in the panel).'; return g; }
   if (sel.kind === 'confirm') { g.next = 'console'; g.text = 'Step 4: add any Plots, then Declare attack.'; return g; }
-  if (sel.kind === 'plot' || sel.kind === 'resource') { g.next = 'console'; g.text = 'Pick how to play it on the right, or Close.'; return g; }
+  if (sel.kind === 'plot' || sel.kind === 'resource') { g.next = 'console'; g.text = 'Pick how to play it in the panel, or Close.'; return g; }
   const canUse = (c: string) => s.cards[c].tokens > 0 && (attackOptions(s, ui.me, c).length > 0 || abilityOptions(s, ui.me, c).length > 0 || def(s, c).type === 'Group');
   mark(mine, canUse);
   mark(res, (r) => abilityOptions(s, ui.me, r).length > 0 || !!HOOKS[s.cards[r].cardId]?.linkTo);
@@ -237,9 +250,9 @@ function computeGuide(s: GameState): Guide {
   const boardOk = mine.some((c) => g.ok.has(c));
   const handOk = hand.some((h) => g.ok.has(h));
   g.next = boardOk ? 'board' : handOk ? 'hand' : 'console';
-  g.text = boardOk ? 'Step 1: tap a green Group to attack or move with it' + (handOk ? ', or a green card in your hand' : '') + '. End your turn on the right when done.'
-    : handOk ? 'Step 1: play a green card from your hand, or end your turn on the right.'
-    : 'Nothing left to do this turn except buy cards: End turn on the right.';
+  g.text = boardOk ? 'Step 1: tap a green Group to attack or move with it' + (handOk ? ', or a green card in your hand' : '') + '. End your turn when done.'
+    : handOk ? 'Step 1: play a green card from your hand, or end your turn.'
+    : 'Nothing left to do this turn except buy cards: End turn.';
   return g;
 }
 
@@ -251,36 +264,194 @@ function render() {
   ensureLayout(ui.game); // a game saved before cards had real shapes
   G = computeGuide(ui.game);
   const s = ui.game;
-  const rival = s.players.find((p) => p.id !== ui.me)!;
+  noticeRolls(s);
+  // Open the action panel again whenever a new kind of decision comes up.
+  const key = `${s.turn}|${s.prompt?.kind ?? ''}|${s.window?.kind ?? ''}|${s.attack?.id ?? ''}|${ui.sel.kind}|${waitingFor(s).includes(ui.me)}`;
+  if (key !== ui.lastKey) {
+    ui.lastKey = key;
+    // On a phone the panel folds down to its "Next" line whenever the next step is on the table or in your hand.
+    const narrow = window.innerWidth <= 900;
+    if (waitingFor(s).includes(ui.me)) ui.sheetMin = narrow && (G.next === 'board' || G.next === 'rival' || G.next === 'hand');
+  }
+  const rivals = s.players.filter((p) => p.id !== ui.me);
+  const me = player(s, ui.me);
+  const recent = s.log.filter((l) => !l.to || l.to === ui.me).slice(-2).reverse();
   app.innerHTML = `
-    <header class="bar">
-      <button class="linkish" data-act="home">‹ Games</button>
-      <div class="brand">Elitists War</div>
-      <div class="turn">${s.phase === 'gameOver' ? 'Game over' : `Turn ${s.turn} · ${myTurn(s) ? 'your move' : 'computer\'s turn'}`}</div>
+  <div class="shell ${ui.guide ? 'guide' : ''}">
+    <header class="hud">
+      <button class="linkish" data-act="home" aria-label="Back to games">‹</button>
+      <div class="players">${s.players.map((p) => playerChip(s, p.id)).join('')}</div>
+      <span class="turn-no">${s.phase === 'gameOver' ? 'Game over' : `Turn ${s.turn}`}</span>
+      <button class="hud-btn" data-act="log">Log</button>
       <button class="guide-toggle ${ui.guide ? 'on' : ''}" data-act="guide" aria-pressed="${ui.guide}" title="Outline what you can do now">Guide ${ui.guide ? 'on' : 'off'}</button>
     </header>
-    <main class="table ${ui.guide ? 'guide' : ''}">
-      <section class="boards">
-        ${renderSide(s, rival.id, false)}
+    <main class="tablearea">
+      <div class="viewport" id="vp"><div class="world" id="world">
+        <div class="rivals">${rivals.map((r) => renderSide(s, r.id, false)).join('')}</div>
         ${renderNwo(s)}
         ${renderSide(s, ui.me, true)}
-      </section>
-      <aside class="console ${gnext('console')}">
-        ${G.text ? `<div class="guide-step" role="status"><b>Next:</b> ${esc(G.text)}</div>` : ''}
-        ${renderConsole(s)}
-        ${online ? ordersPanel() : ''}
-        ${renderInspect(s)}
-        ${renderLog(s)}
-      </aside>
-      <section class="hand-wrap ${gnext('hand')}">
-        <div class="hand-head">
-          <span class="label">Your hand</span>
-          <span class="muted">${plotsInHand(s, ui.me).length} Plots (limit ${handLimit(s, ui.me)} outside your turn) · ${player(s, ui.me).plotDeck.length} Plots and ${player(s, ui.me).groupDeck.length} Groups left in your decks</span>
+      </div></div>
+      <div class="ticker" aria-live="polite">${recent.map((l) => `<div>${esc(youText(l.text))}</div>`).join('')}</div>
+      <div class="zoom"><button data-zoom="in" aria-label="Zoom in">+</button><button data-zoom="out" aria-label="Zoom out">−</button><button data-zoom="fit">Fit</button></div>
+      ${renderInspect(s)}
+      <aside class="sheet ${ui.sheetMin ? 'min' : ''} ${gnext('console')}">
+        <div class="sheet-top">
+          <button class="sheet-handle" data-act="sheet" aria-expanded="${!ui.sheetMin}">
+            <span>${G.text ? `<b>Next:</b> ${esc(G.text)}` : waitingFor(s).includes(ui.me) ? '<b>Your move</b>' : esc(sheetTitle(s))}</span><i>${ui.sheetMin ? '▴' : '▾'}</i></button>
+          ${ui.sheetMin ? quickButton(s) : ''}
         </div>
-        <div class="hand">${player(s, ui.me).hand.map((iid) => handCard(s, iid)).join('') || '<span class="muted">No cards in hand.</span>'}</div>
-      </section>
-    </main>`;
+        <div class="sheet-body">${renderConsole(s)}${online ? ordersPanel() : ''}</div>
+      </aside>
+    </main>
+    <footer class="dock ${gnext('hand')} ${ui.handMin ? 'min' : ''}">
+      <button class="hand-head" data-act="hand" aria-expanded="${!ui.handMin}">
+        <span class="label">Your hand</span>
+        <span class="muted small">${plotsInHand(s, ui.me).length} Plots (limit ${handLimit(s, ui.me)} outside your turn) · decks: ${me.plotDeck.length} Plots, ${me.groupDeck.length} Groups</span><i>${ui.handMin ? '▴' : '▾'}</i>
+      </button>
+      <div class="hand">${me.hand.map((iid) => handCard(s, iid)).join('') || '<span class="muted">No cards in hand.</span>'}</div>
+    </footer>
+    ${diceOverlay()}
+    ${ui.showLog ? `<div class="modal-back" data-act="log"></div><div class="modal" role="dialog" aria-label="Game log">${renderLog(s)}<div class="btns"><button data-act="log">Close</button></div></div>` : ''}
+  </div>`;
   bind();
+  bindTable();
+}
+
+const DICE_MS = 2300;
+
+/** Spot new attack rolls in the log (yours, or anyone's) so the dice can be shown rolling. */
+function noticeRolls(s: GameState) {
+  if (ui.logGame !== s.id || ui.logSeen === undefined || ui.logSeen > s.log.length) { ui.logGame = s.id; ui.logSeen = s.log.length; return; }
+  for (const l of s.log.slice(ui.logSeen)) {
+    const m = l.text.match(/^Needs (-?\d+) or less on 2d6 — rolled (\d) \+ (\d)/);
+    if (m) {
+      ui.dice = { need: +m[1], a: +m[2], b: +m[3], start: Date.now() };
+      window.setTimeout(() => { if (ui.game) render(); }, DICE_MS + 20);
+    }
+  }
+  ui.logSeen = s.log.length;
+}
+
+const PIPS: Record<number, number[]> = { 1: [5], 2: [1, 9], 3: [1, 5, 9], 4: [1, 3, 7, 9], 5: [1, 3, 5, 7, 9], 6: [1, 3, 4, 6, 7, 9] };
+const dieFace = (n: number) => `<span class="die" aria-hidden="true">${Array.from({ length: 9 }, (_, i) => `<i class="${PIPS[n].includes(i + 1) ? 'on' : ''}"></i>`).join('')}</span>`;
+
+function diceOverlay(): string {
+  const d = ui.dice;
+  if (!d) return '';
+  const t = Date.now() - d.start;
+  if (t > DICE_MS) return '';
+  const sum = d.a + d.b;
+  const ok = sum <= d.need && sum < 11;
+  return `<div class="dice-overlay" data-act="dice" style="--t:-${t}ms" role="status" aria-label="Rolled ${d.a} and ${d.b}: ${sum}">
+    <div class="dice-pair">${dieFace(d.a)}${dieFace(d.b)}</div>
+    <div class="dice-result ${ok ? 'ok' : 'bad'}"><b>${sum}</b> ${ok ? 'Success' : 'Failure'} <span class="muted">needed ${d.need} or less${sum >= 11 ? ' — 11 or 12 always fails' : ''}</span></div>
+  </div>`;
+}
+
+/** The one main button, kept reachable while the action panel is folded. */
+function quickButton(s: GameState): string {
+  if (idle(s) && ui.sel.kind === 'none') return '<button class="quick primary" data-act="endTurn">End turn</button>';
+  if (s.window && waitingFor(s).includes(ui.me) && !s.prompt) {
+    const roll = s.window.kind === 'attack' && s.attack?.attackerPlayer === ui.me;
+    return `<button class="quick primary" data-act="pass">${roll ? '🎲 Roll' : 'Pass'}</button>`;
+  }
+  return '';
+}
+
+function sheetTitle(s: GameState): string {
+  if (s.phase === 'gameOver') return 'Game over';
+  const w = waitingFor(s).map((id) => player(s, id).name);
+  return w.length ? `Waiting for ${w.join(', ')}` : 'Actions';
+}
+
+/** One player in the top bar: name, Groups toward the goal, and whose turn it is. */
+function playerChip(s: GameState, pl: string): string {
+  const p = player(s, pl);
+  const n = goalCount(s, pl), need = goalNeeded(s, pl);
+  const active = s.players[s.active].id === pl && s.phase !== 'gameOver';
+  const inHand = pl === ui.me ? '' : ` · ${p.hand.filter((i) => def(s, i).type === 'Plot').length}P ${p.hand.filter((i) => def(s, i).type !== 'Plot').length}G`;
+  return `<span class="pchip ${active ? 'active' : ''} ${pl === ui.me ? 'me' : ''} ${p.eliminated ? 'out' : ''}" title="${esc(p.name)}: ${n} of ${need} Groups${inHand ? `; ${inHand.slice(3)} in hand` : ''}">
+    <b>${esc(pl === ui.me ? 'You' : p.name)}</b><span class="goal-bar"><span style="width:${Math.min(100, (n / need) * 100)}%"></span></span><span class="mono">${n}/${need}</span><span class="muted">${inHand}</span></span>`;
+}
+
+// The human player is called "You", so fix the verb: "You leads" -> "You lead".
+const youText = (t: string) => t.replace(/(^|\s)You (has|\w+?)s\b/g, (_m, pre, v) => `${pre}You ${v === 'has' ? 'have' : v}`);
+
+// ------------------------------------------------------------------ table pan and zoom
+
+/** Frame the whole table, leaving room for the action panel. */
+function fitView(vp: HTMLElement, world: HTMLElement) {
+  const wide = vp.clientWidth > 900;
+  const sheet = vp.parentElement!.querySelector<HTMLElement>('.sheet');
+  const aw = vp.clientWidth - (wide ? 372 : 0) - 16;
+  const ah = vp.clientHeight - (!wide && sheet ? sheet.offsetHeight + 8 : 0) - 16;
+  const ww = world.offsetWidth, wh = world.offsetHeight;
+  const z = Math.max(0.3, Math.min(1.5, aw / ww, ah / wh));
+  ui.view = { x: 8 + (aw - ww * z) / 2, y: 8 + Math.max(0, (ah - wh * z) / 2), z, auto: true };
+}
+
+function applyView(world: HTMLElement) {
+  const v = ui.view!;
+  world.style.transform = `translate(${v.x}px, ${v.y}px) scale(${v.z})`;
+}
+
+function zoomAt(px: number, py: number, factor: number) {
+  const v = ui.view!;
+  const z = Math.max(0.25, Math.min(3, v.z * factor));
+  v.x = px - ((px - v.x) * z) / v.z;
+  v.y = py - ((py - v.y) * z) / v.z;
+  v.z = z; v.auto = false;
+}
+
+function bindTable() {
+  const vp = app.querySelector<HTMLElement>('#vp');
+  const world = app.querySelector<HTMLElement>('#world');
+  if (!vp || !world) return;
+  // On a landscape screen the rivals sit beside you rather than above, so the cards come out bigger.
+  const wide = vp.clientWidth - (vp.clientWidth > 900 ? 372 : 0) > vp.clientHeight * 1.25;
+  world.classList.toggle('wide', wide);
+  if (!ui.view || ui.view.auto) fitView(vp, world);
+  applyView(world);
+  const pts = new Map<number, { x: number; y: number }>();
+  let moved = 0;
+  let pinch = 0;
+  vp.onpointerdown = (e) => { pts.set(e.pointerId, { x: e.clientX, y: e.clientY }); moved = 0; pinch = 0; };
+  vp.onpointermove = (e) => {
+    const prev = pts.get(e.pointerId);
+    if (!prev) return;
+    const cur = { x: e.clientX, y: e.clientY };
+    if (pts.size === 1) {
+      moved += Math.abs(cur.x - prev.x) + Math.abs(cur.y - prev.y);
+      if (moved > 6) {
+        if (!vp.hasPointerCapture(e.pointerId)) vp.setPointerCapture(e.pointerId);
+        ui.view!.x += cur.x - prev.x; ui.view!.y += cur.y - prev.y; ui.view!.auto = false; applyView(world);
+      }
+    } else if (pts.size === 2) {
+      const [a, b] = [...pts.values()];
+      const other = a === prev ? b : a;
+      const d0 = Math.hypot(prev.x - other.x, prev.y - other.y), d1 = Math.hypot(cur.x - other.x, cur.y - other.y);
+      const r = vp.getBoundingClientRect();
+      if (d0 > 0) { zoomAt((cur.x + other.x) / 2 - r.left, (cur.y + other.y) / 2 - r.top, d1 / d0); applyView(world); }
+      moved = 99; pinch = 1;
+    }
+    pts.set(e.pointerId, cur);
+  };
+  const up = (e: PointerEvent) => { pts.delete(e.pointerId); };
+  vp.onpointerup = up; vp.onpointercancel = up;
+  // A drag or pinch is not a tap on the card underneath.
+  vp.addEventListener('click', (e) => { if (moved > 6 || pinch) { e.stopPropagation(); e.preventDefault(); moved = 0; pinch = 0; } }, true);
+  vp.onwheel = (e) => {
+    e.preventDefault();
+    const r = vp.getBoundingClientRect();
+    zoomAt(e.clientX - r.left, e.clientY - r.top, e.deltaY < 0 ? 1.12 : 1 / 1.12);
+    applyView(world);
+  };
+  app.querySelectorAll<HTMLElement>('[data-zoom]').forEach((b) => b.onclick = () => {
+    const z = b.dataset.zoom;
+    if (z === 'fit') fitView(vp, world);
+    else zoomAt(vp.clientWidth / 2, vp.clientHeight / 2, z === 'in' ? 1.25 : 0.8);
+    applyView(world);
+  });
 }
 
 function renderSide(s: GameState, pl: string, mine: boolean): string {
@@ -309,7 +480,7 @@ function renderSide(s: GameState, pl: string, mine: boolean): string {
   return `
     <div class="side ${mine ? 'mine' : 'theirs'} ${s.players[s.active].id === pl && s.phase !== 'gameOver' ? 'active' : ''} ${gnext(mine ? 'board' : 'rival')}">
       <div class="side-head">
-        <span class="who">${mine ? 'Your Power Structure' : 'Computer'}</span>
+        <span class="who">${mine ? 'Your Power Structure' : esc(p.name)}</span>
         <span class="goal" title="Groups controlled toward the Basic Goal">
           <span class="goal-bar"><span style="width:${Math.min(100, (n / need) * 100)}%"></span></span>
           <b>${n}</b>/${need} Groups
@@ -492,7 +663,7 @@ function renderConsole(s: GameState): string {
       : s.window.kind === 'roll' ? '<p>The dice are down. Cards that change rolls can be played now.</p>' : '';
     body = `${s.attack ? attackPanel(s) : ''}${head}
       <div class="opts">${opts.map((o, i) => `<button data-opt="${i}">${esc(o.label)}</button>`).join('')}</div>
-      <div class="btns"><button class="primary" data-act="pass">${s.window.kind === 'attack' && s.attack?.attackerPlayer === ui.me ? 'Roll the dice' : 'Pass'}</button>${s.window.kind === 'attack' && s.attack?.attackerPlayer === ui.me && !s.attack.instant && !s.attack.plays.some((pp) => pp.player === ui.me) ? '<button data-act="callOff">Call off the attack</button>' : ''}</div>`;
+      <div class="btns"><button class="primary" data-act="pass">${s.window.kind === 'attack' && s.attack?.attackerPlayer === ui.me ? '🎲 Roll the dice' : 'Pass'}</button>${s.window.kind === 'attack' && s.attack?.attackerPlayer === ui.me && !s.attack.instant && !s.attack.plays.some((pp) => pp.player === ui.me) ? '<button data-act="callOff">Call off the attack</button>' : ''}</div>`;
     (window as unknown as { __opts: typeof opts }).__opts = opts;
   } else if (idle(s)) {
     body = renderMainConsole(s);
@@ -518,6 +689,7 @@ function renderMainConsole(s: GameState): string {
         <button ${canControl ? '' : 'disabled'} data-act="atk-control">Attack to control</button>
         <button ${canDestroy ? '' : 'disabled'} data-act="atk-destroy">Attack to destroy</button>
         ${canMove ? `<button data-act="move">Move</button>` : ''}
+        <button class="linkish" data-inspect="${sel.iid}">Details</button>
         <button class="linkish" data-act="clear">Cancel</button>
       </div>
       ${abilityButtons(s, sel.iid)}
@@ -606,7 +778,8 @@ function renderInspect(s: GameState): string {
   const stats = d.type === 'Group' || d.type === 'Illuminati'
     ? `<div class="kv"><span>Power</span><b>${power(s, iid)}${d.globalPower ? ` / ${globalPower(s, iid)} Global` : ''}</b>${d.type === 'Group' ? `<span>Resistance</span><b>${resistance(s, iid)}</b>` : ''}</div>
        <div>${alignments(s, iid).map(chip).join(' ')} ${(d.attributes ?? []).map((a) => `<span class="attr">${a}</span>`).join(' ')}</div>` : '';
-  return `<div class="panel inspect">
+  return `<div class="panel inspect popover">
+    <button class="close" data-act="closeInspect" aria-label="Close">×</button>
     <div class="label">${esc(d.subtype)}</div><h3>${esc(d.name)}</h3>${stats}
     <p class="small">${esc(d.text)}</p>
     ${pending.length ? `<p class="small warn">Not active yet in this version: ${esc(pending.join('; '))}.</p>` : ''}
@@ -617,7 +790,7 @@ function renderInspect(s: GameState): string {
 
 function renderLog(s: GameState): string {
   // Private lines (what a player saw with a card) are shown only to that player.
-  const lines = s.log.filter((l) => !l.to || l.to === ui.me).slice(-40).reverse();
+  const lines = s.log.filter((l) => !l.to || l.to === ui.me).slice(-120).reverse();
   // The human player is called "You", so fix the verb: "You leads" -> "You lead".
   const you = (t: string) => t.replace(/(^|\s)You (has|\w+?)s\b/g, (_m, pre, v) => `${pre}You ${v === 'has' ? 'have' : v}`);
   return `<div class="panel log"><div class="label">Log</div><ol>${lines.map((l) => `<li class="${l.player === ui.me ? 'me' : l.player ? 'them' : ''} ${l.text.startsWith('—') ? 'turnline' : ''}">${esc(you(l.text))}</li>`).join('')}</ol></div>`;
@@ -665,8 +838,8 @@ function renderStart() {
 
 function onTableCard(iid: string) {
   const s = ui.game!;
-  ui.inspect = iid;
   ui.error = undefined;
+  const before = JSON.stringify(ui.sel);
   const sel = ui.sel;
   if (sel.kind === 'attack') {
     const opt = attackOptions(s, ui.me, sel.attacker).find((o) => o.target === iid && o.type === sel.type);
@@ -676,13 +849,16 @@ function onTableCard(iid: string) {
   if (idle(s) && s.cards[iid].controller === ui.me && sel.kind !== 'move') {
     ui.sel = { kind: 'group', iid };
   }
+  // A tap that does nothing else shows the card's details.
+  ui.inspect = JSON.stringify(ui.sel) === before ? iid : undefined;
   render();
 }
 
 function onHandCard(iid: string) {
   const s = ui.game!;
-  ui.inspect = iid;
   ui.error = undefined;
+  const before = JSON.stringify(ui.sel);
+  ui.inspect = undefined;
   const d = def(s, iid);
   const sel = ui.sel;
   if (s.prompt?.player === ui.me && s.prompt.kind === 'discardToLimit') {
@@ -700,6 +876,7 @@ function onHandCard(iid: string) {
   } else if (d.type === 'Plot' && (idle(s) || (s.window && waitingFor(s).includes(ui.me)))) {
     ui.sel = idle(s) ? { kind: 'plot', card: iid } : ui.sel;
   }
+  if (JSON.stringify(ui.sel) === before) ui.inspect = iid;
   render();
 }
 
@@ -775,8 +952,13 @@ function bind() {
   app.querySelectorAll<HTMLElement>('[data-act]').forEach((b) => b.onclick = () => {
     const sel = ui.sel;
     switch (b.dataset.act) {
-      case 'home': clearTimeout(timer); ui.game = null; if (online) { online.gameId = undefined; online.channel?.unsubscribe(); loadGames(); } render(); break;
+      case 'home': clearTimeout(timer); ui.game = null; ui.view = undefined; ui.inspect = undefined; ui.showLog = false; if (online) { online.gameId = undefined; online.channel?.unsubscribe(); loadGames(); } render(); break;
       case 'clear': ui.sel = { kind: 'none' }; ui.error = undefined; render(); break;
+      case 'sheet': ui.sheetMin = !ui.sheetMin; render(); break;
+      case 'dice': if (ui.dice) ui.dice.start = 0; render(); schedule(); break;
+      case 'hand': ui.handMin = !ui.handMin; render(); break;
+      case 'log': ui.showLog = !ui.showLog; render(); break;
+      case 'closeInspect': ui.inspect = undefined; render(); break;
       case 'guide':
         ui.guide = !ui.guide;
         try { localStorage.setItem('elitists-war.guide', ui.guide ? 'on' : 'off'); } catch { /* storage unavailable */ }

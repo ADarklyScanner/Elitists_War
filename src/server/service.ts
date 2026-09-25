@@ -172,6 +172,8 @@ export function settle(rec: GameRecord, state: GameState): GameState {
 
 function autoPasses(rec: GameRecord, s: GameState, pl: string): boolean {
   const o = rec.orders[pl] ?? DEFAULT_ORDERS;
+  // Your own attack waits for you to roll the dice.
+  if (s.window?.kind === 'attack' && s.attack?.attackerPlayer === pl) return false;
   if (o.passWhenNothing && !hasResponse(s, pl)) return true;
   if (o.passWhenUninvolved && s.attack && s.attack.attackerPlayer !== pl && s.attack.targetPlayer !== pl) return true;
   return false;

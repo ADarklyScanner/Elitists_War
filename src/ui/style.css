@@ -215,3 +215,112 @@ p { margin: 0; }
 
 .save .del, .danger { border: 1px solid #e05a4b66; background: transparent; color: #f0a79d; border-radius: 7px; padding: 6px 10px; font-size: 12.5px; }
 .save .del:hover, .danger:hover { background: #e05a4b1a; }
+
+/* =====================================================================
+   Game screen: the table fills the screen, the hand sits at the bottom,
+   and everything else (actions, card details, log) floats over the table.
+   ===================================================================== */
+.shell { position: fixed; inset: 0; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; background: var(--ground);
+  padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px); }
+.hud { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-bottom: 1px solid var(--line); background: var(--panel); min-width: 0; }
+.hud .linkish { font-size: 22px; line-height: 1; padding: 2px 8px 4px 2px; text-decoration: none; }
+.players { display: flex; gap: 6px; flex: 1; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+.pchip { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel-2); font-size: 12.5px; }
+.pchip.active { border-color: var(--brass); box-shadow: 0 0 0 1px var(--brass) inset; }
+.pchip.me b { color: var(--brass); }
+.pchip.out { opacity: .45; text-decoration: line-through; }
+.pchip .goal-bar { width: 40px; height: 5px; }
+.pchip .mono { font-family: var(--mono); }
+.turn-no { color: var(--muted); font-size: 12.5px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.hud-btn { padding: 5px 10px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); font-size: 12.5px; }
+
+.tablearea { position: relative; overflow: hidden; min-height: 0; }
+.viewport { position: absolute; inset: 0; overflow: hidden; touch-action: none; cursor: grab;
+  background: radial-gradient(ellipse at 50% 60%, #15252c, var(--ground) 75%); }
+.viewport:active { cursor: grabbing; }
+.world { position: absolute; left: 0; top: 0; transform-origin: 0 0; display: flex; flex-direction: column; align-items: center; gap: 22px; padding: 16px; width: max-content; }
+.world .rivals { display: flex; gap: 22px; align-items: flex-end; justify-content: center; flex-wrap: nowrap; }
+.world .side { width: max-content; }
+.world .board-scroll { overflow: visible; padding: 10px 18px; }
+.world .side-head { padding: 7px 12px; }
+
+.ticker { position: absolute; left: 10px; top: 8px; max-width: min(520px, calc(100% - 20px)); pointer-events: none; display: flex; flex-direction: column; gap: 3px; }
+.ticker div { background: #0e171bd9; border: 1px solid var(--line); border-radius: 6px; padding: 3px 8px; font-size: 12px; color: var(--muted); width: fit-content; }
+.ticker div:first-child { color: var(--ink); }
+.zoom { position: absolute; left: 10px; bottom: 10px; display: flex; gap: 4px; }
+.zoom button { min-width: 34px; height: 34px; border-radius: 8px; border: 1px solid var(--line); background: #15232ae6; color: var(--ink); font-size: 16px; padding: 0 8px; }
+.zoom button[data-zoom="fit"] { font-size: 12.5px; }
+
+/* The action panel ("sheet"): floats at the right on wide screens, above the hand on phones. */
+.sheet { position: absolute; right: 10px; top: 10px; width: 350px; max-height: calc(100% - 20px); display: flex; flex-direction: column;
+  border: 1px solid color-mix(in srgb, var(--brass) 45%, var(--line)); border-radius: 12px; background: #15232af2; box-shadow: 0 10px 30px #0008; overflow: hidden; }
+.sheet-handle { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; border: 0; background: var(--panel-2); padding: 9px 12px; font-size: 13px; border-bottom: 1px solid var(--line); }
+.sheet-handle span { flex: 1; min-width: 0; }
+.sheet-handle b { color: var(--ok); font-family: var(--display); text-transform: uppercase; letter-spacing: .06em; font-size: 12px; margin-right: 4px; }
+.sheet-handle i { font-style: normal; color: var(--muted); }
+.sheet-body { overflow: auto; padding: 10px; display: flex; flex-direction: column; gap: 10px; }
+.sheet-body .panel { border: 0; padding: 4px 4px; background: transparent; }
+.sheet.min { max-height: none; }
+.sheet.min .sheet-body { display: none; }
+.sheet.min .sheet-handle { border-bottom: 0; }
+.sheet.min .sheet-handle span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.popover { position: absolute; left: 10px; top: 64px; width: 290px; max-height: calc(100% - 130px); overflow: auto; z-index: 3; box-shadow: 0 10px 30px #0008; background: #15232af5; }
+.popover .close { position: absolute; right: 6px; top: 4px; border: 0; background: none; color: var(--muted); font-size: 22px; line-height: 1; padding: 4px 8px; }
+
+.dock { border-top: 1px solid var(--line); background: var(--panel); min-width: 0; }
+.dock .hand-head { display: flex; align-items: baseline; gap: 10px; width: 100%; border: 0; background: none; padding: 6px 12px 4px; text-align: left; }
+.dock .hand-head .muted { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dock .hand-head i { font-style: normal; color: var(--muted); }
+.dock .hand { display: flex; gap: 8px; overflow-x: auto; padding: 4px 12px 10px; }
+.dock .hcard { flex: 0 0 136px; min-height: 112px; }
+.dock .hcard .txt { -webkit-line-clamp: 3; }
+.dock.min .hand { display: none; }
+.guide .dock.g-next { outline: 0; box-shadow: inset 0 2px 0 var(--ok), 0 0 18px -6px var(--ok); border-radius: 0; }
+.guide .sheet.g-next { outline: 1px solid var(--ok); outline-offset: 0; }
+
+.modal-back { position: fixed; inset: 0; background: #0009; z-index: 10; }
+.modal { position: fixed; z-index: 11; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(560px, calc(100% - 24px)); max-height: min(80vh, 700px); overflow: auto;
+  border: 1px solid var(--line); border-radius: 12px; background: var(--panel); padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+.modal .panel { border: 0; padding: 0; }
+
+@media (max-width: 900px) {
+  .sheet { left: 8px; right: 8px; top: auto; bottom: 8px; width: auto; max-height: 52%; }
+  .popover { top: 56px; width: min(300px, calc(100% - 20px)); max-height: 45%; }
+  .zoom { left: auto; right: 10px; top: 8px; bottom: auto; flex-direction: column; }
+  .ticker { max-width: calc(100% - 70px); }
+  .turn-no { display: none; }
+}
+@media (max-width: 480px) {
+  .dock .hcard { flex-basis: 118px; min-height: 100px; padding: 6px; }
+  .dock .hcard .name { font-size: 13.5px; }
+  .dock .hcard .txt { font-size: 11px; }
+  .pchip { padding: 3px 7px; gap: 4px; }
+  .pchip .goal-bar { display: none; }
+}
+
+/* Dice: tumble in the middle of the table, then show the result. */
+.dice-overlay { position: fixed; inset: 0; z-index: 20; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; background: #0006;
+  animation: dice-fade 2.3s linear forwards; animation-delay: var(--t); }
+.dice-pair { display: flex; gap: 18px; }
+.die { width: 64px; height: 64px; border-radius: 12px; background: #f3efe4; box-shadow: 0 8px 20px #000a, inset 0 -4px 0 #d8d1bf; display: grid; grid-template: repeat(3, 1fr) / repeat(3, 1fr); padding: 9px; gap: 2px;
+  animation: dice-tumble .9s cubic-bezier(.2,.8,.3,1) both; animation-delay: var(--t); }
+.die + .die { animation-name: dice-tumble-2; }
+.die i { border-radius: 50%; }
+.die i.on { background: #1a1406; margin: 2px; }
+.dice-result { opacity: 0; animation: dice-result .3s ease-out forwards; animation-delay: calc(var(--t) + .95s); background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 14px; font-size: 15px; }
+.dice-result b { font-family: var(--mono); font-size: 20px; margin-right: 6px; }
+.dice-result.ok { border-color: var(--ok); color: var(--ok); }
+.dice-result.bad { border-color: var(--threat); color: #f0a79d; }
+.dice-result .muted { font-size: 12.5px; margin-left: 4px; }
+@keyframes dice-tumble { 0% { transform: translate(-160px, -120px) rotate(-540deg) scale(.6); filter: blur(2px); } 70% { transform: translate(6px, 4px) rotate(12deg) scale(1.05); filter: blur(0); } 100% { transform: none; } }
+@keyframes dice-tumble-2 { 0% { transform: translate(170px, -140px) rotate(620deg) scale(.6); filter: blur(2px); } 70% { transform: translate(-5px, 6px) rotate(-10deg) scale(1.05); filter: blur(0); } 100% { transform: none; } }
+@keyframes dice-result { to { opacity: 1; } }
+@keyframes dice-fade { 0%, 88% { opacity: 1; } 100% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .die { animation: none; } .dice-result { animation-delay: 0s; } }
+.world.wide { flex-direction: row-reverse; align-items: center; }
+.world.wide .rivals { flex-direction: column; align-items: center; }
+.sheet-top { display: flex; align-items: stretch; background: var(--panel-2); border-bottom: 1px solid var(--line); }
+.sheet-top .sheet-handle { border-bottom: 0; width: auto; flex: 1; min-width: 0; }
+.sheet.min .sheet-top { border-bottom: 0; }
+.sheet-top .quick { margin: 5px 6px 5px 0; border-radius: 7px; padding: 6px 12px; white-space: nowrap; border: 1px solid var(--brass); background: var(--brass); color: #1a1406; font-weight: 600; }
