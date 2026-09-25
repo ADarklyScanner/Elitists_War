@@ -20,7 +20,7 @@ import type { AiLevel, AnnouncedKind, Choice, GameEvent, PlotEffect } from './ty
 // ---------------------------------------------------------------- setup
 
 export interface DeckList { illuminati: string; plots: string[]; groups: string[] }
-export interface NewPlayer { id: string; name: string; isAI: boolean; aiLevel?: AiLevel; deck: DeckList }
+export interface NewPlayer { id: string; name: string; isAI: boolean; aiLevel?: AiLevel; aiStyle?: string; deck: DeckList }
 
 export const DEFAULT_SETTINGS: GameSettings = { basicGoal: 12, responseHours: 24, houseRules: [] };
 
@@ -62,7 +62,7 @@ export function createGame(opts: { id?: string; seed?: number; players: NewPlaye
     Object.assign(s.cards[ill], { controller: p.id, x: 0, y: 0, rot: 0 });
     s.layout = LAYOUT_VERSION;
     const player: PlayerState = {
-      id: p.id, name: p.name, isAI: p.isAI, ...(p.isAI && p.aiLevel ? { aiLevel: p.aiLevel } : {}), illuminati: ill,
+      id: p.id, name: p.name, isAI: p.isAI, ...(p.isAI && p.aiLevel ? { aiLevel: p.aiLevel } : {}), ...(p.isAI && p.aiStyle ? { aiStyle: p.aiStyle } : {}), illuminati: ill,
       plotDeck: shuffle(s, p.deck.plots.map((c) => mk(c, 'plotDeck'))),
       groupDeck: p.deck.groups.map((c) => mk(c, 'groupDeck')),
       hand: [], discard: [], destroyedCredit: [], turnsTaken: 0, eliminated: false, autoPass: false,

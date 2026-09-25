@@ -85,6 +85,7 @@ export interface PlayerState {
   name: string;
   isAI: boolean;
   aiLevel?: AiLevel;       // how well a computer player plays (default 'normal')
+  aiStyle?: string;        // which named computer this is: its habits (see src/ai/personas.ts)
   illuminati: string;      // iid
   plotDeck: string[];      // top of deck = index 0
   groupDeck: string[];
