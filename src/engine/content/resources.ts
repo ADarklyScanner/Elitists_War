@@ -945,7 +945,7 @@ const T: Record<string, CardHooks> = {
       apply(s, pl, self, p) {
         s.cards[player(s, pl).illuminati].tokens--;
         s.turnFlags.resourcePlayed = true;
-        playResourceCard(s, p.target!, pl, { hiddenUnder: self });
+        playResourceCard(s, p.target!, pl, { hiddenUnder: self, refund: 'resource' });
       },
     }, {
       id: 'reveal', label: 'Turn a Resource in Warehouse 23 face up', timing: ['main', 'anytime', 'attack', 'roll'], usesToken: false,
@@ -956,6 +956,13 @@ const T: Record<string, CardHooks> = {
       },
       apply(s, pl, self, p) {
         const t = p.target!;
+        // A copy kept hidden while a rival played the same Unique Resource was lost: once exposed, it goes (R041).
+        if (s.cards[t].forfeited) {
+          log(s, `${player(s, pl).name} turns ${cardName(s, t)} face up from ${cardName(s, self)}, but a rival already has that Unique Resource in play, so it is discarded.`, pl);
+          s.cards[t].hiddenUnder = undefined;
+          discardCard(s, t);
+          return;
+        }
         s.cards[t].hiddenUnder = undefined;
         log(s, `${player(s, pl).name} turns ${cardName(s, t)} face up from ${cardName(s, self)}.`, pl);
         hooksOf(s, t)?.onEnterPlay?.(s, t);

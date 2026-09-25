@@ -34,7 +34,11 @@ export interface CardDef {
   variableStats?: boolean;
 }
 
-export type Zone = 'plotDeck' | 'groupDeck' | 'hand' | 'structure' | 'resources' | 'discard' | 'destroyed' | 'table' | 'removed';
+/**
+ * 'agents': a spare Illuminati card played from hand as an agent inside a rival Illuminati (R044). It
+ * lies beside its player's Resources but is not a Resource.
+ */
+export type Zone = 'plotDeck' | 'groupDeck' | 'hand' | 'structure' | 'resources' | 'discard' | 'destroyed' | 'table' | 'removed' | 'agents';
 
 /** A temporary or permanent change to a card. */
 export interface Modifier {
@@ -75,6 +79,17 @@ export interface CardInstance {
   note?: string;           // secret note written under a card (Ark of the Covenant, Holy Grail)
   data?: Record<string, unknown>; // card-specific memory for scripted cards
   hiddenUnder?: string;    // Resources: face down under this card (Warehouse 23): inactive, unseen by rivals
+  /** A face-down Unique Resource its controller showed when a rival tried to play a copy: now public (R041). */
+  shown?: boolean;
+  /**
+   * A face-down Unique Resource its controller kept hidden while a rival played a copy: the rival has
+   * the Resource now, and this copy is discarded if it is ever turned face up (R041).
+   */
+  forfeited?: boolean;
+  /** Resources: the turn it last gave a benefit (a bonus in an attack, an extra token or draw) (R042, R040). */
+  benefitTurn?: number;
+  /** Set aside for its owner after a duplicate copy replaced it in a capture: out of the game (R031). */
+  setAside?: boolean;
 }
 
 /** Computer opponent difficulty. */
@@ -101,6 +116,10 @@ export interface PlayerState {
   lastPuppetTakenBy?: string; // who removed this player's last Group (credit for knocking out an Illuminati)
   eliminatedBy?: string;
   lastPuppetHelpers?: string[]; // players who helped remove that last Group (Fratricide: any help counts)
+  /** Players this one attacked before finishing his first turn: they may respond against him (R001). */
+  firstTurnAttacked?: string[];
+  /** Left the game (resigned): counts as elimination (R049). */
+  resigned?: boolean;
 }
 
 export type AttackType = 'control' | 'destroy';
@@ -167,6 +186,8 @@ export interface AttackCtx {
   usedAgents?: boolean;
   barred?: string[];       // players a card has barred from interfering in this attack (Multinational Oil Companies)
   strengthLock?: { attack: number; defense: number; by: string }; // strength fixed by a card (Mothers' March) unless that card is cancelled
+  /** The attacker removed an Action token during the attack: it is committed and cannot be called off (R009). */
+  committed?: boolean;
   /**
    * Why the attacking action is no longer legal (a new immunity, a changed alignment…), re-checked after
    * every play. While set the attack counts as cancelled; if it is still set when the attack resolves,
@@ -190,9 +211,33 @@ export interface ResponseWindow {
 /** A decision only one player can make (blocks the game until made). */
 export interface Prompt {
   player: string;
+  /**
+   * 'placeCaptured': the player may rearrange the Groups a capture or a move just brought in (each keeps
+   * its master); `data` is a PlaceCapturedData. Groups still unplaced when he is done are lost (R031, R038).
+   */
   kind: 'takeover' | 'discardToLimit' | 'placeCaptured' | 'chooseLead' | 'choose' | 'draw';
   data?: Record<string, unknown>;
   choice?: Choice;         // for kind 'choose'
+}
+
+/** What a 'placeCaptured' prompt is about. */
+export interface PlaceCapturedData {
+  /** The Groups that came in (the root first): only these may be rearranged. */
+  cards: string[];
+  /** Groups (with their puppets) that did not fit: each still needs an open arrow of its master. */
+  pending: { group: string; master: string }[];
+  /** What happens to a Group that still does not fit: discarded after a capture, back to hand after a move. */
+  overflow: 'discard' | 'hand';
+  /** Whose hand an unplaced Group goes back to (after a move). */
+  handOf?: string;
+}
+
+/** A player's promise to spend some of his Groups' actions on Relief for a Devastated Place (R037). */
+export interface ReliefPledge {
+  player: string;
+  place: string;
+  groups: string[];
+  turn: number;            // pledges lapse when the turn they were made in ends
 }
 
 /** A decision a card asks one player to make (pick a Group to lose, a Plot to show, …). */
@@ -298,7 +343,9 @@ export interface GameState {
   winners?: string[];
   /** Victories declared at the end of this turn, open to responses until everyone passes (R016). */
   claims?: VictoryClaim[];
-  setup?: { picks: Record<string, string | undefined>; banned: string[]; setAside: string[] };
+  setup?: { picks: Record<string, string | undefined>; banned: string[]; setAside: string[]; sides?: Record<string, Side> };
+  /** Players' promises to join in Relief for a Devastated Place, so several players can pay it together (R037). */
+  reliefPledges?: ReliefPledge[];
   /** Deal offers waiting for an answer (R040, R022). Each is seen only by its two players. */
   deals?: Deal[];
   /** Agreed deals whose I Lied is still waiting to resolve: the liar's side is held back until then. */
@@ -373,7 +420,21 @@ export type Action =
   | { type: 'link'; resource: string; to: string }
   | { type: 'useAbility'; card: string; ability: string; params?: import('./hooks').AbilityParams }
   | { type: 'agent'; card: string; as: 'aid' | 'oppose' }
-  | { type: 'relief'; place: string; payWith: string[] }
+  /** `partners`: other players whose pledged Groups pay for this Relief along with `payWith` (R037). */
+  | { type: 'relief'; place: string; payWith: string[]; partners?: string[] }
+  /** Promise Groups toward a Relief another player (or you) may send; an empty list withdraws it. */
+  | { type: 'pledgeRelief'; place: string; payWith: string[] }
+  /** Play a spare Illuminati card from hand as an agent inside a rival Illuminati (R044). */
+  | { type: 'playAgent'; card: string }
+  /** Leave the game for good: it counts as being eliminated (R049). */
+  | { type: 'resign' }
+  /** Rearranging Groups a capture or move brought in: put `group` on `side` of `onto` (its own master). */
+  | { type: 'placeCaptured'; group: string; onto: string; side: Side }
+  | { type: 'placeCapturedDone' }
+  /** Take an Action token off one of your own Groups or Resources, for whatever reason (Action Tokens, p.3). */
+  | { type: 'removeToken'; card: string }
+  /** Show a hidden Plot in your hand to one rival; it stays hidden from everyone else (Hidden and Exposed Plots, p.5). */
+  | { type: 'showCard'; card: string; to: string }
   | { type: 'aid'; group: string; useGlobal?: boolean }
   | { type: 'oppose'; group: string; useGlobal?: boolean }
   | { type: 'pass' }
@@ -381,7 +442,7 @@ export type Action =
   | { type: 'declareVictory'; goal: string }  // knock (in your main phase) or at the end of a turn: claim a Goal
   | { type: 'discard'; cards: string[]; toDeck?: boolean; position?: 'top' | 'middle' | 'bottom' }
   | { type: 'exposeCard'; card: string }
-  | { type: 'chooseLead'; card: string }
+  | { type: 'chooseLead'; card: string; side?: Side }
   | { type: 'choose'; ids: string[] }
   | { type: 'callOff' }
   | { type: 'setAutoPass'; value: boolean }

@@ -8,7 +8,7 @@ import {
   HOOKS, CHOICES, checkAbility, resourcesOf, canEnterPlay, goalsInHand, goalLimit, type AbilityParams,
   type AiLevel, declareOptions, type GoalOption,
   type Deal, type DealGroup, I_LIED, sideEmpty, dealsAllowed, tokenBarred, offersFrom,
-  GOAL_PROGRESS, moveSubtree, placeGroup, isPrivileged,
+  GOAL_PROGRESS, moveSubtree, placeGroup, isPrivileged, agentProblem, reliefPledgesFor,
 } from '../engine';
 import { OPPOSITE } from '../engine/cards';
 import { matches } from '../engine/abilities';
@@ -316,6 +316,10 @@ function mainPhase(s: GameState, pl: string): Action {
       if (tryAction(s, pl, a)) return a;
     }
   }
+  // 0b. A spare Illuminati card that matches a rival's Illuminati becomes an agent inside it (+3).
+  for (const c of me.hand) {
+    if (def(s, c).type === 'Illuminati' && !agentProblem(s, pl, c)) return { type: 'playAgent', card: c };
+  }
   // 1a. Instant attacks (Disasters, Assassinations): a big prize at fair odds, or a long shot to stop a winner.
   const instant = instantStrike(s, pl);
   if (instant) return instant;
@@ -516,17 +520,23 @@ function nwoMove(s: GameState, pl: string): Action | undefined {
   return best;
 }
 
-/** Relief for our Devastated Places: the smallest set of our Groups with tokens that is enough. */
+/**
+ * Relief for our Devastated Places: the smallest set of our Groups with tokens that is enough, after
+ * counting any Groups other players have pledged to it (they pay together, R037).
+ */
 function reliefOptions(s: GameState, pl: string): Action[] {
   const out: Action[] = [];
   for (const place of structureCards(s, pl).filter((g) => s.cards[g].devastated)) {
-    const need = 3 * (def(s, place).power ?? 0);
+    const pledges = reliefPledgesFor(s, place, pl);
+    const partners = pledges.length ? { partners: pledges.map((x) => x.player) } : {};
+    const need = 3 * (def(s, place).power ?? 0) - pledges.reduce((n, x) => n + x.power, 0);
+    if (need <= 0) { out.push({ type: 'relief', place, payWith: [], ...partners }); continue; }
     const pool = structureCards(s, pl).filter((g) => s.cards[g].tokens > 0 && g !== place).sort((a, b) => power(s, a) - power(s, b));
     const single = pool.find((g) => power(s, g) >= need);
     const pay: string[] = [];
     if (single) pay.push(single);
     else { let n = 0; for (const g of [...pool].reverse()) { if (n >= need) break; pay.push(g); n += power(s, g); } if (n < need) continue; }
-    out.push({ type: 'relief', place, payWith: pay });
+    out.push({ type: 'relief', place, payWith: pay, ...partners });
   }
   return out;
 }
@@ -978,6 +988,8 @@ function plotValue(s: GameState, pl: string, card: string): number {
   const d = def(s, card);
   const h = PLOTS[d.id];
   if (d.subtype === 'Goal') return 4 + 10 * goalCardProgress(s, pl, card);
+  // A spare Illuminati is worth keeping while a rival plays that Illuminati (it can become an agent).
+  if (d.type === 'Illuminati') return rivalsOf(s, pl).some((r) => s.cards[r.illuminati].cardId === d.id) ? 4 : 0;
   if (!h) return 0;
   const t = h.timing;
   if (t.includes('instant')) return 4.5 + (rivalsOf(s, pl).some((r) => nearWin(s, r.id)) ? 2 : 0);
@@ -1000,6 +1012,8 @@ function plotValue(s: GameState, pl: string, card: string): number {
 function decide(s: GameState, pl: string): Action {
   if (s.prompt?.player === pl) {
     if (s.prompt.kind === 'chooseLead') return { type: 'chooseLead', card: bestLead(s, pl) };
+    // After a capture or move, the automatic arrangement is kept.
+    if (s.prompt.kind === 'placeCaptured') return { type: 'placeCapturedDone' };
     if (s.prompt.kind === 'draw') {
       const d = s.prompt.data as { plot: number; group: number };
       return { type: 'draw', deck: d.plot > 0 ? 'plot' : 'group' };

@@ -21,6 +21,8 @@ export interface ApiRequest {
   seats?: number;
   computerSeats?: number;
   quick?: boolean;
+  /** Basic Goal agreed before the game (R016); omitted means the book's number for the table size. */
+  basicGoal?: number;
   /** Difficulty of the computer seats: 'easy' | 'normal' | 'hard'. */
   level?: string;
   levels?: string[];         // one difficulty per computer player
@@ -29,6 +31,11 @@ export interface ApiRequest {
   orders?: { passWhenNothing?: boolean; passWhenUninvolved?: boolean };
   /** op 'alerts': omit to read the current settings. */
   alerts?: { phone: string; optIn: boolean };
+}
+
+/** A Basic Goal the players agreed on (whole number, 4 to 20), or undefined for the standard one. */
+function agreedGoal(n?: number): number | undefined {
+  return typeof n === 'number' && Number.isInteger(n) && n >= 4 && n <= 20 ? n : undefined;
 }
 
 function summary(rec: GameRecord, userId: string) {
@@ -63,7 +70,8 @@ export async function handle(store: Store, userId: string, req: ApiRequest, noti
       const seats = Math.min(8, Math.max(2, req.seats ?? 2));
       const lv = (x?: string): AiLevel => (x === 'easy' || x === 'hard' ? x : 'normal');
       const rec = await newTable(store, { userId, name, illuminati: req.illuminati ?? 'bavarian-illuminati' }, {
-        seats, computerSeats: Math.min(seats - 1, req.computerSeats ?? 0), settings: { houseRules: req.quick ? ['quickGame'] : [] },
+        seats, computerSeats: Math.min(seats - 1, req.computerSeats ?? 0),
+        settings: { houseRules: req.quick ? ['quickGame'] : [], ...(agreedGoal(req.basicGoal) ? { basicGoal: agreedGoal(req.basicGoal) } : {}) },
         aiLevel: lv(req.level), aiLevels: req.bots ? req.bots.map((b) => lv(b.level)) : req.levels?.map(lv), bots: req.bots,
       }, notifier);
       return reply(rec, userId);
@@ -80,7 +88,7 @@ export async function handle(store: Store, userId: string, req: ApiRequest, noti
     case 'orders':
       return reply(await setOrders(store, req.gameId ?? '', userId, req.orders ?? {}), userId);
     case 'delete':
-      return { result: await deleteOrLeave(store, req.gameId ?? '', userId) };
+      return { result: await deleteOrLeave(store, req.gameId ?? '', userId, notifier) };
     case 'tick':
       return { changed: await tick(store, Date.now(), 72, notifier) };
     case 'profile': {

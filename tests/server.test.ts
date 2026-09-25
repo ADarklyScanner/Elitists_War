@@ -80,11 +80,12 @@ describe('deleting and leaving games', () => {
     expect(await deleteOrLeave(store, t.id, 'bob')).toBe('left');
     expect((await store.get(t.id))!.seats.some((x) => x.userId === 'bob')).toBe(false);
     await expect(deleteOrLeave(store, t.id, 'eve')).rejects.toThrow(/not playing/);
-    // Once it has started, only the host may remove it.
+    // Once it has started, only the host may remove it; the others may leave only by resigning, once
+    // the lead Groups are chosen (see rulesGaps.test.ts).
     await joinTable(store, t.invite, { userId: 'bob', name: 'Bob', illuminati: 'ufos' });
     await joinTable(store, t.invite, { userId: 'cat', name: 'Cat', illuminati: 'the-network' });
     expect((await store.get(t.id))!.state).not.toBeNull();
-    await expect(deleteOrLeave(store, t.id, 'cat')).rejects.toThrow(/created this game/);
+    await expect(deleteOrLeave(store, t.id, 'cat')).rejects.toThrow(/lead Group/);
     expect(await deleteOrLeave(store, t.id, 'ann')).toBe('deleted');
     expect(await store.get(t.id)).toBeUndefined();
   });
