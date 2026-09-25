@@ -11,7 +11,8 @@ import {
 import { attachRect, rectOf, ensureLayout, type Rect } from '../engine/geometry';
 import { chooseAction, successChance } from '../ai/ai';
 import { suggestBots, type TableLevel } from './botMix';
-import { seatComputers, styleById, STYLES } from '../ai/personas';
+import { styleById, STYLES, WILD_CARDS } from '../ai/personas';
+import { assignIlluminati, emptyLineup, lineupSize, pickId, resolveLineup, SECTIONS, specOf, type BotSpec, type Lineup, type Section } from './lineup';
 
 // ------------------------------------------------------------------ state
 
@@ -197,117 +198,141 @@ function styleHtml(): string {
     <span class="mini-table"><span class="cardback plot"></span><span class="cardback group"></span></span><b>${name}</b></button>`).join('')}</div>`;
 }
 
-/** The computer players you set up, each with its own difficulty. Remembered between games. */
-const BOTS_KEY = 'elitists-war.bots';
+/** Table difficulty presets: they fill the random seats with a sensible mix of levels. */
 const TABLE_KEY = 'elitists-war.table-level';
-const CUSTOM_KEY = 'elitists-war.bots-custom';
+const LINEUP_KEY = 'elitists-war.lineup';
 const TABLE_LEVELS: [TableLevel, string, string][] = [
   ['beginner', 'Beginner', 'Mostly Easy computers'],
   ['standard', 'Standard', 'Normal computers with some Easy ones'],
   ['challenging', 'Challenging', 'A mix of Hard, Normal and Easy'],
   ['expert', 'Expert', 'Every computer on Hard'],
 ];
-function loadTableLevel(): TableLevel {
+function loadTableLevel(): TableLevel | undefined {
   try { const v = localStorage.getItem(TABLE_KEY); if (TABLE_LEVELS.some((t) => t[0] === v)) return v as TableLevel; } catch { /* storage unavailable */ }
-  return 'standard';
+  return undefined;
 }
-/** True once the player has set a computer's level by hand; until then the table difficulty decides. */
-function botsCustom(): boolean {
-  try { return localStorage.getItem(CUSTOM_KEY) === '1'; } catch { return false; }
-}
-function loadBots(): AiLevel[] {
+function loadLineup(): Lineup {
   try {
-    const v = JSON.parse(localStorage.getItem(BOTS_KEY) ?? 'null');
-    if (Array.isArray(v) && v.every((x) => x === 'easy' || x === 'normal' || x === 'hard')) return v.slice(0, 7);
+    const v = JSON.parse(localStorage.getItem(LINEUP_KEY) ?? 'null');
+    if (v && Array.isArray(v.picked) && v.random) return { picked: v.picked.filter((id: string) => specOf(id)), random: { ...emptyLineup().random, ...v.random } };
   } catch { /* storage unavailable */ }
-  return suggestBots(1, loadTableLevel());
+  return emptyLineup();
 }
-function saveBots(b: AiLevel[], custom = botsCustom()) {
-  try { localStorage.setItem(BOTS_KEY, JSON.stringify(b)); localStorage.setItem(CUSTOM_KEY, custom ? '1' : '0'); } catch { /* storage unavailable */ }
+function saveLineup(l: Lineup, keepPreset = false) {
+  try {
+    localStorage.setItem(LINEUP_KEY, JSON.stringify(l));
+    if (!keepPreset) localStorage.removeItem(TABLE_KEY); // a hand-made change ends the preset
+  } catch { /* storage unavailable */ }
 }
-/** Change how many computers there are: a fresh suggested mix, or (for a hand-set line-up) add copies / drop from the end. */
-function setBotCount(n: number) {
-  n = Math.max(0, Math.min(7, n));
-  if (!botsCustom()) { saveBots(suggestBots(n, loadTableLevel()), false); return; }
-  const bots = loadBots();
-  while (bots.length < n) bots.push(bots[bots.length - 1] ?? 'normal');
-  saveBots(bots.slice(0, n));
+/** Fill `n` random seats with the preset's mix, leaving picked players and wild cards as they are. */
+function presetRandoms(l: Lineup, n: number, level: TableLevel): Lineup {
+  const mix = suggestBots(Math.max(0, n), level);
+  return { ...l, random: { ...l.random, easy: mix.filter((x) => x === 'easy').length, normal: mix.filter((x) => x === 'normal').length, hard: mix.filter((x) => x === 'hard').length } };
 }
 const goalFor = (n: number) => (n <= 3 ? 12 : n === 4 ? 11 : 10);
+const LEVEL_NAME: Record<AiLevel, string> = { easy: 'Easy', normal: 'Normal', hard: 'Hard' };
+const SECTION_INFO: Record<Section, [string, string]> = {
+  easy: ['Easy', 'Make mistakes and miss chances. Good for learning.'],
+  normal: ['Normal', 'Play solidly: weigh their attacks and defend what matters.'],
+  hard: ['Hard', 'Plan their help, play every takeover out, and fight hardest near a win.'],
+  wild: ['Wild cards', 'No plan at all: any legal move, picked at random. Usually nonsense; once in a while, brilliant by accident.'],
+};
 
-/** One row per computer player, each with Easy / Normal / Hard. `humans` counts you and any friends. */
+/**
+ * Choose the computer players: tick named ones in each difficulty, and/or ask for a number of random
+ * ones at the bottom of each section. `humans` counts you and any friends; `minBots` is 1 offline.
+ */
 function botsEditor(humans: number, minBots: number): string {
-  if (loadBots().length < minBots) setBotCount(minBots); // playing the computer needs at least one
-  const bots = loadBots().slice(0, 8 - humans);
-  const total = humans + bots.length;
-  const tl = loadTableLevel(), custom = botsCustom();
-  return `<div class="bots" data-humans="${humans}">
-    <div class="table-level"><span class="bot-name">Table difficulty</span>
-      <span class="seg" role="radiogroup" aria-label="Table difficulty">${TABLE_LEVELS.map(([id, name, what]) => `<button type="button" role="radio" aria-checked="${!custom && tl === id}" class="${!custom && tl === id ? 'on' : ''}" data-table-level="${id}" title="${esc(what)}">${name}</button>`).join('')}</span>
-      <span class="muted small">${custom ? 'Custom line-up. Tap a table difficulty to go back to a suggested mix.' : esc(TABLE_LEVELS.find((t) => t[0] === tl)![2]) + '. Change any computer below to set your own.'}</span></div>
-    ${bots.map((lv, i) => `
-    <div class="bot-row"><span class="bot-name">Computer ${i + 1}</span>
-      <span class="seg" role="radiogroup" aria-label="Computer ${i + 1} difficulty">${LEVELS.map(([id, name, what]) => `<button type="button" role="radio" aria-checked="${lv === id}" class="${lv === id ? 'on' : ''}" data-bot="${i}" data-bot-level="${id}" title="${esc(what)}">${name}</button>`).join('')}</span>
-      ${bots.length > minBots ? `<button type="button" class="linkish" data-bot-del="${i}" aria-label="Remove Computer ${i + 1}">Remove</button>` : ''}</div>`).join('')}
-    ${total < 8 ? '<button type="button" class="add-bot" data-bot-add>+ Add a computer player</button>' : ''}
-    ${recommend(humans, minBots, total)}
-    <p class="muted small">${total} players in all · Goal ${goalFor(total)} Groups. 7–8 players works, but rounds take longer.
-    <br><b>Easy</b> makes mistakes · <b>Normal</b> plays solidly · <b>Hard</b> plans its help and fights hardest near a win.
-    Each computer gets its own name and style when the game starts.</p>${rosterHtml()}</div>`;
+  const l = loadLineup(), max = 8 - humans, n = lineupSize(l), total = humans + n, full = n >= max;
+  const preset = loadTableLevel();
+  const card = (id: string, name: string, style: string, blurb: string) => {
+    const on = l.picked.includes(id);
+    return `<label class="bot-card ${on ? 'on' : ''} ${!on && full ? 'off' : ''}"><input type="checkbox" data-pick-bot="${id}" ${on ? 'checked' : ''} ${!on && full ? 'disabled' : ''}>
+      <span><b>${esc(name)}</b><span class="small muted">${esc(style)} · ${esc(blurb)}</span></span></label>`;
+  };
+  const section = (sec: Section) => {
+    const [title, what] = SECTION_INFO[sec];
+    const cards = sec === 'wild'
+      ? WILD_CARDS.map((w) => card(`wild:${w.id}`, w.name, 'Wild card', 'random moves')).join('')
+      : STYLES.map((st) => card(pickId(st, sec), st.names[sec], st.style, st.blurb)).join('');
+    const picked = l.picked.filter((id) => (sec === 'wild' ? id.startsWith('wild:') : id.endsWith(`:${sec}`))).length;
+    return `<details class="lv-sec lv-${sec}" ${picked || l.random[sec] ? 'open' : ''}><summary><b>${title}</b> <span class="muted small">${esc(what)}</span>
+        ${picked + l.random[sec] ? `<span class="lv-count">${picked + l.random[sec]} at the table</span>` : ''}</summary>
+      <div class="bot-grid">${cards}</div>
+      <div class="rand-row"><span>Random ${title.toLowerCase().replace(/s$/, '')} players</span>
+        <button type="button" data-rand="${sec}" data-d="-1" ${l.random[sec] ? '' : 'disabled'} aria-label="One fewer random ${title} player">−</button><b>${l.random[sec]}</b>
+        <button type="button" data-rand="${sec}" data-d="1" ${full ? 'disabled' : ''} aria-label="One more random ${title} player">+</button></div></details>`;
+  };
+  return `<div class="bots" data-humans="${humans}" data-min="${minBots}">
+    <div class="table-level"><span class="bot-name">Quick fill</span>
+      <span class="seg" role="radiogroup" aria-label="Table difficulty">${TABLE_LEVELS.map(([id, name, what]) => `<button type="button" role="radio" aria-checked="${preset === id}" class="${preset === id ? 'on' : ''}" data-table-level="${id}" title="${esc(what)}">${name}</button>`).join('')}</span>
+      <span class="muted small">${preset ? `${esc(TABLE_LEVELS.find((t) => t[0] === preset)![2])} in the random seats.` : 'Sets the random seats to a mix of levels. Or pick your own below.'}</span></div>
+    <div class="table-sum"><b>${total} players</b> · you${humans > 1 ? ` + ${humans - 1} friend${humans > 2 ? 's' : ''}` : ''} + ${n} computer${n === 1 ? '' : 's'}${l.picked.length ? ` (${l.picked.map((id) => esc(specOf(id)!.name)).join(', ')}${n > l.picked.length ? ` and ${n - l.picked.length} random` : ''})` : ''} · Goal ${goalFor(total)} Groups
+      ${n < minBots ? '<span class="bad"> · add at least one computer</span>' : ''}${full ? '<span class="muted"> · table full</span>' : ''}</div>
+    ${recommend(humans, total)}
+    ${SECTIONS.map(section).join('')}
+    <p class="muted small">Each name always plays the same way; a style's Easy, Normal and Hard players share its habits, the harder ones just play them better. 7–8 players works, but rounds take longer.</p></div>`;
 }
 
 /** Players generally find 4 or 6 at the table the sweet spot; offer one tap to get there. */
 const SWEET = [4, 6];
-function recommend(humans: number, minBots: number, total: number): string {
-  const opts = SWEET.filter((t) => t - humans >= Math.max(minBots, 0) && t - humans <= 7);
+function recommend(humans: number, total: number): string {
+  const l = loadLineup(), fixed = humans + l.picked.length + l.random.wild;
+  const opts = SWEET.filter((t) => t >= fixed && t - humans <= 7);
   if (!opts.length) return '';
-  const bots = (t: number) => `${t - humans} computer${t - humans === 1 ? '' : 's'}`;
-  return `<div class="sweet"><span class="small">★ Recommended: <b>4 or 6 players</b> in all${humans > 1 ? ` (with ${humans} people)` : ''}.</span>
-    ${opts.map((t) => t === total ? `<span class="sweet-on">✓ ${t} players</span>` : `<button type="button" class="sweet-btn" data-bot-total="${t}">Make it ${t} (${bots(t)})</button>`).join('')}</div>`;
+  return `<div class="sweet"><span class="small">★ Recommended: <b>4 or 6 players</b> in all.</span>
+    ${opts.map((t) => t === total ? `<span class="sweet-on">✓ ${t} players</span>` : `<button type="button" class="sweet-btn" data-bot-total="${t}">Make it ${t}</button>`).join('')}</div>`;
 }
 
 function bindBots(rerender: () => void) {
+  const box = app.querySelector<HTMLElement>('.bots');
+  if (!box) return;
+  const humans = +(box.dataset.humans ?? 1), max = 8 - humans;
+  app.querySelectorAll<HTMLInputElement>('[data-pick-bot]').forEach((b) => b.onchange = () => {
+    const l = loadLineup(), id = b.dataset.pickBot!;
+    l.picked = b.checked ? [...l.picked.filter((x) => x !== id), id] : l.picked.filter((x) => x !== id);
+    if (lineupSize(l) > max) return rerender();
+    saveLineup(l); rerender();
+  });
+  app.querySelectorAll<HTMLElement>('[data-rand]').forEach((b) => b.onclick = () => {
+    const l = loadLineup(), sec = b.dataset.rand as Section;
+    l.random[sec] = Math.max(0, l.random[sec] + +b.dataset.d!);
+    if (lineupSize(l) > max) return;
+    saveLineup(l); rerender();
+  });
   app.querySelectorAll<HTMLElement>('[data-table-level]').forEach((b) => b.onclick = () => {
-    try { localStorage.setItem(TABLE_KEY, b.dataset.tableLevel!); } catch { /* storage unavailable */ }
-    saveBots(suggestBots(loadBots().length, b.dataset.tableLevel as TableLevel), false); rerender();
+    const l = loadLineup(), level = b.dataset.tableLevel as TableLevel;
+    const seats = Math.max(1, l.random.easy + l.random.normal + l.random.hard) ;
+    saveLineup(presetRandoms(l, Math.min(seats, max - l.picked.length - l.random.wild), level));
+    try { localStorage.setItem(TABLE_KEY, level); } catch { /* storage unavailable */ }
+    rerender();
   });
   app.querySelectorAll<HTMLElement>('[data-bot-total]').forEach((b) => b.onclick = () => {
-    const humans = +(b.closest<HTMLElement>('[data-humans]')?.dataset.humans ?? 1);
-    setBotCount(+b.dataset.botTotal! - humans); rerender();
+    const l = loadLineup(), want = +b.dataset.botTotal! - humans - l.picked.length - l.random.wild;
+    const preset = loadTableLevel();
+    saveLineup(presetRandoms(l, want, preset ?? 'standard'), !!preset); rerender();
   });
-  app.querySelectorAll<HTMLElement>('[data-bot-level]').forEach((b) => b.onclick = () => {
-    const bots = loadBots(); bots[+b.dataset.bot!] = b.dataset.botLevel as AiLevel; saveBots(bots, true); rerender();
-  });
-  app.querySelectorAll<HTMLElement>('[data-bot-del]').forEach((b) => b.onclick = () => {
-    if (!botsCustom()) { setBotCount(loadBots().length - 1); rerender(); return; }
-    const bots = loadBots(); bots.splice(+b.dataset.botDel!, 1); saveBots(bots); rerender();
-  });
-  app.querySelector<HTMLElement>('[data-bot-add]')?.addEventListener('click', () => { setBotCount(loadBots().length + 1); rerender(); });
 }
 
-const LEVEL_NAME: Record<AiLevel, string> = { easy: 'Easy', normal: 'Normal', hard: 'Hard' };
-
-/** Every named computer: one name per style at each level. */
-function rosterHtml(): string {
-  return `<details class="roster"><summary>Meet the computer players (${STYLES.length * 3})</summary>
-    <p class="muted small">Each name always plays the same way. Easy, Normal and Hard players of one style share its habits; the harder ones just play them better.</p>
-    <table><thead><tr><th>Style</th><th>Easy</th><th>Normal</th><th>Hard</th></tr></thead><tbody>${STYLES.map((st) => `
-      <tr><td><b>${esc(st.style)}</b><span class="muted small">${esc(st.blurb)}</span></td><td>${esc(st.names.easy)}</td><td>${esc(st.names.normal)}</td><td>${esc(st.names.hard)}</td></tr>`).join('')}</tbody></table></details>`;
+/** The computers for a new game, with at least `min` of them. */
+function botsForGame(seed: number, min: number, maxBots: number): BotSpec[] {
+  const l = loadLineup();
+  const bots = resolveLineup(l, seed).slice(0, maxBots);
+  return bots.length >= min ? bots : [...bots, ...resolveLineup(presetRandoms(emptyLineup(), min - bots.length, 'standard'), seed + 1)];
 }
 
 function newGame(illuminati: string, quick: boolean) {
   const seed = Math.floor(Math.random() * 1e9);
-  if (!loadBots().length) setBotCount(1);
-  const bots = loadBots();
-  // Each computer is a named player with its own style, on an Illuminati that suits it.
+  const bots = botsForGame(seed, 1, 7);
+  // Each computer plays on an Illuminati that suits its style, when one is free.
   const others = ILLUMINATI.filter((c) => c.id !== illuminati).map((c) => c.id);
   for (let i = others.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [others[i], others[j]] = [others[j], others[i]]; }
-  const seats = seatComputers(bots, seed, [illuminati], others);
+  const ills = assignIlluminati(bots, [illuminati], others);
   const s = createGame({
     seed,
     players: [
       { id: 'p1', name: 'You', isAI: false, deck: randomDeck(seed, illuminati) },
-      ...seats.map((c, i) => ({ id: `p${i + 2}`, name: c.name, isAI: true, aiLevel: c.level, aiStyle: c.style.id, deck: randomDeck(seed + i + 1, c.illuminati ?? others[i]) })),
+      ...bots.map((b, i) => ({ id: `p${i + 2}`, name: b.name, isAI: true, aiLevel: b.level, aiStyle: b.style, deck: randomDeck(seed + i + 1, ills[i]) })),
     ],
     settings: { houseRules: quick ? ['quickGame'] : [] },
     chooseLeads: true,
@@ -1316,7 +1341,7 @@ function renderStart() {
         <div class="label">Computer players</div>
         ${botsEditor(1, 1)}
         <div class="row">
-          <label class="toggle"><input type="checkbox" id="quick" ${quick ? 'checked' : ''}> Quick game: first to 8 Groups (house rule; the official goal is ${goalFor(1 + loadBots().length)})</label>
+          <label class="toggle"><input type="checkbox" id="quick" ${quick ? 'checked' : ''}> Quick game: first to 8 Groups (house rule; the official goal is ${goalFor(1 + Math.max(1, lineupSize(loadLineup())))})</label>
           <button class="primary" data-act="start">Start game</button>
         </div>
         <p class="muted small">Games are saved in this browser after every move, so you can stop and pick up later.</p>
@@ -1683,9 +1708,9 @@ function renderOnline() {
   app.querySelector<HTMLSelectElement>('#n-friends')!.onchange = (e) => { (ui as Ui & { friends?: number }).friends = Number((e.target as HTMLSelectElement).value); render(); };
   app.querySelector<HTMLFormElement>('#new')!.onsubmit = async (e) => {
     e.preventDefault();
-    const levels = friends >= 7 ? [] : loadBots().slice(0, 7 - friends);
+    const bots = friends >= 7 ? [] : botsForGame(Math.floor(Math.random() * 1e9), friends ? 0 : 1, 7 - friends);
     const quick = (app.querySelector('#n-quick') as HTMLInputElement).checked;
-    try { applyReply(await api({ op: 'new', seats: 1 + friends + levels.length, computerSeats: levels.length, levels, quick, illuminati: pick })); await openGame(online!.gameId!); } catch (err) { o.msg = (err as Error).message; render(); }
+    try { applyReply(await api({ op: 'new', seats: 1 + friends + bots.length, computerSeats: bots.length, bots, quick, illuminati: pick })); await openGame(online!.gameId!); } catch (err) { o.msg = (err as Error).message; render(); }
   };
 }
 

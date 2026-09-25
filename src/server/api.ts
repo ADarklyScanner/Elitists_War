@@ -23,6 +23,7 @@ export interface ApiRequest {
   /** Difficulty of the computer seats: 'easy' | 'normal' | 'hard'. */
   level?: string;
   levels?: string[];         // one difficulty per computer player
+  bots?: { name: string; level: AiLevel; style: string }[]; // or a full line-up from the setup screen
   action?: Action;
   orders?: { passWhenNothing?: boolean; passWhenUninvolved?: boolean };
   /** op 'alerts': omit to read the current settings. */
@@ -60,7 +61,7 @@ export async function handle(store: Store, userId: string, req: ApiRequest, noti
       const lv = (x?: string): AiLevel => (x === 'easy' || x === 'hard' ? x : 'normal');
       const rec = await newTable(store, { userId, name, illuminati: req.illuminati ?? 'bavarian-illuminati' }, {
         seats, computerSeats: Math.min(seats - 1, req.computerSeats ?? 0), settings: { houseRules: req.quick ? ['quickGame'] : [] },
-        aiLevel: lv(req.level), aiLevels: req.levels?.map(lv),
+        aiLevel: lv(req.level), aiLevels: req.bots ? req.bots.map((b) => lv(b.level)) : req.levels?.map(lv), bots: req.bots,
       }, notifier);
       return reply(rec, userId);
     }

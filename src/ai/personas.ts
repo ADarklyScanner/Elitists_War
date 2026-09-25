@@ -69,7 +69,21 @@ export const STYLES: PlayStyle[] = [
     names: { easy: 'Rookie', normal: 'Juniper', hard: 'The Professor' }, favours: [], s: {} },
 ];
 
-export const styleById = (id?: string) => STYLES.find((p) => p.id === id);
+/**
+ * Wild cards: no style, no plan, any legal move at random. Each name is a different wild card, but they
+ * all play the same way; they have no difficulty.
+ */
+export const WILD_CARDS = [
+  { id: 'wild-pudding', name: 'Pudding' }, { id: 'wild-wobbles', name: 'Mister Wobbles' },
+  { id: 'wild-lenore', name: 'Loopy Lenore' }, { id: 'wild-bingo', name: 'Bingo' },
+];
+export const WILD_STYLE: PlayStyle = {
+  id: 'chaos', style: 'Wild card', blurb: 'No plan at all: any legal move, picked at random.',
+  tell: 'Nothing to read here. Protect your big Groups from freak attacks and keep building.',
+  names: { easy: 'Pudding', normal: 'Pudding', hard: 'Pudding' }, favours: [], s: {},
+};
+
+export const styleById = (id?: string) => (id === 'chaos' ? WILD_STYLE : STYLES.find((p) => p.id === id));
 export const styleOf = (id?: string): Style => ({ ...BASE_STYLE, ...(styleById(id)?.s ?? {}) });
 /** The style and level behind a computer's name, e.g. "Grimsby" → Wrecker, Normal. */
 export const whoIs = (name: string) => {

@@ -498,3 +498,23 @@ p { margin: 0; }
 .roster td b { display: block; }
 .roster td .small { display: block; }
 .tells { padding-left: 18px; font-size: 13px; }
+
+/* Computer picker: one section per difficulty, named players to tick, random seats at the bottom */
+.table-sum { font-size: 13.5px; padding: 6px 2px; }
+.table-sum .bad { color: var(--threat); }
+.lv-sec { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+.lv-sec > summary { cursor: pointer; padding: 9px 12px; display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
+.lv-sec > summary b { font: 600 16px var(--display); letter-spacing: .04em; }
+.lv-easy > summary b { color: #8fd3a8; } .lv-normal > summary b { color: var(--brass); } .lv-hard > summary b { color: #f08a7c; } .lv-wild > summary b { color: #c6a4f0; }
+.lv-count { margin-left: auto; font-size: 12px; color: var(--ok); }
+.bot-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 6px; padding: 0 10px 8px; }
+.bot-card { display: flex; gap: 8px; align-items: flex-start; padding: 7px 9px; border: 1px solid var(--line); border-radius: 8px; cursor: pointer; }
+.bot-card.on { border-color: var(--brass); background: #d4a34012; }
+.bot-card.off { opacity: .45; cursor: default; }
+.bot-card input { margin-top: 3px; accent-color: var(--brass); }
+.bot-card b { display: block; font-size: 13.5px; }
+.bot-card .small { display: block; line-height: 1.35; }
+.rand-row { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-top: 1px dashed var(--line); font-size: 13px; }
+.rand-row span { flex: 1; }
+.rand-row button { width: 30px; height: 30px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel-2); font-size: 16px; }
+.rand-row b { min-width: 18px; text-align: center; font-family: var(--mono); }

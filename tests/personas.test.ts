@@ -37,4 +37,20 @@ describe('named computer players', () => {
     }
     expect(s.phase).toBe('gameOver');
   }, 300_000);
+  it('wild cards play any legal move at random, and a table with them still finishes', () => {
+    let s = createGame({ seed: 11, players: [
+      { id: 'p1', name: 'Pudding', isAI: true, aiLevel: 'normal', aiStyle: 'chaos', deck: randomDeck(111) },
+      { id: 'p2', name: 'Bingo', isAI: true, aiLevel: 'normal', aiStyle: 'chaos', deck: randomDeck(112) },
+      { id: 'p3', name: 'Juniper', isAI: true, aiLevel: 'normal', aiStyle: 'book', deck: randomDeck(113) }] });
+    const kinds = new Set<string>();
+    for (let i = 0; i < 40000 && s.phase !== 'gameOver' && s.turn < 400; i++) {
+      const w = waitingFor(s)[0];
+      const a = chooseAction(s, w);
+      if (s.players.find((p) => p.id === w)!.aiStyle === 'chaos') kinds.add(a.type);
+      s = applyAction(s, w, a); // an illegal move would throw here
+      checkInvariants(s);
+    }
+    expect(s.phase).toBe('gameOver');
+    expect(kinds.size).toBeGreaterThan(3); // it really does all sorts of things
+  }, 300_000);
 });

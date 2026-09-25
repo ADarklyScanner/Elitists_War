@@ -7,7 +7,7 @@ import {
   RuleError, def, HOOKS, canExpose,
 } from '../engine';
 import { chooseAction } from '../ai/ai';
-import { seatComputers, styleById } from '../ai/personas';
+import { seatComputers, styleById, WILD_CARDS } from '../ai/personas';
 
 export interface Seat { id: string; name: string; isAI: boolean; aiLevel?: AiLevel; aiStyle?: string; userId?: string; illuminati?: string }
 
@@ -51,17 +51,31 @@ function inviteCode() {
 
 // ------------------------------------------------------------------ lobby
 
+/** Accept a computer seat from the client only if it is a real style and name (names are never free text). */
+function cleanBot(b?: { name: string; level: AiLevel; style: string }) {
+  if (!b) return undefined;
+  const level: AiLevel = b.level === 'easy' || b.level === 'hard' ? b.level : 'normal';
+  if (b.style === 'chaos') {
+    const w = WILD_CARDS.find((x) => b.name === x.name || b.name.startsWith(`${x.name} `));
+    return w && { name: b.name.slice(0, 24), level: 'normal' as AiLevel, style: 'chaos' };
+  }
+  const st = styleById(b.style);
+  return st && { name: b.name === `${st.names[level]} II` ? b.name : st.names[level], level, style: st.id };
+}
+
 export async function newTable(store: Store, host: { userId: string; name: string; illuminati: string }, opts: {
-  seats: number; computerSeats?: number; aiLevel?: AiLevel; aiLevels?: AiLevel[]; settings?: Partial<GameSettings>;
+  seats: number; computerSeats?: number; aiLevel?: AiLevel; aiLevels?: AiLevel[]; bots?: { name: string; level: AiLevel; style: string }[]; settings?: Partial<GameSettings>;
 }, notifier?: Notifier): Promise<GameRecord> {
   const seats: Seat[] = [{ id: 'p1', name: host.name, isAI: false, userId: host.userId, illuminati: host.illuminati }];
   const firstAi = opts.seats - (opts.computerSeats ?? 0) + 1;
   const levels = Array.from({ length: opts.computerSeats ?? 0 }, (_, k) => opts.aiLevels?.[k] ?? opts.aiLevel ?? 'normal');
   // Named computers, each with its own style; their Illuminati are picked when the game starts.
-  const named = seatComputers(levels, Date.now() % 1e9);
+  const auto = seatComputers(levels, Date.now() % 1e9);
+  // A line-up chosen on the setup screen wins over the automatic one.
+  const named = levels.map((_, k) => cleanBot(opts.bots?.[k]) ?? { name: auto[k].name, level: auto[k].level, style: auto[k].style.id });
   for (let i = 2; i <= opts.seats; i++) {
     const k = i - firstAi; // 0 for the first computer player
-    seats.push(k >= 0 ? { id: `p${i}`, name: named[k].name, isAI: true, aiLevel: named[k].level, aiStyle: named[k].style.id } : { id: `p${i}`, name: '', isAI: false });
+    seats.push(k >= 0 ? { id: `p${i}`, name: named[k].name, isAI: true, aiLevel: named[k].level, aiStyle: named[k].style } : { id: `p${i}`, name: '', isAI: false });
   }
   const now = Date.now();
   const rec: GameRecord = {

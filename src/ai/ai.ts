@@ -9,7 +9,7 @@ import {
   type AiLevel,
 } from '../engine';
 import { OPPOSITE } from '../engine/cards';
-import { abilityOptions, responseOptions } from '../engine/moves';
+import { abilityOptions, attackOptions, responseOptions } from '../engine/moves';
 import { BASE_STYLE, styleOf, type Style } from './personas';
 import { attackChance, attackOutcomeScore, bestBySimulation, evaluate, rollout, spread, standing, successChance } from './evaluate';
 
@@ -418,6 +418,7 @@ function respondToRoll(s: GameState, pl: string): Action {
 export function chooseAction(s: GameState, pl: string): Action {
   P = PROFILES[player(s, pl).aiLevel ?? 'normal'] ?? PROFILES.normal;
   S = styleOf(player(s, pl).aiStyle);
+  if (player(s, pl).aiStyle === 'chaos') return chaosMove(s, pl);
   return decide(s, pl);
 }
 
@@ -492,6 +493,55 @@ function decide(s: GameState, pl: string): Action {
   if (w) return { type: 'pass' };
   if (s.phase === 'main' && s.players[s.active].id === pl) return mainPhase(s, pl);
   return { type: 'pass' };
+}
+
+/**
+ * A wild card: any legal move, picked at random. It still has to follow the rules (every move is
+ * checked), but it has no plan at all. Now and then that stumbles into brilliance.
+ */
+function chaosMove(s: GameState, pl: string): Action {
+  const pick = <T>(xs: T[], salt: string): T => xs[Math.floor(roll01(s, pl, salt) * xs.length)];
+  const legalOnes = (xs: Action[]) => xs.filter((a) => tryAction(s, pl, a));
+  if (s.prompt?.player === pl) {
+    const pr = s.prompt;
+    if (pr.kind === 'takeover') {
+      const opts = takeoverOptions(s, pl);
+      if (opts.length && roll01(s, pl, 'skip') > 0.2) return { type: 'takeover', ...pick(opts, 'tk') };
+      if (tryAction(s, pl, { type: 'skipTakeover' })) return { type: 'skipTakeover' };
+    }
+    if (pr.kind === 'choose' && pr.choice) {
+      const ids = pr.choice.options.map((o) => o.id);
+      for (let i = ids.length - 1; i > 0; i--) { const j = Math.floor(roll01(s, pl, `c${i}`) * (i + 1)); [ids[i], ids[j]] = [ids[j], ids[i]]; }
+      const n = pr.choice.min + Math.floor(roll01(s, pl, 'n') * (pr.choice.max - pr.choice.min + 1));
+      const a: Action = { type: 'choose', ids: ids.slice(0, n) };
+      if (tryAction(s, pl, a)) return a;
+    }
+    if (pr.kind === 'draw') {
+      const a: Action = { type: 'draw', deck: roll01(s, pl, 'deck') < 0.5 ? 'plot' : 'group' };
+      if (tryAction(s, pl, a)) return a;
+    }
+    return decide(s, pl); // anything else: answer it plainly
+  }
+  if (s.window) {
+    if (roll01(s, pl, 'pass') < 0.55) return { type: 'pass' };
+    const opts = legalOnes(spread(responseOptions(s, pl).map((o) => o.action), 30));
+    return opts.length ? pick(opts, 'resp') : { type: 'pass' };
+  }
+  if (s.phase === 'main' && s.players[s.active].id === pl) {
+    if (roll01(s, pl, 'end') < 0.25) return { type: 'endTurn' };
+    const me = player(s, pl);
+    const cands: Action[] = [];
+    for (const g of structureCards(s, pl).filter((x) => s.cards[x].tokens > 0)) {
+      for (const o of attackOptions(s, pl, g)) cands.push({ type: 'attack', attackType: o.type, attacker: g, target: o.target, side: o.sides.length ? pick(o.sides, `side${o.target}`) : undefined });
+      cands.push(...abilityOptions(s, pl, g).map((o) => o.action));
+    }
+    for (const c of plotsInHand(s, pl)) cands.push(...plotOptions(s, pl, c).map((o) => o.action));
+    for (const h of me.hand) if (def(s, h).type === 'Resource') cands.push({ type: 'playResource', card: h });
+    cands.push({ type: 'buyPlot', payWith: [me.illuminati] }, { type: 'drawGroup' });
+    const opts = legalOnes(spread(cands, 40));
+    return opts.length ? pick(opts, 'main') : { type: 'endTurn' };
+  }
+  return decide(s, pl);
 }
 
 /** Open arrows the structure would have after a takeover: room to grow. */
