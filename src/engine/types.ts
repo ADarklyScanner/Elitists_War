@@ -76,10 +76,14 @@ export interface CardInstance {
   hiddenUnder?: string;    // Resources: face down under this card (Warehouse 23): inactive, unseen by rivals
 }
 
+/** Computer opponent difficulty. */
+export type AiLevel = 'easy' | 'normal' | 'hard';
+
 export interface PlayerState {
   id: string;
   name: string;
   isAI: boolean;
+  aiLevel?: AiLevel;       // how well a computer player plays (default 'normal')
   illuminati: string;      // iid
   plotDeck: string[];      // top of deck = index 0
   groupDeck: string[];

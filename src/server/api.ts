@@ -19,6 +19,8 @@ export interface ApiRequest {
   seats?: number;
   computerSeats?: number;
   quick?: boolean;
+  /** Difficulty of the computer seats: 'easy' | 'normal' | 'hard'. */
+  level?: string;
   action?: Action;
   orders?: { passWhenNothing?: boolean; passWhenUninvolved?: boolean };
   /** op 'alerts': omit to read the current settings. */
@@ -55,6 +57,7 @@ export async function handle(store: Store, userId: string, req: ApiRequest, noti
       const seats = Math.min(6, Math.max(2, req.seats ?? 2));
       const rec = await newTable(store, { userId, name, illuminati: req.illuminati ?? 'bavarian-illuminati' }, {
         seats, computerSeats: Math.min(seats - 1, req.computerSeats ?? 0), settings: { houseRules: req.quick ? ['quickGame'] : [] },
+        aiLevel: req.level === 'easy' || req.level === 'hard' ? req.level : 'normal',
       }, notifier);
       return reply(rec, userId);
     }

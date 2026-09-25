@@ -4,9 +4,11 @@ import {
   type Action, type AttackCtx, type GameState, type PlotPlay, type Side,
   applyAction, attackStrength, canAid, canOppose, checkPlot, currentOutcome, def, openArrows, player,
   plotsInHand, handLimit, power, resistance, structureCards, takeoverOptions, validateAttack, waitingFor,
-  alignments, abilitiesOf, PLOTS, subtree, goalCount, goalNeeded, depth, bestLead, plotOptions,
+  alignments, globalPower, abilitiesOf, PLOTS, subtree, goalCount, goalNeeded, depth, bestLead, plotOptions,
   HOOKS, CHOICES, checkAbility, resourcesOf, canEnterPlay, goalsInHand, goalLimit, type AbilityParams,
+  type AiLevel,
 } from '../engine';
+import { OPPOSITE } from '../engine/cards';
 import { abilityOptions, responseOptions } from '../engine/moves';
 import { attackChance, attackOutcomeScore, bestBySimulation, evaluate, rollout, spread, standing, successChance } from './evaluate';
 
@@ -31,8 +33,49 @@ function abilityMoves(s: GameState, pl: string, hint: string, targets: (string |
 /** Chance that 2d6 rolls `strength` or less (11 and 12 always fail). */
 export { successChance };
 
-/** Knobs for the computer player's appetite for risk. */
+/** Knobs for the computer player's appetite for risk (Normal level). */
 export const AI_TUNING = { minChance: 0.4, actionCost: 2 };
+
+/**
+ * How each difficulty level plays. Easy takes only safe-looking attacks, ignores most clever
+ * card play and sometimes slips; Hard looks further, expects rivals' hidden Plots to defend,
+ * keeps strong Groups for helping, and goes all out to stop a rival who is about to win.
+ */
+interface Profile {
+  minChance: number;            // lowest odds it will attack at
+  costBase: number;             // what spending an attacker's action is worth…
+  costPerPower: number;         // …plus this much per point of its Power (a strong Group could help instead)
+  plans: number;                // how many candidate attacks it plays out
+  generic: boolean;             // weighs every Plot and ability by look-ahead
+  mistakes: number;             // how often it takes a worse option or forgets to defend (0..1)
+  defendMin: number;            // defends when the attack's odds exceed this
+  tricks: boolean;              // uses roll-changing cards and counters
+  smartTakeover: boolean;       // plays out each automatic takeover to pick the best
+  handPlotDefense: number;      // expected defense per Plot in the defender's hand
+  endgame: boolean;             // takes long shots to stop a rival about to win
+  gainMin: number;              // how much better an attack must look than doing nothing
+  fullDefense: boolean;         // defends every attack: unused tokens come back next turn anyway
+  drawGroups: boolean;          // spends a spare Illuminati action on a Group card when short of them
+  samples: number;              // plays each top attack out this many times with real responses and dice (0 = estimate)
+  aidBelow: number;             // helps its own attack with other Groups only while its odds are below this
+  aidPlanning: boolean;         // counts the help its other Groups can really add to each attack
+}
+export const PROFILES: Record<AiLevel, Profile> = {
+  easy: { minChance: 0.55, costBase: 0, costPerPower: 0, plans: 3, generic: false, mistakes: 0.3, defendMin: 0.45, tricks: false, smartTakeover: false, handPlotDefense: 0, endgame: false, gainMin: 1, fullDefense: false, drawGroups: false, samples: 0, aidBelow: 0.72, aidPlanning: false },
+  normal: { minChance: AI_TUNING.minChance, costBase: AI_TUNING.actionCost, costPerPower: 0, plans: 8, generic: true, mistakes: 0, defendMin: 0.25, tricks: true, smartTakeover: false, handPlotDefense: 0, endgame: false, gainMin: 0.5, fullDefense: false, drawGroups: false, samples: 0, aidBelow: 0.72, aidPlanning: false },
+  hard: { minChance: 0.3, costBase: 1.5, costPerPower: 0.2, plans: 14, generic: true, mistakes: 0, defendMin: 0.15, tricks: true, smartTakeover: true, handPlotDefense: 0, endgame: true, gainMin: 0.5, fullDefense: true, drawGroups: true, samples: 0, aidBelow: 0.72, aidPlanning: true },
+};
+let P: Profile = PROFILES.normal;
+
+/** A repeatable "random" number for this moment of the game, so replays stay the same. */
+function roll01(s: GameState, pl: string, salt: string): number {
+  let h = 2166136261;
+  for (const ch of `${s.version}|${s.turn}|${pl}|${salt}`) h = Math.imul(h ^ ch.charCodeAt(0), 16777619);
+  return ((h >>> 0) % 10000) / 10000;
+}
+const slips = (s: GameState, pl: string, salt: string) => P.mistakes > 0 && roll01(s, pl, salt) < P.mistakes;
+/** A rival who meets, or is one Group from, the Basic Goal. */
+const nearWin = (s: GameState, id?: string) => !!id && goalCount(s, id) >= goalNeeded(s, id) - 1;
 
 const tryAction = (s: GameState, pl: string, a: Action): boolean => {
   try { applyAction(s, pl, a); return true; } catch { return false; }
@@ -55,6 +98,8 @@ function expectedOpposition(s: GameState, ctx: AttackCtx): number {
   // A couple of other defenders, at a discount.
   const helpers = structureCards(s, ctx.targetPlayer).filter((g) => g !== ctx.target && s.cards[g].tokens > 0).map((g) => power(s, g)).sort((a, b) => b - a);
   v += (helpers[0] ?? 0) * 0.4;
+  // Hidden Plots in the defender's hand may hold +10 defenses.
+  v += Math.min(6, P.handPlotDefense * plotsInHand(s, ctx.targetPlayer).length);
   return v;
 }
 
@@ -93,8 +138,11 @@ function planAttacks(s: GameState, pl: string): AttackPlan[] {
       const ctx = hypotheticalCtx(s, pl, att, t.iid, t.type);
       // Count likely aid from our other Groups.
       let strength = attackStrength(s, ctx).strength - expectedOpposition(s, ctx);
-      const spare = mine.filter((g) => g !== att).map((g) => power(s, g)).sort((a, b) => b - a);
-      strength += (spare[0] ?? 0) * 0.5;
+      if (P.aidPlanning) strength += helpAvailable(s, mine.filter((g) => g !== att), t.iid, t.type);
+      else {
+        const spare = mine.filter((g) => g !== att).map((g) => power(s, g)).sort((a, b) => b - a);
+        strength += (spare[0] ?? 0) * 0.5;
+      }
       const chance = successChance(Math.floor(strength));
       let value = groupValue(s, t.iid);
       if (t.type === 'destroy') value = value * 0.7 + (behind ? 6 : 0);
@@ -107,6 +155,21 @@ function planAttacks(s: GameState, pl: string): AttackPlan[] {
     }
   }
   return plans.sort((a, b) => b.score - a.score);
+}
+
+/**
+ * What our other Groups can really add to an attack: full Power when they may aid by alignment
+ * (a shared alignment to take control, an opposite one to destroy), otherwise Global Power.
+ * Only the best three count, since each helper spends its action.
+ */
+function helpAvailable(s: GameState, helpers: string[], target: string, type: 'control' | 'destroy'): number {
+  const tAl = alignments(s, target);
+  const adds = helpers.map((g) => {
+    const al = alignments(s, g);
+    const ok = type === 'control' ? al.some((a) => tAl.includes(a)) : al.some((a) => tAl.includes(OPPOSITE[a] as typeof a));
+    return ok ? power(s, g) : Math.min(globalPower(s, g), power(s, g));
+  }).sort((a, b) => b - a);
+  return adds.slice(0, 3).reduce((n, x) => n + x, 0) * 0.85;
 }
 
 /** Pick Plots worth attaching when declaring an attack. */
@@ -153,19 +216,28 @@ function mainPhase(s: GameState, pl: string): Action {
     }
   }
   // 1b. Any other Plot or ability whose result looks better than doing nothing.
-  const generic = genericMainMoves(s, pl);
+  const generic = P.generic ? genericMainMoves(s, pl) : undefined;
   if (generic) return generic;
   // 2. Best attack: the most promising few are played out both ways and weighed by their odds.
-  const plans = planAttacks(s, pl).filter((p) => p.chance >= AI_TUNING.minChance).slice(0, 8);
+  // Against a rival about to win, long shots are worth taking (Hard).
+  const minFor = (p: AttackPlan) => (P.endgame && nearWin(s, s.cards[p.action.target].controller) ? 0.12 : P.minChance);
+  const plans = planAttacks(s, pl).filter((p) => p.chance >= minFor(p)).slice(0, P.plans);
   const now = evaluate(s, pl);
   let best: AttackPlan | undefined;
-  let bestGain = 0.5;
+  let bestGain = P.gainMin;
+  let sampled = 0;
+  const viable: AttackPlan[] = [];
   for (const p of plans) {
     let after: GameState;
     try { after = applyAction(s, pl, p.action); } catch { continue; }
-    const gain = p.chance * attackOutcomeScore(after, pl, true) + (1 - p.chance) * attackOutcomeScore(after, pl, false) - now - AI_TUNING.actionCost;
+    let gain = p.chance * attackOutcomeScore(after, pl, true) + (1 - p.chance) * attackOutcomeScore(after, pl, false) - now - (P.costBase + P.costPerPower * power(s, p.action.attacker));
+    // Hard: play the most promising attacks out for real — the defender answers, the dice roll.
+    if (P.samples && gain > -3 && sampled++ < 5) gain = playedOut(s, pl, p.action, P.samples) - now - (P.costBase + P.costPerPower * power(s, p.action.attacker));
+    if (gain > 0) viable.push(p);
     if (gain > bestGain) { bestGain = gain; best = p; }
   }
+  // Easy sometimes settles for a lesser attack.
+  if (best && viable.length > 1 && slips(s, pl, 'attack')) best = viable[Math.floor(roll01(s, pl, 'pick') * viable.length)];
   if (best) {
     const withPlots = { ...best.action, plots: declarePlots(s, pl, best.action) };
     if (tryAction(s, pl, withPlots)) return withPlots;
@@ -183,6 +255,12 @@ function mainPhase(s: GameState, pl: string): Action {
     if (best) { const a: Action = { type: 'link', resource: r, to: best }; if (tryAction(s, pl, a)) return a; }
   }
   for (const a of abilityMoves(s, pl, 'draw', [undefined])) if (tryAction(s, pl, a)) return a;
+  // 3b. Short of Group cards: the Illuminati's spare action draws one (fuel for takeovers).
+  if (P.drawGroups && s.cards[me.illuminati].tokens > 0 && !s.turnFlags.illumGroupDraw && me.groupDeck.length
+      && me.hand.filter((h) => def(s, h).type === 'Group').length <= 1) {
+    const a: Action = { type: 'drawGroup' };
+    if (tryAction(s, pl, a)) return a;
+  }
   // 4. Buy a Plot with a spare Illuminati token.
   if (s.cards[me.illuminati].tokens > 0 && plotsInHand(s, pl).length < 4 && me.plotDeck.length) {
     const a: Action = { type: 'buyPlot', payWith: [me.illuminati] };
@@ -228,7 +306,7 @@ function respondToAttack(s: GameState, pl: string): Action {
   const chance = successChance(attackStrength(s, ctx).strength);
   const mine = structureCards(s, pl).filter((g) => s.cards[g].tokens > 0);
   if (ctx.attackerPlayer === pl) {
-    if (chance < 0.72) {
+    if (chance < P.aidBelow) {
       const dup = player(s, pl).hand.find((h) => s.cards[h].cardId === s.cards[ctx.target].cardId && h !== ctx.target);
       if (dup && ctx.targetPlayer && ctx.targetPlayer !== pl) {
         const a: Action = { type: 'agent', card: dup, as: 'aid' };
@@ -246,7 +324,10 @@ function respondToAttack(s: GameState, pl: string): Action {
     }
     return { type: 'pass' };
   }
-  if (ctx.targetPlayer === pl && chance > 0.25) {
+  if (ctx.targetPlayer === pl && slips(s, pl, 'defend')) return { type: 'pass' };
+  // Hard defends even long shots when the attacker is about to win.
+  const defendMin = P.endgame && nearWin(s, ctx.attackerPlayer) ? 0.08 : P.defendMin;
+  if (ctx.targetPlayer === pl && chance > defendMin) {
     const worth = groupValue(s, ctx.target);
     // Defensive +10 first (cheap), then Groups — the target itself counts double.
     for (const c of plotsInHand(s, pl)) {
@@ -261,12 +342,12 @@ function respondToAttack(s: GameState, pl: string): Action {
     const defenders = mine.map((g) => ({ g, r: canOppose(s, pl, g) })).filter((x) => x.r.ok)
       .sort((a, b) => Number(b.r.self) - Number(a.r.self) || power(s, b.g) - power(s, a.g));
     for (const d of defenders) {
-      if (d.g === player(s, pl).illuminati && worth < 8 && !d.r.self) continue; // keep the Illuminati token unless it matters
+      if (!P.fullDefense && d.g === player(s, pl).illuminati && worth < 8 && !d.r.self) continue; // keep the Illuminati token unless it matters
       const a: Action = { type: 'oppose', group: d.g };
       if (tryAction(s, pl, a)) return a;
     }
     // Cancel an attack plot with a counter if we hold one.
-    for (const c of plotsInHand(s, pl)) {
+    for (const c of P.tricks ? plotsInHand(s, pl) : []) {
       const id = s.cards[c].cardId;
       if (!['hoax', 'secrets-man-was-not-meant-to-know'].includes(id)) continue;
       for (const p of ctx.plays.filter((x) => x.player !== pl)) {
@@ -284,6 +365,7 @@ function respondToRoll(s: GameState, pl: string): Action {
   const outcome = currentOutcome(s, ctx);
   const wantFail = ctx.targetPlayer === pl;
   const wantSuccess = ctx.attackerPlayer === pl;
+  if (!P.tricks) return { type: 'pass' };
   if ((wantFail && outcome === 'success') || (wantSuccess && outcome === 'failure')) {
     for (const c of plotsInHand(s, pl)) {
       const id = s.cards[c].cardId;
@@ -310,6 +392,35 @@ function respondToRoll(s: GameState, pl: string): Action {
 }
 
 export function chooseAction(s: GameState, pl: string): Action {
+  P = PROFILES[player(s, pl).aiLevel ?? 'normal'] ?? PROFILES.normal;
+  return decide(s, pl);
+}
+
+/**
+ * The average position after actually playing an attack out `n` times: every player answers as
+ * a Normal computer would, and each time the dice fall differently.
+ */
+function playedOut(s: GameState, pl: string, attack: Action, n: number): number {
+  const saved = P;
+  P = PROFILES.normal;
+  let total = 0;
+  try {
+    for (let k = 0; k < n; k++) {
+      let t = applyAction(s, pl, attack);
+      t.rng = (Math.imul(s.version + 1, 2654435761) ^ Math.imul(k + 1, 40503)) >>> 0; // a different roll each time
+      const id = t.attack?.id;
+      for (let j = 0; j < 60 && t.attack && t.attack.id === id && t.phase !== 'gameOver'; j++) {
+        const who = waitingFor(t)[0];
+        if (!who) break;
+        try { t = applyAction(t, who, decide(t, who)); } catch { t = applyAction(t, who, t.window ? { type: 'pass' } : { type: 'endTurn' }); }
+      }
+      total += evaluate(rollout(t, pl), pl);
+    }
+  } finally { P = saved; }
+  return total / n;
+}
+
+function decide(s: GameState, pl: string): Action {
   if (s.prompt?.player === pl) {
     if (s.prompt.kind === 'chooseLead') return { type: 'chooseLead', card: bestLead(s, pl) };
     if (s.prompt.kind === 'choose' && s.prompt.choice) {
@@ -320,6 +431,18 @@ export function chooseAction(s: GameState, pl: string): Action {
     if (s.prompt.kind === 'takeover') {
       const opts = takeoverOptions(s, pl);
       opts.sort((a, b) => groupValue(s, b.card) - groupValue(s, a.card) || depth(s, a.onto) - depth(s, b.onto));
+      if (P.smartTakeover && opts.length > 1) {
+        // Play out the most promising placements and keep the one that leaves us best off.
+        let best = opts[0], bestScore = -Infinity;
+        for (const o of spread(opts, 12)) {
+          try {
+            const score = evaluate(applyAction(s, pl, { type: 'takeover', ...o }), pl) + (openArrowsAfter(s, pl, o) * 0.8);
+            if (score > bestScore) { bestScore = score; best = o; }
+          } catch { /* not placeable after all */ }
+        }
+        return { type: 'takeover', ...best };
+      }
+      if (opts.length > 1 && slips(s, pl, 'takeover')) return { type: 'takeover', ...opts[Math.floor(roll01(s, pl, 'tk') * opts.length)] };
       return opts.length ? { type: 'takeover', ...opts[0] } : { type: 'skipTakeover' };
     }
     if (s.prompt.kind === 'discardToLimit') {
@@ -342,8 +465,17 @@ export function chooseAction(s: GameState, pl: string): Action {
   return { type: 'pass' };
 }
 
+/** Open arrows the structure would have after a takeover: room to grow. */
+function openArrowsAfter(s: GameState, pl: string, o: { card: string; onto: string; side: Side }): number {
+  try {
+    const after = applyAction(s, pl, { type: 'takeover', ...o });
+    return structureCards(after, pl).reduce((n, g) => n + openArrows(after, g).length, 0);
+  } catch { return 0; }
+}
+
 /** Counter a harmful Plot, or answer an event, when the look-ahead says it pays. */
 function windowMove(s: GameState, pl: string): Action {
+  if (!P.tricks) return { type: 'pass' };
   const opts = responseOptions(s, pl).map((o) => o.action);
   if (!opts.length) return { type: 'pass' };
   let baseline: number;

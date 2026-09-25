@@ -3,12 +3,12 @@
 // players, applies standing orders and response deadlines. A host only needs to supply a Store
 // (database) and call these functions from its API routes and a periodic timer.
 import {
-  type Action, type GameState, type GameSettings, applyAction, createGame, hasResponse, player, waitingFor, randomDeck,
+  type Action, type AiLevel, type GameState, type GameSettings, applyAction, createGame, hasResponse, player, waitingFor, randomDeck,
   RuleError, def, HOOKS, canExpose,
 } from '../engine';
 import { chooseAction } from '../ai/ai';
 
-export interface Seat { id: string; name: string; isAI: boolean; userId?: string; illuminati?: string }
+export interface Seat { id: string; name: string; isAI: boolean; aiLevel?: AiLevel; userId?: string; illuminati?: string }
 
 export interface StandingOrders {
   /** Pass automatically in windows where you have no legal response. */
@@ -51,12 +51,13 @@ function inviteCode() {
 // ------------------------------------------------------------------ lobby
 
 export async function newTable(store: Store, host: { userId: string; name: string; illuminati: string }, opts: {
-  seats: number; computerSeats?: number; settings?: Partial<GameSettings>;
+  seats: number; computerSeats?: number; aiLevel?: AiLevel; settings?: Partial<GameSettings>;
 }, notifier?: Notifier): Promise<GameRecord> {
   const seats: Seat[] = [{ id: 'p1', name: host.name, isAI: false, userId: host.userId, illuminati: host.illuminati }];
   for (let i = 2; i <= opts.seats; i++) {
     const ai = i > opts.seats - (opts.computerSeats ?? 0);
-    seats.push({ id: `p${i}`, name: ai ? `Computer ${i - 1}` : '', isAI: ai });
+    const level = opts.aiLevel ?? 'normal';
+    seats.push(ai ? { id: `p${i}`, name: `Computer ${i - 1} (${level[0].toUpperCase()}${level.slice(1)})`, isAI: true, aiLevel: level } : { id: `p${i}`, name: '', isAI: false });
   }
   const now = Date.now();
   const rec: GameRecord = {
@@ -96,7 +97,7 @@ function maybeStart(rec: GameRecord) {
         ill = ['bavarian-illuminati', 'gnomes-of-zurich', 'the-network', 'servants-of-cthulhu', 'discordian-society', 'ufos', 'shangri-la', 'adepts-of-hermes', 'bermuda-triangle'].find((x) => !used.has(x))!;
         used.add(ill);
       }
-      return { id: s.id, name: s.name, isAI: s.isAI, deck: randomDeck(seed + i, ill) };
+      return { id: s.id, name: s.name, isAI: s.isAI, aiLevel: s.aiLevel, deck: randomDeck(seed + i, ill) };
     }),
   });
   rec.state = settle(rec, rec.state);

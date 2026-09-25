@@ -6,7 +6,7 @@ import {
   goalCount, goalNeeded, hasResponse, ILLUMINATI, isImplemented, GROUP_ABILITIES, openArrows, outSides,
   plotOptions, plotsInHand, handLimit, power, resistance, globalPower, alignments, randomDeck,
   responseOptions, structureCards, subtree, takeoverOptions, tokenBarred, waitingFor, PLOTS, NWO_EFFECTS,
-  describePlay, player, leadOptions, actionCancelled, actionSummary, abilitiesOf, abilityOptions, resourcesOf, canEnterPlay, HOOKS, goalsInHand, goalLimit,
+  describePlay, player, leadOptions, type AiLevel, actionCancelled, actionSummary, abilitiesOf, abilityOptions, resourcesOf, canEnterPlay, HOOKS, goalsInHand, goalLimit,
 } from '../engine';
 import { attachRect, rectOf, ensureLayout, type Rect } from '../engine/geometry';
 import { chooseAction, successChance } from '../ai/ai';
@@ -165,6 +165,16 @@ function schedule() {
   }
 }
 
+const LEVEL_KEY = 'elitists-war.level';
+function loadLevel(): AiLevel {
+  try { const v = localStorage.getItem(LEVEL_KEY); return v === 'easy' || v === 'hard' ? v : 'normal'; } catch { return 'normal'; }
+}
+const LEVELS: [AiLevel, string, string][] = [
+  ['easy', 'Easy', 'Takes only safe-looking attacks, skips clever card play, and sometimes slips up.'],
+  ['normal', 'Normal', 'Plays solidly: weighs its attacks and cards, and defends what matters.'],
+  ['hard', 'Hard', 'Counts all the help it can bring to each attack, plays every takeover out, and fights hardest when a win is close.'],
+];
+
 function newGame(illuminati: string, quick: boolean) {
   const seed = Math.floor(Math.random() * 1e9);
   const others = ILLUMINATI.filter((c) => c.id !== illuminati);
@@ -173,7 +183,7 @@ function newGame(illuminati: string, quick: boolean) {
     seed,
     players: [
       { id: 'p1', name: 'You', isAI: false, deck: randomDeck(seed, illuminati) },
-      { id: 'p2', name: 'Computer', isAI: true, deck: randomDeck(seed + 1, rivalIll) },
+      { id: 'p2', name: `Computer (${LEVELS.find((l) => l[0] === loadLevel())![1]})`, isAI: true, aiLevel: loadLevel(), deck: randomDeck(seed + 1, rivalIll) },
     ],
     settings: { houseRules: quick ? ['quickGame'] : [] },
     chooseLeads: true,
@@ -986,14 +996,21 @@ function renderStart() {
             <b>${esc(c.name)}</b><span class="pw">${c.power}/${c.globalPower}</span>
             <span class="small">${esc(c.text.replace(/^Power [^.]+\.\s*/, ''))}</span>
           </button>`).join('')}</div>
+        <div class="label">Computer difficulty</div>
+        <div class="levels" role="radiogroup" aria-label="Computer difficulty">${LEVELS.map(([id, name, what]) => `
+          <button class="level ${loadLevel() === id ? 'on' : ''}" role="radio" aria-checked="${loadLevel() === id}" data-level="${id}"><b>${name}</b><span class="small muted">${what}</span></button>`).join('')}</div>
         <div class="row">
           <label class="toggle"><input type="checkbox" id="quick" ${quick ? 'checked' : ''}> Quick game: first to 8 Groups (house rule; the official two-player goal is 12)</label>
           <button class="primary" data-act="start">Start game</button>
         </div>
-        <p class="muted small">Games are saved in this browser after every move, so you can stop and pick up later. Playing friends online comes next.</p>
+        <p class="muted small">Games are saved in this browser after every move, so you can stop and pick up later.</p>
       </section>
     </div>`;
   app.querySelectorAll<HTMLElement>('[data-pick]').forEach((b) => b.onclick = () => { (ui as Ui & { pick?: string }).pick = b.dataset.pick; renderStart(); });
+  app.querySelectorAll<HTMLElement>('[data-level]').forEach((b) => b.onclick = () => {
+    try { localStorage.setItem(LEVEL_KEY, b.dataset.level!); } catch { /* storage unavailable */ }
+    renderStart();
+  });
   app.querySelector<HTMLInputElement>('#quick')!.onchange = (e) => { (ui as Ui & { quick?: boolean }).quick = (e.target as HTMLInputElement).checked; };
   app.querySelector<HTMLElement>('[data-act="start"]')!.onclick = () => newGame(pick, (ui as Ui & { quick?: boolean }).quick ?? false);
   app.querySelectorAll<HTMLElement>('[data-load]').forEach((b) => b.onclick = () => {
@@ -1314,6 +1331,7 @@ function renderOnline() {
       <form id="new" class="panel"><div class="row">
         <label>Players <select id="n-seats"><option>2</option><option>3</option><option>4</option><option>5</option></select></label>
         <label>Computer players <select id="n-ai"><option>0</option><option>1</option><option>2</option><option>3</option></select></label>
+        <label>Computer difficulty <select id="n-level">${LEVELS.map(([id, name]) => `<option value="${id}" ${loadLevel() === id ? 'selected' : ''}>${name}</option>`).join('')}</select></label>
         <label class="toggle"><input type="checkbox" id="n-quick"> Quick game (8 Groups, house rule)</label>
         <button class="primary" type="submit">Create game</button></div>
         <p class="muted small">With 0 computer players you get an invite code to send to friends. Everyone moves when they like; the game waits (up to 24 hours per response, 3 days per turn).</p></form>
@@ -1339,7 +1357,9 @@ function renderOnline() {
     const seats = Number((app.querySelector('#n-seats') as HTMLSelectElement).value);
     const computerSeats = Number((app.querySelector('#n-ai') as HTMLSelectElement).value);
     const quick = (app.querySelector('#n-quick') as HTMLInputElement).checked;
-    try { applyReply(await api({ op: 'new', seats, computerSeats, quick, illuminati: pick })); await openGame(online!.gameId!); } catch (err) { o.msg = (err as Error).message; render(); }
+    const level = (app.querySelector('#n-level') as HTMLSelectElement).value;
+    try { localStorage.setItem(LEVEL_KEY, level); } catch { /* storage unavailable */ }
+    try { applyReply(await api({ op: 'new', seats, computerSeats, quick, level, illuminati: pick })); await openGame(online!.gameId!); } catch (err) { o.msg = (err as Error).message; render(); }
   };
 }
 
