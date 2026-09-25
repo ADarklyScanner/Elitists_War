@@ -737,7 +737,6 @@ interface Online {
   channel?: { unsubscribe(): void };
   busy: boolean;
   msg?: string;
-  authMode: 'signin' | 'signup';
   alerts?: { available: boolean; phone: string; optIn: boolean; msg?: string };
 }
 let online: Online | null = null;
@@ -796,10 +795,10 @@ function startOnline() {
     app.innerHTML = '<div class="start"><header class="hero"><h1>Elitists War</h1><p>The game could not connect. Check your internet connection and reload the page.</p></header></div>';
     return;
   }
-  online = { client: g.supabase!.createClient(__SB_URL__, __SB_KEY__), name: 'Player', games: [], busy: false, authMode: 'signin' };
-  online.client.auth.onAuthStateChange((_e: string, session: { user: { id: string; email: string; user_metadata?: { name?: string } } } | null) => {
+  online = { client: g.supabase!.createClient(__SB_URL__, __SB_KEY__), name: 'Player', games: [], busy: false };
+  online.client.auth.onAuthStateChange((_e: string, session: { user: { id: string; email: string; user_metadata?: { name?: string; full_name?: string } } } | null) => {
     online!.userId = session?.user.id;
-    if (session) online!.name = session.user.user_metadata?.name || session.user.email.split('@')[0];
+    if (session) online!.name = (session.user.user_metadata?.full_name || session.user.user_metadata?.name || session.user.email.split('@')[0]).slice(0, 24);
     if (session) loadGames(); else render();
   });
   setInterval(() => { if (online?.gameId) refreshGame(); else if (online?.userId) loadGames(); }, 45_000);
@@ -810,33 +809,17 @@ function renderOnline() {
   const o = online!;
   const msg = o.msg ? `<div class="error" role="alert">${esc(o.msg)}</div>` : '';
   if (!o.userId) {
-    const up = o.authMode === 'signup';
     app.innerHTML = `<div class="start"><header class="hero"><h1>Elitists War</h1><p>Play online with friends, a move at a time. Sign in so your games follow you to any device.</p></header>
-      <form class="panel auth" id="auth">${msg}
-        <h2>${up ? 'Create an account' : 'Sign in'}</h2>
-        ${up ? '<label>Your name at the table<input id="a-name" required maxlength="24" autocomplete="nickname"></label>' : ''}
-        <label>Email<input id="a-email" type="email" required autocomplete="email"></label>
-        <label>Password<input id="a-pass" type="password" required minlength="8" autocomplete="${up ? 'new-password' : 'current-password'}"></label>
-        <div class="btns"><button class="primary" type="submit" ${o.busy ? 'disabled' : ''}>${up ? 'Create account' : 'Sign in'}</button>
-        <button type="button" class="linkish" id="a-switch">${up ? 'I already have an account' : 'New here? Create an account'}</button></div>
-      </form></div>`;
-    app.querySelector<HTMLFormElement>('#auth')!.onsubmit = async (e) => {
-      e.preventDefault();
-      const email = (app.querySelector('#a-email') as HTMLInputElement).value.trim();
-      const password = (app.querySelector('#a-pass') as HTMLInputElement).value;
+      <section class="panel auth">${msg}
+        <button class="google" id="a-google" ${o.busy ? 'disabled' : ''}>
+          <svg viewBox="0 0 48 48" width="20" height="20" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>
+          Sign in with Google</button>
+      </section></div>`;
+    app.querySelector<HTMLButtonElement>('#a-google')!.onclick = async () => {
       o.busy = true; o.msg = undefined; render();
-      if (up) {
-        const name = (app.querySelector('#a-name') as HTMLInputElement).value.trim();
-        const { data, error } = await o.client.auth.signUp({ email, password, options: { data: { name } } });
-        o.msg = error ? error.message : data.session ? undefined : 'Check your email and click the confirmation link, then sign in here.';
-        if (!error && !data.session) o.authMode = 'signin';
-      } else {
-        const { error } = await o.client.auth.signInWithPassword({ email, password });
-        if (error) o.msg = error.message === 'Email not confirmed' ? 'Confirm your email first: open the link we sent you, then sign in.' : error.message;
-      }
-      o.busy = false; render();
+      const { error } = await o.client.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: location.origin + location.pathname } });
+      if (error) { o.msg = error.message; o.busy = false; render(); } // on success the browser goes to Google
     };
-    app.querySelector<HTMLElement>('#a-switch')!.onclick = () => { o.authMode = up ? 'signin' : 'signup'; o.msg = undefined; render(); };
     return;
   }
   // Waiting room for a game whose seats are not all filled.

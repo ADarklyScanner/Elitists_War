@@ -187,6 +187,9 @@ p { margin: 0; }
 
 /* Online lobby */
 .auth { max-width: 420px; }
+.google { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; padding: 11px 16px; font: 600 15px/1 "IBM Plex Sans", sans-serif; color: #1f1f1f; background: #fff; border: 1px solid #dadce0; border-radius: 6px; cursor: pointer; }
+.google:hover:not(:disabled) { background: #f4f6f8; }
+.google:disabled { opacity: .6; cursor: default; }
 .auth label, #new label, #join label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
 .auth input, #new select, #join input { font: inherit; color: var(--ink); background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; }
 .invite { display: flex; gap: 10px; align-items: center; }
