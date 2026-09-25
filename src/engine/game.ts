@@ -905,13 +905,28 @@ function checkVictory(s: GameState) {
 /** R049: after his third complete turn, a player whose Illuminati has no puppets is out at once. */
 function checkElimination(s: GameState) {
   const activeId = activePlayer(s).id;
+  // A Servants-of-Cthulhu-style player whose own last Group was his winning destruction is not
+  // knocked out: he wins at the end of this turn instead (R049).
+  const winsByDestroying = (p: PlayerState) => p.id === activeId && abilitiesOf(s, p.illuminati)
+    .some((a) => a.kind === 'specialGoal' && a.goal === 'destroyCount' && p.destroyedCredit.length >= a.value);
   for (const p of livePlayers(s)) {
-    if (p.turnsTaken >= 3 && puppets(s, p.illuminati).length === 0) {
+    if (p.turnsTaken >= 3 && puppets(s, p.illuminati).length === 0 && !winsByDestroying(p)) {
       p.eliminated = true;
       p.eliminatedBy = p.lastPuppetTakenBy;
       // His hand and decks leave the game.
       for (const iid of [...p.hand, ...p.plotDeck, ...p.groupDeck]) s.cards[iid].zone = 'removed';
       p.hand = []; p.plotDeck = []; p.groupDeck = [];
+      // His Resources leave play too, unless the player who knocked him out is another faction of
+      // the same Illuminati: that player takes them all (R044, R049).
+      const heir = p.eliminatedBy && !player(s, p.eliminatedBy).eliminated && s.cards[player(s, p.eliminatedBy).illuminati].cardId === s.cards[p.illuminati].cardId
+        ? player(s, p.eliminatedBy) : undefined;
+      for (const r of resourcesOf(s, p.id)) {
+        const c = s.cards[r];
+        if (heir) { Object.assign(c, { controller: heir.id, linkedTo: heir.illuminati }); continue; }
+        Object.assign(c, { controller: undefined, linkedTo: undefined, hiddenUnder: undefined, tokens: 0 });
+        if (c.owner === p.id) c.zone = 'removed';
+        else { c.zone = 'discard'; player(s, c.owner).discard.push(r); }
+      }
       log(s, `${p.name} has no Groups left and is eliminated.`, p.id);
     }
   }
@@ -981,6 +996,8 @@ export function validateAttack(s: GameState, playerId: string, a: Extract<Action
     if (s.attack || s.window || s.prompt) return 'Finish the current action first.';
     if (s.turnFlags.restricted) return 'This turn you may only draw cards and place Action tokens.';
   }
+  // There are only two kinds of attack a Group can make (R005: no Attack to Neutralize).
+  if (a.attackType !== 'control' && a.attackType !== 'destroy') return 'A Group can only attack to control or to destroy.';
   const att = s.cards[a.attacker];
   const tgt = s.cards[a.target];
   if (!att || !tgt) return 'Unknown card.';
@@ -1191,10 +1208,19 @@ export function attackStrength(s: GameState, ctx: AttackCtx): StrengthBreakdown 
   for (const b of liveBonus(ctx.defenseBonus)) add('d', b.amount, b.label);
   // Scripted card effects (Resources, linked Plots, special Groups).
   {
+    // R014: in an attack by or against a Secret Group, Groups' abilities are ignored, but Plots still
+    // work, and so do Resources unless they are linked to a Group that is not Secret.
+    const worksOnSecrets = (self: string) => {
+      const t = def(s, self).type;
+      if (t === 'Plot') return true;
+      if (t !== 'Resource') return false;
+      const to = s.cards[self].linkedTo;
+      return !to || def(s, to).type === 'Illuminati' || isSecret(s, to);
+    };
     for (const self of activeHookCards(s)) {
       const h = HOOKS[s.cards[self].cardId];
       if (!h.attackMod) continue;
-      if (noAbilities && !ctx.instant && !h.worksInSecretAttacks) continue;
+      if (noAbilities && !ctx.instant && !h.worksInSecretAttacks && !worksOnSecrets(self)) continue;
       add('a', h.attackMod(s, self, ctx, 'attack'), cardName(s, self));
       add('d', h.attackMod(s, self, ctx, 'defense'), cardName(s, self));
     }
