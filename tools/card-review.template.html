@@ -100,6 +100,7 @@ button { cursor: pointer; }
 .sheet td.mono { font-family: var(--mono); font-size: 12.5px; color: var(--gilt); word-break: break-all; }
 .sheet ul { margin: 0; padding-left: 18px; }
 .pass { color: var(--ok); } .bad { color: var(--flag); }
+.alt-head th { background: #2c1f3c; color: var(--gilt); letter-spacing: .08em; text-transform: uppercase; font-size: 11.5px; }
 @media (max-width: 600px) { .sheet th { width: 104px; padding: 7px 8px; } .sheet td { padding: 7px 8px; } }
 
 .review { display: flex; flex-direction: column; gap: 8px; padding: 12px; border-top: 1px solid var(--line); background: #1f152b; }
@@ -116,7 +117,7 @@ button { cursor: pointer; }
 
 <header class="top">
   <h1>Card Sheet Review</h1>
-  <p>Every card's new text, flavour and notes, drafted one card at a time and checked against the original wording. Nothing here is in the game until you approve it.</p>
+  <p>Every card's new text, flavour and notes, drafted one card at a time and checked against the original wording. Where the GPT workbook has a version too, it is shown underneath to compare. Nothing here is in the game until you approve it.</p>
   <div class="progress" id="progress"></div>
 </header>
 <div class="layout">
@@ -136,7 +137,7 @@ const esc = (t) => String(t ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<
 const state = { i: 0, filter: 'all', type: 'all', q: '', reviews: {}, db: null, local: false };
 try { const v = JSON.parse(localStorage.getItem('card-review.pos') || '{}'); if (typeof v.i === 'number') state.i = v.i; } catch (e) {}
 
-const statusOf = (s) => state.reviews[s.id]?.status || (s.status === 'Needs attention' ? 'attention' : 'todo');
+const statusOf = (s) => { const v = state.reviews[s.id]?.status; return v === 'second' ? 'approved' : v || (s.status === 'Needs attention' ? 'attention' : 'todo'); };
 function visible() {
   const q = state.q.toLowerCase();
   return SHEETS.map((s, i) => ({ s, i })).filter(({ s }) =>
@@ -200,14 +201,20 @@ function sheetHtml(s) {
     <tr><th>Image file</th><td class="mono">${esc(s.imageFile)}</td></tr>
     <tr><th>Originality check</th><td class="${orig.startsWith('PASS') ? 'pass' : 'bad'}">${esc(orig || 'Not run')}</td></tr>
     <tr><th>Draft status</th><td>${esc(s.status)}</td></tr>
+    ${s.second?.cardText ? `<tr class="alt-head"><th colspan="2">Second draft (GPT workbook)</th></tr>
+    <tr><th>Card text</th><td>${esc(s.second.cardText)}</td></tr>
+    <tr><th>Flavour text</th><td class="fl">${esc(s.second.flavorText)}</td></tr>
+    <tr><th>Originality check</th><td class="${String(s.second.check).startsWith('PASS') ? 'pass' : 'bad'}">${esc(s.second.check)}</td></tr>
+    ${s.second.photoPrompt ? `<tr><th>Its image prompt</th><td>${esc(s.second.photoPrompt)}</td></tr>` : ''}` : ''}
     <tr><th>Date added</th><td>${esc(s.dateAdded)}</td></tr>
   </table>
   <div class="review">
     <div class="row">
       <button class="btn ok ${r.status === 'approved' ? 'on' : ''}" data-act="approved">Approve</button>
+      ${s.second?.cardText && String(s.second.check).startsWith('PASS') ? `<button class="btn ok ${r.status === 'second' ? 'on' : ''}" data-act="second" title="Use the second draft's text and flavour">Use second draft</button>` : ''}
       <button class="btn fl ${r.status === 'flagged' ? 'on' : ''}" data-act="flagged">Flag for changes</button>
       ${r.status ? '<button class="btn clear" data-act="clear">Clear</button>' : ''}
-      <span class="saved" id="saved">${r.at ? `${r.status === 'approved' ? 'Approved' : 'Flagged'} ${new Date(r.at).toLocaleString()}` : ''}</span>
+      <span class="saved" id="saved">${r.at ? `${({ approved: 'Approved', second: 'Second draft chosen', flagged: 'Flagged' })[r.status] || ''} ${new Date(r.at).toLocaleString()}` : ''}</span>
     </div>
     <label for="note" class="saved">What should change? (saved with a flag)</label>
     <textarea id="note" placeholder="e.g. Flavour is too long; name the other card it works with">${esc(r.note || '')}</textarea>
@@ -242,7 +249,7 @@ async function saveReview(status) {
     catch (e) { state.local = true; }
   }
   if (!state.db || state.local) { try { localStorage.setItem('card-review.local', JSON.stringify(state.reviews)); } catch (e) {} }
-  if (status === 'approved') go(1); else render();
+  if (status === 'approved' || status === 'second') go(1); else render();
 }
 
 document.addEventListener('click', (e) => {
