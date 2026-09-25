@@ -34,9 +34,15 @@ interface Ui {
   error?: string;
   autoPass: boolean;
   thinking: boolean;
+  /** Guide mode: green outlines on what you can use now, red on what you can't, and the next area to go to. */
+  guide: boolean;
 }
 
-const ui: Ui = { game: null, me: 'p1', sel: { kind: 'none' }, autoPass: true, thinking: false };
+const ui: Ui = { game: null, me: 'p1', sel: { kind: 'none' }, autoPass: true, thinking: false, guide: loadGuidePref() };
+
+function loadGuidePref(): boolean {
+  try { return localStorage.getItem('elitists-war.guide') !== 'off'; } catch { return true; }
+}
 const app = document.getElementById('app')!;
 
 // ------------------------------------------------------------------ saved games
@@ -156,8 +162,92 @@ function chip(a: string) {
 
 // ------------------------------------------------------------------ rendering
 
+// ------------------------------------------------------------------ guide mode
+
+type Area = 'board' | 'rival' | 'hand' | 'console';
+interface Guide { ok: Set<string>; no: Set<string>; next?: Area; text: string }
+let G: Guide = { ok: new Set(), no: new Set(), text: '' };
+
+/** Work out, for the current moment, which cards can be used, which cannot, and where to go next. */
+function computeGuide(s: GameState): Guide {
+  const g: Guide = { ok: new Set(), no: new Set(), text: '' };
+  if (!ui.guide || s.phase === 'gameOver') return g;
+  const me = player(s, ui.me);
+  const mine = structureCards(s, ui.me);
+  const res = resourcesOf(s, ui.me);
+  const hand = me.hand;
+  const mark = (ids: string[], ok: (id: string) => boolean) => { for (const id of ids) (ok(id) ? g.ok : g.no).add(id); };
+  const sel = ui.sel;
+  const pr = s.prompt?.player === ui.me ? s.prompt : undefined;
+  if (ui.slotChoice) { g.next = 'console'; g.text = 'Pick which arrow the card attaches to.'; return g; }
+  if (pr?.kind === 'choose' || pr?.kind === 'chooseLead') { g.next = 'console'; g.text = 'Make your choice on the right.'; return g; }
+  if (pr?.kind === 'takeover') {
+    const opts = takeoverOptions(s, ui.me);
+    if (sel.kind === 'takeover') {
+      g.ok.add('slots'); mark(hand, (h) => h === sel.card);
+      g.next = 'board'; g.text = 'Step 2 of 2: tap a green + in your Power Structure to place the Group.';
+    } else {
+      mark(hand, (h) => opts.some((o) => o.card === h) || (def(s, h).type === 'Resource' && canEnterPlay(s, h, ui.me)));
+      g.next = opts.length ? 'hand' : 'console';
+      g.text = opts.length ? 'Step 1 of 2: pick a green Group in your hand to take over for free (or Skip on the right).' : 'No Group in your hand fits an open arrow: tap Skip takeover.';
+    }
+    return g;
+  }
+  if (pr?.kind === 'discardToLimit') {
+    mark(hand, (h) => def(s, h).type === 'Plot');
+    g.next = 'hand'; g.text = 'Tap the green Plots you want to get rid of, then confirm on the right.';
+    return g;
+  }
+  if (s.window && waitingFor(s).includes(ui.me)) {
+    const opts = responseOptions(s, ui.me);
+    mark(hand.filter((h) => def(s, h).type === 'Plot'), (h) => opts.some((o) => o.action.type === 'playPlot' && o.action.play.card === h));
+    const acting = new Set(opts.flatMap((o) => o.action.type === 'aid' || o.action.type === 'oppose' ? [o.action.group] : o.action.type === 'useAbility' ? [o.action.card] : []));
+    mark(mine, (c) => acting.has(c));
+    g.next = 'console';
+    g.text = opts.length ? 'Green cards can respond: pick a response on the right, or Pass when you are done.' : 'Nothing you can do here: tap Pass.';
+    return g;
+  }
+  if (!idle(s)) { g.text = s.prompt || s.window ? 'Waiting for your rival.' : ''; return g; }
+  // Your main phase.
+  if (sel.kind === 'attack') {
+    const opts = attackOptions(s, ui.me, sel.attacker).filter((o) => o.type === sel.type);
+    const targets = new Set(opts.map((o) => o.target));
+    const rivalCards = s.players.filter((p) => p.id !== ui.me).flatMap((p) => structureCards(s, p.id));
+    mark(rivalCards, (c) => targets.has(c));
+    if (sel.type === 'control') mark(hand.filter((h) => def(s, h).type === 'Group'), (h) => targets.has(h));
+    g.next = [...targets].some((t) => s.cards[t].zone === 'hand') && ![...targets].some((t) => s.cards[t].zone === 'structure') ? 'hand' : 'rival';
+    g.text = targets.size ? `Step 3: tap a green target to attack to ${sel.type}.` : 'No legal targets for this attack: Cancel on the right.';
+    return g;
+  }
+  if (sel.kind === 'move') { g.ok.add('slots'); g.next = 'board'; g.text = 'Tap a green + to move the Group there.'; return g; }
+  if (sel.kind === 'link') { mark(mine, (c) => def(s, c).type !== 'Illuminati'); g.next = 'board'; g.text = 'Tap a green Group to link the Resource to it.'; return g; }
+  if (sel.kind === 'group') { g.next = 'console'; g.text = 'Step 2: choose what this Group does (green buttons on the right).'; return g; }
+  if (sel.kind === 'confirm') { g.next = 'console'; g.text = 'Step 4: add any Plots, then Declare attack.'; return g; }
+  if (sel.kind === 'plot' || sel.kind === 'resource') { g.next = 'console'; g.text = 'Pick how to play it on the right, or Close.'; return g; }
+  const canUse = (c: string) => s.cards[c].tokens > 0 && (attackOptions(s, ui.me, c).length > 0 || abilityOptions(s, ui.me, c).length > 0 || def(s, c).type === 'Group');
+  mark(mine, canUse);
+  mark(res, (r) => abilityOptions(s, ui.me, r).length > 0 || !!HOOKS[s.cards[r].cardId]?.linkTo);
+  mark(hand, (h) => {
+    const d = def(s, h);
+    if (d.type === 'Plot') return plotOptions(s, ui.me, h).length > 0;
+    if (d.type === 'Resource') return !s.turnFlags.resourcePlayed && s.cards[me.illuminati].tokens > 0 && canEnterPlay(s, h, ui.me);
+    return false; // Groups in hand come into play by takeover or an Attack to Control from the board
+  });
+  const boardOk = mine.some((c) => g.ok.has(c));
+  const handOk = hand.some((h) => g.ok.has(h));
+  g.next = boardOk ? 'board' : handOk ? 'hand' : 'console';
+  g.text = boardOk ? 'Step 1: tap a green Group to attack or move with it' + (handOk ? ', or a green card in your hand' : '') + '. End your turn on the right when done.'
+    : handOk ? 'Step 1: play a green card from your hand, or end your turn on the right.'
+    : 'Nothing left to do this turn except buy cards: End turn on the right.';
+  return g;
+}
+
+const gcls = (id: string) => (G.ok.has(id) ? 'g-ok' : G.no.has(id) ? 'g-no' : '');
+const gnext = (a: Area) => (G.next === a ? 'g-next' : '');
+
 function render() {
   if (!ui.game) { renderStart(); return; }
+  G = computeGuide(ui.game);
   const s = ui.game;
   const rival = s.players.find((p) => p.id !== ui.me)!;
   app.innerHTML = `
@@ -165,20 +255,22 @@ function render() {
       <button class="linkish" data-act="home">‹ Games</button>
       <div class="brand">Elitists War</div>
       <div class="turn">${s.phase === 'gameOver' ? 'Game over' : `Turn ${s.turn} · ${myTurn(s) ? 'your move' : 'computer\'s turn'}`}</div>
+      <button class="guide-toggle ${ui.guide ? 'on' : ''}" data-act="guide" aria-pressed="${ui.guide}" title="Outline what you can do now">Guide ${ui.guide ? 'on' : 'off'}</button>
     </header>
-    <main class="table">
+    <main class="table ${ui.guide ? 'guide' : ''}">
       <section class="boards">
         ${renderSide(s, rival.id, false)}
         ${renderNwo(s)}
         ${renderSide(s, ui.me, true)}
       </section>
-      <aside class="console">
+      <aside class="console ${gnext('console')}">
+        ${G.text ? `<div class="guide-step" role="status"><b>Next:</b> ${esc(G.text)}</div>` : ''}
         ${renderConsole(s)}
         ${online ? ordersPanel() : ''}
         ${renderInspect(s)}
         ${renderLog(s)}
       </aside>
-      <section class="hand-wrap">
+      <section class="hand-wrap ${gnext('hand')}">
         <div class="hand-head">
           <span class="label">Your hand</span>
           <span class="muted">${plotsInHand(s, ui.me).length} Plots (limit ${handLimit(s, ui.me)} outside your turn) · ${player(s, ui.me).plotDeck.length} Plots and ${player(s, ui.me).groupDeck.length} Groups left in your decks</span>
@@ -205,11 +297,11 @@ function renderSide(s: GameState, pl: string, mine: boolean): string {
   for (const sl of slots) byCell.set(`${sl.x},${sl.y}`, [...(byCell.get(`${sl.x},${sl.y}`) ?? []), sl]);
   for (const group of byCell.values()) {
     const sl = group[0];
-    cells.push(`<button class="cell slot" style="grid-column:${sl.x - minX + 1};grid-row:${sl.y - minY + 1}" data-slot="${group.map((g) => `${g.onto}:${g.side}`).join('|')}" aria-label="Place here">+</button>`);
+    cells.push(`<button class="cell slot" style="grid-column:${sl.x - minX + 1};grid-row:${sl.y - minY + 1}" data-slot="${group.map((g) => `${g.onto}:${g.side}`).join('|')}" aria-label="Place here">+</button>`.replace('class="cell slot"', `class="cell slot ${G.ok.has('slots') ? 'g-ok' : ''}"`));
   }
   const n = goalCount(s, pl), need = goalNeeded(s, pl);
   return `
-    <div class="side ${mine ? 'mine' : 'theirs'} ${s.players[s.active].id === pl && s.phase !== 'gameOver' ? 'active' : ''}">
+    <div class="side ${mine ? 'mine' : 'theirs'} ${s.players[s.active].id === pl && s.phase !== 'gameOver' ? 'active' : ''} ${gnext(mine ? 'board' : 'rival')}">
       <div class="side-head">
         <span class="who">${mine ? 'Your Power Structure' : 'Computer'}</span>
         <span class="goal" title="Groups controlled toward the Basic Goal">
@@ -222,7 +314,7 @@ function renderSide(s: GameState, pl: string, mine: boolean): string {
       ${resourcesOf(s, pl).length ? `<div class="res-row"><span class="label">Resources</span>${resourcesOf(s, pl).map((r) => {
         const c = s.cards[r];
         const sel = (ui.sel.kind === 'resource' && ui.sel.iid === r) || (ui.sel.kind === 'link' && ui.sel.resource === r);
-        return `<button class="res ${sel ? 'selected' : ''}" data-res="${r}"><b>${esc(cardName(s, r))}</b>${c.tokens ? '<span class="token-inline"></span>' : ''}<span class="muted small">${c.linkedTo && s.cards[c.linkedTo] && def(s, c.linkedTo).type !== 'Illuminati' ? `linked to ${esc(cardName(s, c.linkedTo))}` : 'unlinked'}</span></button>`;
+        return `<button class="res ${sel ? 'selected' : ''} ${gcls(r)}" data-res="${r}"><b>${esc(cardName(s, r))}</b>${c.tokens ? '<span class="token-inline"></span>' : ''}<span class="muted small">${c.linkedTo && s.cards[c.linkedTo] && def(s, c.linkedTo).type !== 'Illuminati' ? `linked to ${esc(cardName(s, c.linkedTo))}` : 'unlinked'}</span></button>`;
       }).join('')}</div>` : ''}
     </div>`;
 }
@@ -273,7 +365,7 @@ function tableCard(s: GameState, iid: string): string {
   const p = power(s, iid), g = globalPower(s, iid);
   const partial = !ill && !isImplemented(d.id) && (GROUP_ABILITIES[d.id]?.length ?? 0) > 0;
   return `
-    <button class="card ${ill ? 'ill' : ''} ${c.devastated ? 'devastated' : ''} ${highlightFor(s, iid)}" data-card="${iid}" title="${esc(d.name)}">
+    <button class="card ${ill ? 'ill' : ''} ${c.devastated ? 'devastated' : ''} ${highlightFor(s, iid)} ${gcls(iid)}" data-card="${iid}" title="${esc(d.name)}">
       ${arrows}
       <span class="name">${esc(d.name)}</span>
       <span class="aligns">${alignments(s, iid).map(chip).join('')}</span>
@@ -294,7 +386,7 @@ function handCard(s: GameState, iid: string): string {
   const selected = (sel.kind === 'plot' && sel.card === iid) || (sel.kind === 'takeover' && sel.card === iid) || (sel.kind === 'discard' && sel.cards.includes(iid));
   const targetable = sel.kind === 'attack' && sel.type === 'control' && attackOptions(s, ui.me, sel.attacker).some((o) => o.target === iid);
   return `
-    <button class="hcard ${isPlot ? 'plot' : 'group'} ${selected ? 'selected' : ''} ${targetable ? 'targetable' : ''} ${isPlot && !playable ? 'inactive' : ''}" data-hand="${iid}">
+    <button class="hcard ${isPlot ? 'plot' : 'group'} ${selected ? 'selected' : ''} ${targetable ? 'targetable' : ''} ${isPlot && !playable ? 'inactive' : ''} ${gcls(iid)}" data-hand="${iid}">
       <span class="kind">${isPlot ? esc(d.subtype === 'Plot' ? 'Plot' : d.subtype) : d.type === 'Resource' ? 'Resource' : esc(d.subtype)}</span>
       <span class="name">${esc(d.name)}</span>
       ${isPlot || d.type === 'Resource' ? `<span class="txt">${esc(d.modifier ?? d.text)}</span>` : `
@@ -682,6 +774,10 @@ function bind() {
     switch (b.dataset.act) {
       case 'home': clearTimeout(timer); ui.game = null; if (online) { online.gameId = undefined; online.channel?.unsubscribe(); loadGames(); } render(); break;
       case 'clear': ui.sel = { kind: 'none' }; ui.error = undefined; render(); break;
+      case 'guide':
+        ui.guide = !ui.guide;
+        try { localStorage.setItem('elitists-war.guide', ui.guide ? 'on' : 'off'); } catch { /* storage unavailable */ }
+        render(); break;
       case 'clearSlot': ui.slotChoice = undefined; render(); break;
       case 'skipTakeover': act({ type: 'skipTakeover' }); break;
       case 'pass': act({ type: 'pass' }); break;
