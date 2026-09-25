@@ -51,13 +51,14 @@ function inviteCode() {
 // ------------------------------------------------------------------ lobby
 
 export async function newTable(store: Store, host: { userId: string; name: string; illuminati: string }, opts: {
-  seats: number; computerSeats?: number; aiLevel?: AiLevel; settings?: Partial<GameSettings>;
+  seats: number; computerSeats?: number; aiLevel?: AiLevel; aiLevels?: AiLevel[]; settings?: Partial<GameSettings>;
 }, notifier?: Notifier): Promise<GameRecord> {
   const seats: Seat[] = [{ id: 'p1', name: host.name, isAI: false, userId: host.userId, illuminati: host.illuminati }];
+  const firstAi = opts.seats - (opts.computerSeats ?? 0) + 1;
   for (let i = 2; i <= opts.seats; i++) {
-    const ai = i > opts.seats - (opts.computerSeats ?? 0);
-    const level = opts.aiLevel ?? 'normal';
-    seats.push(ai ? { id: `p${i}`, name: `Computer ${i - 1} (${level[0].toUpperCase()}${level.slice(1)})`, isAI: true, aiLevel: level } : { id: `p${i}`, name: '', isAI: false });
+    const k = i - firstAi; // 0 for the first computer player
+    const level = opts.aiLevels?.[k] ?? opts.aiLevel ?? 'normal';
+    seats.push(k >= 0 ? { id: `p${i}`, name: `Computer ${k + 1} (${level[0].toUpperCase()}${level.slice(1)})`, isAI: true, aiLevel: level } : { id: `p${i}`, name: '', isAI: false });
   }
   const now = Date.now();
   const rec: GameRecord = {

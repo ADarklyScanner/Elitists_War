@@ -2,6 +2,7 @@
 // session; the function works out who they are and returns only what that player may see.
 import { deleteOrLeave, joinTable, newTable, setOrders, submit, tick, viewFor, type GameRecord, type Notifier, type Store } from './service';
 import { normalizePhone } from './sms';
+import type { AiLevel } from '../engine/types';
 
 /** Reading and saving a player's text-alert settings. */
 export interface AlertSettings {
@@ -21,6 +22,7 @@ export interface ApiRequest {
   quick?: boolean;
   /** Difficulty of the computer seats: 'easy' | 'normal' | 'hard'. */
   level?: string;
+  levels?: string[];         // one difficulty per computer player
   action?: Action;
   orders?: { passWhenNothing?: boolean; passWhenUninvolved?: boolean };
   /** op 'alerts': omit to read the current settings. */
@@ -54,10 +56,11 @@ export async function handle(store: Store, userId: string, req: ApiRequest, noti
     case 'list':
       return { games: (await store.listForUser(userId)).map((r) => summary(r, userId)) };
     case 'new': {
-      const seats = Math.min(6, Math.max(2, req.seats ?? 2));
+      const seats = Math.min(8, Math.max(2, req.seats ?? 2));
+      const lv = (x?: string): AiLevel => (x === 'easy' || x === 'hard' ? x : 'normal');
       const rec = await newTable(store, { userId, name, illuminati: req.illuminati ?? 'bavarian-illuminati' }, {
         seats, computerSeats: Math.min(seats - 1, req.computerSeats ?? 0), settings: { houseRules: req.quick ? ['quickGame'] : [] },
-        aiLevel: req.level === 'easy' || req.level === 'hard' ? req.level : 'normal',
+        aiLevel: lv(req.level), aiLevels: req.levels?.map(lv),
       }, notifier);
       return reply(rec, userId);
     }

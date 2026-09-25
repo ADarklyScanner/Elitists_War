@@ -473,3 +473,13 @@ p { margin: 0; }
 .zoom button[data-zoom="me"], .zoom button[data-zoom="turn"] { font-size: 12.5px; }
 .zoom button[data-zoom="turn"] { border-color: var(--brass); color: var(--brass); }
 @media (max-width: 480px) { .hud-btn { padding: 4px 8px; } .hud-btn[data-act="style"] { padding: 4px 6px; } .zoom button[data-zoom="turn"] { max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } }
+
+/* Computer players list on the new-game screens */
+.bots { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+.bot-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
+.bot-name { font: 600 14px var(--display); min-width: 90px; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; }
+.seg button { border: 0; border-radius: 0; background: none; padding: 4px 12px; font-size: 12.5px; color: var(--muted); }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button.on { background: var(--brass); color: #1a1406; font-weight: 600; }
+.add-bot { align-self: flex-start; border: 1px dashed var(--brass); background: none; color: var(--brass); border-radius: 8px; padding: 6px 12px; }

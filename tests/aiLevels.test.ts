@@ -43,4 +43,23 @@ describe('computer difficulty levels', () => {
     expect(rec.seats[1]).toMatchObject({ isAI: true, aiLevel: 'hard' });
     expect(rec.state!.players[1].aiLevel).toBe('hard');
   });
+  it('each computer seat can have its own level, with friends and computers at one table of 8', async () => {
+    const rec = await newTable(new MemoryStore(), { userId: 'ann', name: 'Ann', illuminati: 'the-network' },
+      { seats: 8, computerSeats: 6, aiLevels: ['easy', 'hard', 'normal', 'hard', 'easy', 'normal'] });
+    expect(rec.seats[1]).toMatchObject({ isAI: false, name: '' }); // the friend's seat waits for them
+    expect(rec.seats.slice(2).map((x) => x.aiLevel)).toEqual(['easy', 'hard', 'normal', 'hard', 'easy', 'normal']);
+    expect(rec.seats[2].name).toBe('Computer 1 (Easy)');
+    expect(rec.state).toBeNull(); // not started until the friend joins
+  });
+  it('an 8-player game with mixed levels plays to a legal finish', () => {
+    const levels: AiLevel[] = ['easy', 'normal', 'hard', 'normal', 'easy', 'hard', 'normal', 'easy'];
+    let s = createGame({ seed: 8, players: levels.map((lv, i) => ({ id: `p${i + 1}`, name: `P${i + 1}`, isAI: true, aiLevel: lv, deck: randomDeck(80 + i) })) });
+    expect(s.settings.basicGoal).toBe(10);
+    for (let i = 0; i < 40000 && s.phase !== 'gameOver' && s.turn < 400; i++) {
+      const w = waitingFor(s)[0];
+      s = applyAction(s, w, chooseAction(s, w));
+      checkInvariants(s);
+    }
+    expect(s.phase).toBe('gameOver');
+  }, 300_000);
 });

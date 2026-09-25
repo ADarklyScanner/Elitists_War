@@ -195,15 +195,57 @@ function styleHtml(): string {
     <span class="pair"><span class="cardback plot"></span><span class="cardback group"></span></span><span class="swatch"></span><b>${name}</b></button>`).join('')}</div>`;
 }
 
+/** The computer players you set up, each with its own difficulty. Remembered between games. */
+const BOTS_KEY = 'elitists-war.bots';
+function loadBots(): AiLevel[] {
+  try {
+    const v = JSON.parse(localStorage.getItem(BOTS_KEY) ?? 'null');
+    if (Array.isArray(v) && v.length && v.every((x) => x === 'easy' || x === 'normal' || x === 'hard')) return v.slice(0, 7);
+  } catch { /* storage unavailable */ }
+  return [loadLevel()];
+}
+function saveBots(b: AiLevel[]) {
+  try { localStorage.setItem(BOTS_KEY, JSON.stringify(b)); } catch { /* storage unavailable */ }
+}
+const goalFor = (n: number) => (n <= 3 ? 12 : n === 4 ? 11 : 10);
+
+/** One row per computer player, each with Easy / Normal / Hard. `humans` counts you and any friends. */
+function botsEditor(humans: number, minBots: number): string {
+  const bots = loadBots().slice(0, 8 - humans);
+  const total = humans + bots.length;
+  return `<div class="bots">${bots.map((lv, i) => `
+    <div class="bot-row"><span class="bot-name">Computer ${i + 1}</span>
+      <span class="seg" role="radiogroup" aria-label="Computer ${i + 1} difficulty">${LEVELS.map(([id, name, what]) => `<button type="button" role="radio" aria-checked="${lv === id}" class="${lv === id ? 'on' : ''}" data-bot="${i}" data-bot-level="${id}" title="${esc(what)}">${name}</button>`).join('')}</span>
+      ${bots.length > minBots ? `<button type="button" class="linkish" data-bot-del="${i}" aria-label="Remove Computer ${i + 1}">Remove</button>` : ''}</div>`).join('')}
+    ${total < 8 ? '<button type="button" class="add-bot" data-bot-add>+ Add a computer player</button>' : ''}
+    <p class="muted small">${total} players in all · Goal ${goalFor(total)} Groups. Best with 4–6 players; 7–8 works, but rounds take longer.
+    <br><b>Easy</b> makes mistakes · <b>Normal</b> plays solidly · <b>Hard</b> plans its help and fights hardest near a win.</p></div>`;
+}
+
+function bindBots(rerender: () => void) {
+  app.querySelectorAll<HTMLElement>('[data-bot-level]').forEach((b) => b.onclick = () => {
+    const bots = loadBots(); bots[+b.dataset.bot!] = b.dataset.botLevel as AiLevel; saveBots(bots); rerender();
+  });
+  app.querySelectorAll<HTMLElement>('[data-bot-del]').forEach((b) => b.onclick = () => {
+    const bots = loadBots(); bots.splice(+b.dataset.botDel!, 1); saveBots(bots.length ? bots : ['normal']); rerender();
+  });
+  app.querySelector<HTMLElement>('[data-bot-add]')?.addEventListener('click', () => {
+    const bots = loadBots(); if (bots.length < 7) bots.push(bots[bots.length - 1] ?? 'normal'); saveBots(bots); rerender();
+  });
+}
+
 function newGame(illuminati: string, quick: boolean) {
   const seed = Math.floor(Math.random() * 1e9);
-  const others = ILLUMINATI.filter((c) => c.id !== illuminati);
-  const rivalIll = others[Math.floor(Math.random() * others.length)].id;
+  const bots = loadBots();
+  // Every player gets a different Illuminati, picked at random for the computers.
+  const others = ILLUMINATI.filter((c) => c.id !== illuminati).map((c) => c.id);
+  for (let i = others.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [others[i], others[j]] = [others[j], others[i]]; }
+  const levelName = (lv: AiLevel) => LEVELS.find((l) => l[0] === lv)![1];
   const s = createGame({
     seed,
     players: [
       { id: 'p1', name: 'You', isAI: false, deck: randomDeck(seed, illuminati) },
-      { id: 'p2', name: `Computer (${LEVELS.find((l) => l[0] === loadLevel())![1]})`, isAI: true, aiLevel: loadLevel(), deck: randomDeck(seed + 1, rivalIll) },
+      ...bots.map((lv, i) => ({ id: `p${i + 2}`, name: bots.length === 1 ? `Computer (${levelName(lv)})` : `Computer ${i + 1} (${levelName(lv)})`, isAI: true, aiLevel: lv, deck: randomDeck(seed + i + 1, others[i]) })),
     ],
     settings: { houseRules: quick ? ['quickGame'] : [] },
     chooseLeads: true,
@@ -1194,27 +1236,23 @@ function renderStart() {
         <div class="save"><button data-load="${sv.id}"><b>${esc(sv.summary)}</b><span class="muted">${new Date(sv.updated).toLocaleString()}</span></button>
         <button class="linkish" data-del="${sv.id}" aria-label="Delete saved game">Delete</button></div>`).join('')}</div></section>` : ''}
       <section>
-        <div class="label">New game against the Computer — choose your Illuminati</div>
+        <div class="label">New game against the computer — choose your Illuminati</div>
         <div class="ills">${ILLUMINATI.map((c) => `
           <button class="ill-pick ${pick === c.id ? 'on' : ''}" data-pick="${c.id}">
             <b>${esc(c.name)}</b><span class="pw">${c.power}/${c.globalPower}</span>
             <span class="small">${esc(c.text.replace(/^Power [^.]+\.\s*/, ''))}</span>
           </button>`).join('')}</div>
-        <div class="label">Computer difficulty</div>
-        <div class="levels" role="radiogroup" aria-label="Computer difficulty">${LEVELS.map(([id, name, what]) => `
-          <button class="level ${loadLevel() === id ? 'on' : ''}" role="radio" aria-checked="${loadLevel() === id}" data-level="${id}"><b>${name}</b><span class="small muted">${what}</span></button>`).join('')}</div>
+        <div class="label">Computer players</div>
+        ${botsEditor(1, 1)}
         <div class="row">
-          <label class="toggle"><input type="checkbox" id="quick" ${quick ? 'checked' : ''}> Quick game: first to 8 Groups (house rule; the official two-player goal is 12)</label>
+          <label class="toggle"><input type="checkbox" id="quick" ${quick ? 'checked' : ''}> Quick game: first to 8 Groups (house rule; the official goal is ${goalFor(1 + loadBots().length)})</label>
           <button class="primary" data-act="start">Start game</button>
         </div>
         <p class="muted small">Games are saved in this browser after every move, so you can stop and pick up later.</p>
       </section>
     </div>`;
   app.querySelectorAll<HTMLElement>('[data-pick]').forEach((b) => b.onclick = () => { (ui as Ui & { pick?: string }).pick = b.dataset.pick; renderStart(); });
-  app.querySelectorAll<HTMLElement>('[data-level]').forEach((b) => b.onclick = () => {
-    try { localStorage.setItem(LEVEL_KEY, b.dataset.level!); } catch { /* storage unavailable */ }
-    renderStart();
-  });
+  bindBots(renderStart);
   app.querySelector<HTMLInputElement>('#quick')!.onchange = (e) => { (ui as Ui & { quick?: boolean }).quick = (e.target as HTMLInputElement).checked; };
   app.querySelector<HTMLElement>('[data-act="start"]')!.onclick = () => newGame(pick, (ui as Ui & { quick?: boolean }).quick ?? false);
   app.querySelectorAll<HTMLElement>('[data-load]').forEach((b) => b.onclick = () => {
@@ -1526,17 +1564,18 @@ function renderOnline() {
       <section class="panel"><h2>Waiting for players</h2>
       <p>Send your friends this invite code. The game starts as soon as every seat is filled.</p>
       <div class="invite"><code id="code">${esc(o.summary.invite)}</code><button data-o="copy">Copy code</button></div>
-      <ul class="seats">${o.summary.seats.map((x) => `<li>${esc(x.isAI ? 'Computer' : x.name)} ${x.joined ? '✓' : '<span class="muted">(waiting)</span>'}</li>`).join('')}</ul>
+      <ul class="seats">${o.summary.seats.map((x) => `<li>${esc(x.name || 'Open seat')} ${x.joined ? '✓' : '<span class="muted">(waiting)</span>'}</li>`).join('')}</ul>
       <div class="btns"><button class="danger" data-del="${o.summary.id}" data-host="${o.summary.host ? 1 : ''}">${o.summary.host ? 'Delete this game' : 'Leave this game'}</button></div></section></div>`;
     bindOnline();
     return;
   }
   const pick = (ui as Ui & { pick?: string }).pick ?? 'bavarian-illuminati';
+  const friends = (ui as Ui & { friends?: number }).friends ?? 1;
   app.innerHTML = `<div class="start">
     <header class="bar"><div class="brand">Elitists War</div><div class="turn">${esc(o.name)} · <button class="linkish" data-o="signout">Sign out</button></div></header>
     ${msg}
     <section><div class="label">Your games</div><div class="saves">${o.games.map((g) => `
-      <div class="save"><button data-open="${g.id}"><b>${g.yourMove ? '● Your move — ' : ''}${esc(g.seats.map((x) => x.isAI ? 'Computer' : x.name).join(' vs '))}</b>
+      <div class="save"><button data-open="${g.id}"><b>${g.yourMove ? '● Your move — ' : ''}${esc(g.seats.map((x) => x.name || 'Open seat').join(' vs '))}</b>
       <span class="muted">${g.finished ? 'Finished' : g.started ? `${esc(g.illuminati ?? '')} · ${esc(g.progress)}` : `Waiting for players · invite ${esc(g.invite)}`}</span></button>${g.host || !g.started ? `<button class="del" data-del="${g.id}" data-host="${g.host ? 1 : ''}" aria-label="${g.host ? 'Delete game' : 'Leave game'}">${g.host ? 'Delete' : 'Leave'}</button>` : ''}</div>`).join('') || '<p class="muted">No games yet.</p>'}</div></section>
     ${alertsPanel()}
     <section class="panel"><h2>Join a friend's game</h2>
@@ -1544,12 +1583,14 @@ function renderOnline() {
     <section><div class="label">Start a new game — choose your Illuminati</div>
       <div class="ills">${ILLUMINATI.map((c) => `<button class="ill-pick ${pick === c.id ? 'on' : ''}" data-pick="${c.id}"><b>${esc(c.name)}</b><span class="pw">${c.power}/${c.globalPower}</span><span class="small">${esc(c.text.replace(/^Power [^.]+\.\s*/, ''))}</span></button>`).join('')}</div>
       <form id="new" class="panel"><div class="row">
-        <label>Players <select id="n-seats"><option>2</option><option>3</option><option>4</option><option>5</option></select></label>
-        <label>Computer players <select id="n-ai"><option>0</option><option>1</option><option>2</option><option>3</option></select></label>
-        <label>Computer difficulty <select id="n-level">${LEVELS.map(([id, name]) => `<option value="${id}" ${loadLevel() === id ? 'selected' : ''}>${name}</option>`).join('')}</select></label>
+        <label>Friends to invite <select id="n-friends">${[0, 1, 2, 3, 4, 5, 6, 7].map((n) => `<option ${n === friends ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
+      </div>
+      <div class="label">Computer players</div>
+      ${friends >= 7 ? '<p class="muted small">The table is full: 8 players.</p>' : botsEditor(1 + friends, friends ? 0 : 1)}
+      <div class="row">
         <label class="toggle"><input type="checkbox" id="n-quick"> Quick game (8 Groups, house rule)</label>
         <button class="primary" type="submit">Create game</button></div>
-        <p class="muted small">With 0 computer players you get an invite code to send to friends. Everyone moves when they like; the game waits (up to 24 hours per response, 3 days per turn).</p></form>
+        <p class="muted small">With friends invited you get an invite code to send them. Everyone moves when they like; the game waits (up to 24 hours per response, 3 days per turn).</p></form>
     </section></div>`;
   bindOnline();
   app.querySelectorAll<HTMLElement>('[data-pick]').forEach((b) => b.onclick = () => { (ui as Ui & { pick?: string }).pick = b.dataset.pick; render(); });
@@ -1567,14 +1608,13 @@ function renderOnline() {
     const code = (app.querySelector('#j-code') as HTMLInputElement).value.trim().toUpperCase();
     try { applyReply(await api({ op: 'join', code, illuminati: pick })); await openGame(online!.gameId!); } catch (err) { o.msg = (err as Error).message; render(); }
   };
+  bindBots(render);
+  app.querySelector<HTMLSelectElement>('#n-friends')!.onchange = (e) => { (ui as Ui & { friends?: number }).friends = Number((e.target as HTMLSelectElement).value); render(); };
   app.querySelector<HTMLFormElement>('#new')!.onsubmit = async (e) => {
     e.preventDefault();
-    const seats = Number((app.querySelector('#n-seats') as HTMLSelectElement).value);
-    const computerSeats = Number((app.querySelector('#n-ai') as HTMLSelectElement).value);
+    const levels = friends >= 7 ? [] : loadBots().slice(0, 7 - friends);
     const quick = (app.querySelector('#n-quick') as HTMLInputElement).checked;
-    const level = (app.querySelector('#n-level') as HTMLSelectElement).value;
-    try { localStorage.setItem(LEVEL_KEY, level); } catch { /* storage unavailable */ }
-    try { applyReply(await api({ op: 'new', seats, computerSeats, quick, level, illuminati: pick })); await openGame(online!.gameId!); } catch (err) { o.msg = (err as Error).message; render(); }
+    try { applyReply(await api({ op: 'new', seats: 1 + friends + levels.length, computerSeats: levels.length, levels, quick, illuminati: pick })); await openGame(online!.gameId!); } catch (err) { o.msg = (err as Error).message; render(); }
   };
 }
 
