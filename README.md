@@ -37,3 +37,10 @@ Texting is off until the `ew-game` Edge Function has these secrets (Supabase das
 | `EW_SITE_URL` | optional; link put in each text (defaults to the GitHub Pages site) |
 
 US numbers need A2P 10DLC registration, or a verified toll-free number, before carriers deliver texts. Twilio handles STOP replies automatically.
+
+## Before a public release
+
+- Add a line to the start screen saying this is an unofficial fan-made project, not affiliated with or endorsed by the publisher of the original card game.
+- Decide what to do with `data/Elitists_War.xlsx`: its research notes cite the original game and publisher (keep it private, or reword the citations).
+- Re-run `tools/check_originality.py` (with the local reference files) and make sure it reports 0 problems.
+- Keep the game free, with no ads or sales.
