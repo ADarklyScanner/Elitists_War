@@ -23,7 +23,8 @@ type Sel =
   | { kind: 'takeover'; card: string }
   | { kind: 'discard'; cards: string[] }
   | { kind: 'resource'; iid: string }
-  | { kind: 'link'; resource: string };
+  | { kind: 'link'; resource: string }
+  | { kind: 'deck'; deck: 'plot' | 'group' };
 
 interface Ui {
   slotChoice?: string[];
@@ -211,7 +212,7 @@ function chip(a: string) {
 
 // ------------------------------------------------------------------ guide mode
 
-type Area = 'board' | 'rival' | 'hand' | 'console';
+type Area = 'board' | 'rival' | 'hand' | 'console' | 'decks';
 interface Guide { ok: Set<string>; no: Set<string>; next?: Area; text: string }
 let G: Guide = { ok: new Set(), no: new Set(), text: '' };
 
@@ -228,6 +229,14 @@ function computeGuide(s: GameState): Guide {
   const pr = s.prompt?.player === ui.me ? s.prompt : undefined;
   if (ui.slotChoice) { g.next = 'console'; g.text = 'Pick which arrow the card attaches to.'; return g; }
   if (pr?.kind === 'choose' || pr?.kind === 'chooseLead') { g.next = 'console'; g.text = 'Make your choice in the panel.'; return g; }
+  if (pr?.kind === 'draw') {
+    const d = pr.data as { plot: number; group: number };
+    (d.plot > 0 ? g.ok : g.no).add('deck-plot');
+    (d.group > 0 ? g.ok : g.no).add('deck-group');
+    g.next = 'decks';
+    g.text = d.plot > 0 ? 'Start of your turn: tap the Plot deck to draw' + (d.plot > 1 ? ` (${d.plot} cards)` : '') + ', then the Group deck.' : 'Now tap the Group deck to draw a Group card.';
+    return g;
+  }
   if (pr?.kind === 'takeover') {
     const opts = takeoverOptions(s, ui.me);
     if (sel.kind === 'takeover') {
@@ -271,6 +280,11 @@ function computeGuide(s: GameState): Guide {
   if (sel.kind === 'group') { g.next = 'console'; g.text = 'Step 2: choose what this Group does (green buttons in the panel).'; return g; }
   if (sel.kind === 'confirm') { g.next = 'console'; g.text = 'Step 4: add any Plots, then Declare attack.'; return g; }
   if (sel.kind === 'plot' || sel.kind === 'resource') { g.next = 'console'; g.text = 'Pick how to play it in the panel, or Close.'; return g; }
+  if (sel.kind === 'deck') { g.next = 'console'; g.text = 'Confirm in the panel, or Cancel.'; return g; }
+  const illTok = s.cards[me.illuminati].tokens > 0;
+  const groupTok = mine.filter((g) => g !== me.illuminati && s.cards[g].tokens > 0).length;
+  ((illTok || groupTok >= 2) && me.plotDeck.length ? g.ok : g.no).add('deck-plot');
+  (illTok && !s.turnFlags.illumGroupDraw && me.groupDeck.length ? g.ok : g.no).add('deck-group');
   const canUse = (c: string) => s.cards[c].tokens > 0 && (attackOptions(s, ui.me, c).length > 0 || abilityOptions(s, ui.me, c).length > 0 || def(s, c).type === 'Group');
   mark(mine, canUse);
   mark(res, (r) => abilityOptions(s, ui.me, r).length > 0 || !!HOOKS[s.cards[r].cardId]?.linkTo);
@@ -304,7 +318,7 @@ function render() {
     ui.lastKey = key;
     // On a phone the panel folds down to its "Next" line whenever the next step is on the table or in your hand.
     const narrow = window.innerWidth <= 900;
-    if (waitingFor(s).includes(ui.me)) ui.sheetMin = narrow && (G.next === 'board' || G.next === 'rival' || G.next === 'hand');
+    if (waitingFor(s).includes(ui.me)) ui.sheetMin = narrow && (G.next === 'board' || G.next === 'rival' || G.next === 'hand' || G.next === 'decks');
   }
   const rivals = s.players.filter((p) => p.id !== ui.me);
   const me = player(s, ui.me);
@@ -326,6 +340,7 @@ function render() {
         ${renderNwo(s)}
         ${renderSide(s, ui.me, true)}
       </div></div>
+      ${renderDecks(s)}
       <div class="ticker" aria-live="polite">${recent.map((l) => `<div>${esc(youText(l.text))}</div>`).join('')}</div>
       <div class="zoom"><button data-zoom="in" aria-label="Zoom in">+</button><button data-zoom="out" aria-label="Zoom out">−</button><button data-zoom="fit">Fit</button></div>
       ${renderInspect(s)}
@@ -394,6 +409,27 @@ function quickButton(s: GameState): string {
   return '';
 }
 
+/** Your two decks, face down, along the left of the table. Tap to draw (start of turn) or to buy. */
+function renderDecks(s: GameState): string {
+  const me = player(s, ui.me);
+  const pile = (deck: 'plot' | 'group', n: number, label: string) =>
+    `<button class="deck ${deck} ${gcls(`deck-${deck}`)} ${n ? '' : 'empty'}" data-deck="${deck}" aria-label="${label} deck, ${n} card${n === 1 ? '' : 's'} left">
+      <span class="back" aria-hidden="true"></span><span class="deck-label">${label}</span><span class="deck-count">${n}</span></button>`;
+  return `<div class="decks ${gnext('decks')}">${pile('plot', me.plotDeck.length, 'Plots')}${pile('group', me.groupDeck.length, 'Groups')}</div>`;
+}
+
+function onDeck(deck: 'plot' | 'group') {
+  const s = ui.game!;
+  ui.error = undefined;
+  const pr = s.prompt?.player === ui.me ? s.prompt : undefined;
+  if (pr?.kind === 'draw') { act({ type: 'draw', deck }); return; }
+  if (idle(s)) { ui.sel = { kind: 'deck', deck }; render(); return; }
+  ui.error = deck === 'plot'
+    ? 'You draw from your Plot deck at the start of your turn. In your main phase you can also buy a Plot with an Action token.'
+    : 'You draw from your Group deck at the start of your turn. In your main phase your Illuminati can also draw one Group card per turn.';
+  render();
+}
+
 function sheetTitle(s: GameState): string {
   if (s.phase === 'gameOver') return 'Game over';
   const w = waitingFor(s).map((id) => player(s, id).name);
@@ -411,7 +447,7 @@ function playerChip(s: GameState, pl: string): string {
 }
 
 // The human player is called "You", so fix the verb: "You leads" -> "You lead".
-const youText = (t: string) => t.replace(/(^|\s)You (has|\w+?)s\b/g, (_m, pre, v) => `${pre}You ${v === 'has' ? 'have' : v}`);
+const youText = (t: string) => t.replace(/\bYou's\b/g, 'Your').replace(/(^|\s)You (has|\w+?)s\b/g, (_m, pre, v) => `${pre}You ${v === 'has' ? 'have' : v}`);
 
 // ------------------------------------------------------------------ table pan and zoom
 
@@ -419,11 +455,12 @@ const youText = (t: string) => t.replace(/(^|\s)You (has|\w+?)s\b/g, (_m, pre, v
 function fitView(vp: HTMLElement, world: HTMLElement) {
   const wide = vp.clientWidth > 900;
   const sheet = vp.parentElement!.querySelector<HTMLElement>('.sheet');
-  const aw = vp.clientWidth - (wide ? 372 : 0) - 16;
+  const rail = window.innerWidth <= 480 ? 58 : 84; // the decks along the left
+  const aw = vp.clientWidth - (wide ? 372 : 0) - 16 - rail;
   const ah = vp.clientHeight - (!wide && sheet ? sheet.offsetHeight + 8 : 0) - 16;
   const ww = world.offsetWidth, wh = world.offsetHeight;
   const z = Math.max(0.3, Math.min(1.5, aw / ww, ah / wh));
-  ui.view = { x: 8 + (aw - ww * z) / 2, y: 8 + Math.max(0, (ah - wh * z) / 2), z, auto: true };
+  ui.view = { x: 8 + rail + (aw - ww * z) / 2, y: 8 + Math.max(0, (ah - wh * z) / 2), z, auto: true };
 }
 
 function applyView(world: HTMLElement) {
@@ -779,7 +816,7 @@ function renderConsole(s: GameState): string {
   if (s.phase === 'gameOver') {
     const won = s.winners?.includes(ui.me);
     body = `<h2 class="${won ? 'ok' : 'bad'}">${won ? (s.winners!.length > 1 ? 'Shared victory.' : 'You win.') : s.winners?.length ? 'The Computer wins.' : 'Nobody wins.'}</h2>
-      <p>${esc(s.log.filter((l) => / wins/.test(l.text)).map((l) => l.text).join(' '))}</p>
+      <p>${esc(s.log.filter((l) => / wins/.test(l.text) && !/roll to go first/.test(l.text)).map((l) => youText(l.text)).join(' '))}</p>
       <div class="btns"><button class="primary" data-act="home">New game</button></div>`;
   } else if (s.prompt?.player === ui.me && s.prompt.kind === 'choose' && s.prompt.choice) {
     const ch = s.prompt.choice;
@@ -788,6 +825,15 @@ function renderConsole(s: GameState): string {
     body = `<h2>${esc(ch.source && s.cards[ch.source] ? cardName(s, ch.source) : 'Your choice')}</h2><p>${esc(ch.question)}</p>
       <div class="opts">${ch.options.map((o) => `<button class="${picked.includes(o.id) ? 'on' : ''}" data-pick-opt="${esc(o.id)}">${picked.includes(o.id) ? '✓ ' : ''}${esc(o.label)}</button>`).join('')}</div>
       ${single ? '' : `<div class="btns"><button class="primary" data-act="choose" ${picked.length >= ch.min && picked.length <= ch.max ? '' : 'disabled'}>Confirm (${picked.length})</button></div>`}`;
+  } else if (s.prompt?.player === ui.me && s.prompt.kind === 'draw') {
+    const d = s.prompt.data as { plot: number; group: number };
+    const me = player(s, ui.me);
+    body = `<h2>Draw your cards</h2><p>Start of your turn: draw ${d.plot > 1 ? `${d.plot} Plot cards` : 'a Plot card'} and a Group card. Tap the decks on the left of the table, or use the buttons.</p>
+      <div class="btns">
+        <button class="${d.plot ? 'primary' : ''}" data-act="draw-plot" ${d.plot && me.plotDeck.length ? '' : 'disabled'}>Draw a Plot${d.plot > 1 ? ` (${d.plot} left)` : ''}</button>
+        <button class="${!d.plot && d.group ? 'primary' : ''}" data-act="draw-group" ${d.group && me.groupDeck.length ? '' : 'disabled'}>Draw a Group</button>
+        <button class="linkish" data-act="skipDraw">Skip the rest (drawing is optional)</button>
+      </div>`;
   } else if (s.prompt?.player === ui.me && s.prompt.kind === 'chooseLead') {
     const opts = leadOptions(s, ui.me).sort((a, b) => (def(s, b).arrowsOut?.length ?? 0) - (def(s, a).arrowsOut?.length ?? 0) || (def(s, b).power ?? 0) - (def(s, a).power ?? 0));
     body = `<h2>Choose your lead Group</h2><p>Pick a Group from your deck to start under your Illuminati. Your rival picks at the same time; if you both pick the same Group, you both pick again.</p>
@@ -890,6 +936,20 @@ function renderMainConsole(s: GameState): string {
       }).join('')}</div>` : ''}
       ${abilitiesOf(s, player(s, ui.me).illuminati).some((a) => a.kind === 'freePrivilegedAttack') && !s.turnFlags.bavarianPrivilege ? `<label class="toggle"><input type="checkbox" id="priv" ${sel.privileged ? 'checked' : ''}> Make it Privileged (your Illuminati's free Privileged attack this turn: only you and the defender can take part)</label>` : ''}
       <div class="btns"><button class="primary" data-act="declare">Declare attack</button><button class="linkish" data-act="clear">Cancel</button></div>`;
+  }
+  if (sel.kind === 'deck') {
+    const ill = me.illuminati;
+    const payers = structureCards(s, ui.me).filter((g) => g !== ill && s.cards[g].tokens > 0);
+    if (sel.deck === 'plot') {
+      return `<h2>Plot deck</h2><p>${me.plotDeck.length} cards left. Buying a Plot costs your Illuminati's Action token, or the tokens of two other Groups.</p>
+        <div class="btns"><button class="primary" data-act="buy-ill" ${s.cards[ill].tokens && me.plotDeck.length ? '' : 'disabled'}>Buy with the Illuminati's token</button>
+        <button data-act="buy-two" ${payers.length >= 2 && me.plotDeck.length ? '' : 'disabled'}>Buy with 2 Group tokens</button>
+        <button class="linkish" data-act="clear">Cancel</button></div>`;
+    }
+    const can = s.cards[ill].tokens && !s.turnFlags.illumGroupDraw && me.groupDeck.length;
+    return `<h2>Group deck</h2><p>${me.groupDeck.length} cards left. Once per turn your Illuminati can spend its Action token to draw a Group card.</p>
+      <div class="btns"><button class="primary" data-act="drawGroup" ${can ? '' : 'disabled'}>Draw a Group card</button><button class="linkish" data-act="clear">Cancel</button></div>
+      ${!can && tutorial() ? `<p class="why">${esc(s.turnFlags.illumGroupDraw ? 'Your Illuminati has already drawn a Group card this turn.' : !me.groupDeck.length ? 'Your Group deck is empty.' : 'Your Illuminati\'s Action token is already spent this turn.')}</p>` : ''}`;
   }
   if (sel.kind === 'resource') {
     const d = def(s, sel.iid);
@@ -1130,6 +1190,7 @@ function bind() {
     render();
     if (ui.showRules) app.querySelector(`#rule-${ui.showRules}`)?.scrollIntoView({ block: 'start' });
   });
+  app.querySelectorAll<HTMLElement>('[data-deck]').forEach((b) => b.onclick = () => onDeck(b.dataset.deck as 'plot' | 'group'));
   app.querySelectorAll<HTMLElement>('[data-info]').forEach((b) => b.onclick = (e) => { e.stopPropagation(); ui.info = ui.info === b.dataset.info ? undefined : b.dataset.info; render(); });
   app.querySelectorAll<HTMLElement>('[data-lead]').forEach((b) => b.onclick = () => act({ type: 'chooseLead', card: b.dataset.lead! }));
   app.querySelectorAll<HTMLElement>('[data-relief]').forEach((b) => b.onclick = () => {
@@ -1164,13 +1225,17 @@ function bind() {
       case 'return': if (sel.kind === 'discard') act({ type: 'discard', cards: sel.cards, toDeck: true }); break;
       case 'callOff': act({ type: 'callOff' }); break;
       case 'choose': { const ids = ui.picked ?? []; ui.picked = undefined; act({ type: 'choose', ids }); break; }
-      case 'drawGroup': act({ type: 'drawGroup' }); break;
+      case 'drawGroup': ui.sel = { kind: 'none' }; act({ type: 'drawGroup' }); break;
+      case 'draw-plot': act({ type: 'draw', deck: 'plot' }); break;
+      case 'draw-group': act({ type: 'draw', deck: 'group' }); break;
+      case 'skipDraw': act({ type: 'skipDraw' }); break;
       case 'playResource': if (sel.kind === 'resource') act({ type: 'playResource', card: sel.iid }); break;
       case 'linkStart': if (sel.kind === 'resource') { ui.sel = { kind: 'link', resource: sel.iid }; render(); } break;
-      case 'buy-ill': act({ type: 'buyPlot', payWith: [player(s, ui.me).illuminati] }); break;
+      case 'buy-ill': if (sel.kind === 'deck') ui.sel = { kind: 'none' }; act({ type: 'buyPlot', payWith: [player(s, ui.me).illuminati] }); break;
       case 'buy-two': {
         const ill = player(s, ui.me).illuminati;
         const payers = structureCards(s, ui.me).filter((g) => g !== ill && s.cards[g].tokens > 0).sort((a, c) => power(s, a) - power(s, c));
+        if (sel.kind === 'deck') ui.sel = { kind: 'none' };
         act({ type: 'buyPlot', payWith: payers.slice(0, 2) });
         break;
       }

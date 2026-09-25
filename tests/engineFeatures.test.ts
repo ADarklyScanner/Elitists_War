@@ -9,6 +9,7 @@ import {
 import { plotOptions, targetPool } from '../src/engine/moves';
 import { viewFor } from '../src/server/service';
 import { give, scenario, checkInvariants } from './helpers';
+import { chooseAction } from '../src/ai/ai';
 
 const act = (s: GameState, pl: string, a: Action) => applyAction(s, pl, a);
 const ill = (s: GameState, pl: string) => s.players.find((p) => p.id === pl)!.illuminati;
@@ -208,5 +209,44 @@ describe('attacks by cards', () => {
     expect(s.attack!.cardPower).toBe(8);
     expect(s.attack!.attacker).toBeUndefined();
     expect(s.window?.kind).toBe('attack');
+  });
+});
+
+describe('drawing by hand at the start of a person\'s turn', () => {
+  /** p1 is a person; play until p1's next turn begins. */
+  function toMyTurn() {
+    let s = scenario();
+    s.players[0].isAI = false;
+    s = act(s, 'p1', { type: 'endTurn' });
+    for (let i = 0; i < 200 && !(s.prompt?.kind === 'draw' && s.prompt.player === 'p1'); i++) {
+      const w = waitingFor(s)[0];
+      s = act(s, w, w === 'p1' ? { type: 'pass' } : chooseAction(s, w));
+    }
+    return s;
+  }
+  it('waits for the person to draw from each deck, then carries on', () => {
+    let s = toMyTurn();
+    expect(s.prompt).toMatchObject({ kind: 'draw', player: 'p1' });
+    const before = hand(s, 'p1').length;
+    const plots = (s.prompt!.data as { plot: number }).plot; // 1, or more with a card that grants extra draws
+    for (let i = 0; i < plots; i++) s = act(s, 'p1', { type: 'draw', deck: 'plot' });
+    expect(hand(s, 'p1').length).toBe(before + plots);
+    expect(() => act(s, 'p1', { type: 'draw', deck: 'plot' })).toThrow(/already drawn/);
+    s = act(s, 'p1', { type: 'draw', deck: 'group' });
+    expect(hand(s, 'p1').length).toBe(before + plots + 1);
+    expect(s.prompt?.kind).not.toBe('draw');
+    expect(s.log.some((l) => new RegExp(`draws ${plots} Plot cards? and 1 Group card`).test(l.text))).toBe(true);
+    checkInvariants(s);
+  });
+  it('the draws are optional: skipping keeps the hand as it was', () => {
+    let s = toMyTurn();
+    const before = hand(s, 'p1').length;
+    s = act(s, 'p1', { type: 'skipDraw' });
+    expect(hand(s, 'p1').length).toBe(before);
+    expect(s.prompt?.kind).not.toBe('draw');
+  });
+  it('computer players still draw automatically', () => {
+    const s = toMyTurn();
+    expect(s.log.some((l) => l.player === 'p2' && /draws 1 Plot card/.test(l.text))).toBe(true);
   });
 });

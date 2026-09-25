@@ -423,6 +423,10 @@ function playedOut(s: GameState, pl: string, attack: Action, n: number): number 
 function decide(s: GameState, pl: string): Action {
   if (s.prompt?.player === pl) {
     if (s.prompt.kind === 'chooseLead') return { type: 'chooseLead', card: bestLead(s, pl) };
+    if (s.prompt.kind === 'draw') {
+      const d = s.prompt.data as { plot: number; group: number };
+      return { type: 'draw', deck: d.plot > 0 ? 'plot' : 'group' };
+    }
     if (s.prompt.kind === 'choose' && s.prompt.choice) {
       const ch = s.prompt.choice;
       const pick = CHOICES[ch.key]?.ai?.(s, pl, ch.options, { ...ch.data, source: ch.source }) ?? ch.options.slice(0, ch.min).map((o) => o.id);

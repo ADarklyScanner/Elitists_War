@@ -610,8 +610,22 @@ function turnDraws(s: GameState) {
     let extra = 0;
     for (const iid of structureCards(s, p.id)) for (const a of abilitiesOf(s, iid)) if (a.kind === 'extraPlotDraw') extra += a.value;
     extra += sumHooks(s, (h, self) => (controllerOf2(s, self) === p.id ? h.extraPlotDraws?.(s, self) : 0));
+    if (!p.isAI) {
+      // A person draws by hand, from each deck in turn, as at the table (the draws are optional).
+      const pr: Prompt = { player: p.id, kind: 'draw', data: { plot: 1 + extra, group: 1, drawn: [] } };
+      if (s.prompt) (s.promptQueue ??= []).push(pr); else s.prompt = pr;
+      return;
+    }
     drawn.push(...drawPlot(s, p, 1 + extra));
     drawn.push(...drawGroup(s, p));
+  }
+  afterDraws(s, drawn);
+}
+
+/** Once the start-of-turn draws are done: tell the player what they got, then the takeover step. */
+function afterDraws(s: GameState, drawn: string[]) {
+  const p = activePlayer(s);
+  if (!s.turnFlags.extraTurn && !s.turnFlags.noDraws) {
     const plots = drawn.filter((c) => def(s, c).type === 'Plot').length;
     s.log.push({ turn: s.turn, player: p.id, info: true, text: `Start of turn: ${p.name} draws ${plots} Plot card${plots === 1 ? '' : 's'} and ${drawn.length - plots} Group card${drawn.length - plots === 1 ? '' : 's'}.` });
     if (drawn.length) s.log.push({ turn: s.turn, player: p.id, to: p.id, info: true, text: `You drew: ${drawn.map((c) => cardName(s, c)).join(', ')}.` });
@@ -1683,6 +1697,30 @@ export function applyAction(state: GameState, playerId: string, action: Action):
       if (ids.length < ch.min || ids.length > ch.max) throw new RuleError(ch.min === ch.max ? `Pick ${ch.min}.` : `Pick between ${ch.min} and ${ch.max}.`);
       s.prompt = s.promptQueue?.shift();
       CHOICES[ch.key]?.resolve(s, playerId, ids, { ...ch.data, source: ch.source });
+      break;
+    }
+
+    case 'draw':
+    case 'skipDraw': {
+      const pr = s.prompt;
+      if (pr?.kind !== 'draw' || pr.player !== playerId) throw new RuleError('It is not time to draw.');
+      const d = pr.data as { plot: number; group: number; drawn: string[] };
+      if (action.type === 'skipDraw') { d.plot = 0; d.group = 0; }
+      else {
+        const plot = action.deck === 'plot';
+        if (plot ? d.plot <= 0 : d.group <= 0) throw new RuleError(plot ? 'You have already drawn your Plot card this turn.' : 'You have already drawn your Group card this turn.');
+        const got = plot ? drawPlot(s, p, 1) : drawGroup(s, p);
+        if (plot) d.plot--; else d.group--;
+        d.drawn.push(...got);
+        if (!got.length) log(s, `${p.name}'s ${plot ? 'Plot' : 'Group'} deck is empty.`, playerId);
+        // A card's question about the draw (Crystal Skull, Shroud of Turin) is answered before drawing on.
+        if (s.promptQueue?.length && s.prompt === pr) { s.promptQueue.push(pr); s.prompt = s.promptQueue.shift(); }
+      }
+      if (d.plot <= 0 && d.group <= 0) {
+        if (s.prompt === pr) s.prompt = s.promptQueue?.shift();
+        else s.promptQueue = s.promptQueue?.filter((q) => q !== pr);
+        afterDraws(s, d.drawn);
+      }
       break;
     }
 

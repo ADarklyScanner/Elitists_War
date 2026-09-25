@@ -174,7 +174,7 @@ export interface ResponseWindow {
 /** A decision only one player can make (blocks the game until made). */
 export interface Prompt {
   player: string;
-  kind: 'takeover' | 'discardToLimit' | 'placeCaptured' | 'chooseLead' | 'choose';
+  kind: 'takeover' | 'discardToLimit' | 'placeCaptured' | 'chooseLead' | 'choose' | 'draw';
   data?: Record<string, unknown>;
   choice?: Choice;         // for kind 'choose'
 }
@@ -278,6 +278,8 @@ export type Action =
   | { type: 'playPlot'; play: PlotPlay }
   | { type: 'buyPlot'; payWith: string[] }
   | { type: 'drawGroup' }
+  | { type: 'draw'; deck: 'plot' | 'group' } // start-of-turn draw, made by hand (people only)
+  | { type: 'skipDraw' }                     // the start-of-turn draws are optional
   | { type: 'playResource'; card: string }
   | { type: 'link'; resource: string; to: string }
   | { type: 'useAbility'; card: string; ability: string; params?: import('./hooks').AbilityParams }

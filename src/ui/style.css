@@ -351,3 +351,31 @@ p { margin: 0; }
 .level { display: flex; flex-direction: column; gap: 3px; text-align: left; border: 1px solid var(--line); background: var(--panel); border-radius: 8px; padding: 9px 11px; }
 .level.on { border-color: var(--brass); box-shadow: 0 0 0 1px var(--brass) inset; }
 .level b { font-family: var(--display); font-size: 16px; }
+
+/* ---------- your decks: face down along the left of the table ---------- */
+.decks { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; gap: 30px; z-index: 1; padding: 6px; border-radius: 12px; }
+.deck { position: relative; width: 64px; height: 90px; padding: 0; border: 0; background: none; display: block; }
+.deck .back { position: absolute; inset: 0; border-radius: 7px; border: 2px solid #d4a34099;
+  box-shadow: 2px 2px 0 #0b1216, 4px 4px 0 #2a3f48, 6px 6px 0 #0b1216, 0 8px 18px #0009; }
+/* Plot back: a violet rosette around a brass seal. */
+.deck.plot .back { background:
+  radial-gradient(circle at 50% 50%, #d4a340 0 9%, #3a2657 10% 13%, #d4a340cc 14% 15%, transparent 16%),
+  repeating-conic-gradient(from 7deg at 50% 50%, #4a2f70 0 11.25deg, #2c1b45 11.25deg 22.5deg),
+  #2c1b45; }
+/* Group back: a teal lattice of linked nodes. */
+.deck.group .back { background:
+  radial-gradient(circle at 50% 50%, #d4a340 0 8%, transparent 9%),
+  radial-gradient(circle at 50% 50%, transparent 0 22%, #d4a34066 23% 25%, transparent 26%),
+  repeating-linear-gradient(45deg, #1f4d52 0 5px, #16373b 5px 10px),
+  repeating-linear-gradient(-45deg, #1f4d5288 0 5px, transparent 5px 10px),
+  #16373b; }
+.deck.empty .back { opacity: .3; box-shadow: none; }
+.deck-label { position: absolute; left: 0; right: 0; bottom: -17px; text-align: center; font: 600 10.5px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.deck-count { position: absolute; top: -8px; right: -8px; min-width: 22px; height: 22px; border-radius: 11px; background: var(--panel-2); border: 1px solid var(--line); font: 600 11.5px/20px var(--mono); color: var(--ink); text-align: center; padding: 0 4px; }
+.deck:hover .back { border-color: var(--brass); }
+.guide .deck.g-ok { outline: 1px solid var(--ok); outline-offset: 6px; border-radius: 8px; }
+.guide .deck.g-no { outline: 1px solid #e05a4b99; outline-offset: 6px; border-radius: 8px; }
+.guide .decks.g-next { outline: 1px solid var(--ok); outline-offset: 2px; box-shadow: 0 0 18px -6px var(--ok); }
+@media (max-width: 480px) { .deck { width: 44px; height: 62px; } .decks { left: 6px; gap: 28px; top: 42%; } .deck-count { min-width: 18px; height: 18px; line-height: 16px; font-size: 10px; } }
+
+.sheet { z-index: 3; }
