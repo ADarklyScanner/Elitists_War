@@ -1,6 +1,8 @@
-// Power Structure layout on a square grid. Every card fills one cell; the
-// Illuminati sits at (0,0). A card's printed arrow sides are rotated so that
-// its incoming arrow faces its master, which is how physical INWO cards line up.
+// Power Structure layout with real card shapes. Cards are 5 × 7 rectangles (like the printed
+// 2.5" × 3.5" cards); positions are card centres in half-units, so an upright card is 10 wide and
+// 14 tall and a card turned on its side is 14 × 10. The Illuminati sits upright at (0,0). A puppet
+// is rotated so its incoming arrow faces its master and is centred on the master's arrow, as on a
+// table. Cards may not overlap, so a sideways card can block an arrow of a neighbour.
 import type { GameState, Side } from './types';
 import { def } from './cards';
 
@@ -26,11 +28,74 @@ export function structureCards(s: GameState, player: string): string[] {
     .map((c) => c.iid);
 }
 
-export function occupied(s: GameState, player: string, x: number, y: number, ignore: Set<string> = new Set()): boolean {
-  return structureCards(s, player).some((iid) => {
-    const c = s.cards[iid];
-    return !ignore.has(iid) && c.x === x && c.y === y;
-  });
+/** Layout version stored in the game state; older games used one square cell per card. */
+export const LAYOUT_VERSION = 2;
+export const CARD_W = 10;
+export const CARD_H = 14;
+
+export interface Rect { x: number; y: number; w: number; h: number } // centre and full size
+
+/** Size of a card with `rot` quarter turns: upright or on its side. */
+export function sizeFor(rot: number): { w: number; h: number } {
+  return rot % 2 ? { w: CARD_H, h: CARD_W } : { w: CARD_W, h: CARD_H };
+}
+
+export function rectOf(s: GameState, iid: string): Rect {
+  const c = s.cards[iid];
+  return { x: c.x!, y: c.y!, ...sizeFor(c.rot ?? 0) };
+}
+
+/**
+ * Where a card hung on `side` of `master` would lie. Every incoming arrow is on a short edge, so a
+ * card on a top or bottom arrow stands upright and one on a left or right arrow lies on its side.
+ */
+export function attachRect(s: GameState, master: string, side: Side): Rect {
+  const m = rectOf(s, master);
+  const { w, h } = side === 'LEFT' || side === 'RIGHT' ? sizeFor(1) : sizeFor(0);
+  const [dx, dy] = DELTA[side];
+  return { x: m.x + dx * (m.w + w) / 2, y: m.y + dy * (m.h + h) / 2, w, h };
+}
+
+export function overlaps(a: Rect, b: Rect): boolean {
+  return Math.abs(a.x - b.x) * 2 < a.w + b.w && Math.abs(a.y - b.y) * 2 < a.h + b.h;
+}
+
+/** Does `r` overlap any card in `player`'s Power Structure (other than those in `ignore`)? */
+export function occupied(s: GameState, player: string, r: Rect, ignore: Set<string> = new Set()): boolean {
+  return structureCards(s, player).some((iid) => !ignore.has(iid) && s.cards[iid].x !== undefined && overlaps(r, rectOf(s, iid)));
+}
+
+/** The side of its master that a puppet hangs from. */
+export function sideOf(s: GameState, iid: string): Side | undefined {
+  const c = s.cards[iid];
+  if (c.side) return c.side;
+  if (!c.master) return undefined;
+  return SIDES.find((sd) => { const r = attachRect(s, c.master!, sd); return r.x === c.x && r.y === c.y; });
+}
+
+/**
+ * Bring a game saved with the old square-cell layout up to real card shapes: every puppet keeps
+ * the arrow it hangs from and is laid out again from the Illuminati outwards.
+ */
+export function ensureLayout(s: GameState) {
+  if (s.layout === LAYOUT_VERSION) return;
+  const cards = Object.values(s.cards).filter((c) => c.zone === 'structure' && c.x !== undefined);
+  for (const c of cards) {
+    if (!c.master || c.side) continue;
+    const m = s.cards[c.master];
+    c.side = SIDES.find((sd) => m.x! + DELTA[sd][0] === c.x && m.y! + DELTA[sd][1] === c.y);
+  }
+  const lay = (iid: string) => {
+    for (const p of puppets(s, iid)) {
+      const pc = s.cards[p];
+      if (!pc.side) continue;
+      const r = attachRect(s, iid, pc.side);
+      pc.x = r.x; pc.y = r.y;
+      lay(p);
+    }
+  };
+  for (const c of cards) if (!c.master) { c.x = 0; c.y = 0; lay(c.iid); }
+  s.layout = LAYOUT_VERSION;
 }
 
 export function puppets(s: GameState, iid: string): string[] {
@@ -43,14 +108,11 @@ export function subtree(s: GameState, iid: string): string[] {
   return out;
 }
 
-/** Outgoing sides of `iid` with no puppet and no card in the adjacent cell. */
+/** Outgoing sides of `iid` where a card would fit: no puppet there and no card in the way. */
 export function openArrows(s: GameState, iid: string, ignore: Set<string> = new Set()): Side[] {
   const c = s.cards[iid];
   if (c.zone !== 'structure' || !c.controller) return [];
-  return outSides(s, iid).filter((side) => {
-    const [dx, dy] = DELTA[side];
-    return !occupied(s, c.controller!, c.x! + dx, c.y! + dy, ignore);
-  });
+  return outSides(s, iid).filter((side) => !occupied(s, c.controller!, attachRect(s, iid, side), new Set([...ignore, iid])));
 }
 
 /** Rotation that makes `cardId`'s incoming arrow face a master lying on `sideOfMaster`. */

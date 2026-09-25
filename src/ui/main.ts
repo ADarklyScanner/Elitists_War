@@ -5,9 +5,10 @@ import {
   applyAction, attackOptions, attackStrength, cardName, CARDS, createGame, currentOutcome, def, finalRoll,
   goalCount, goalNeeded, hasResponse, ILLUMINATI, isImplemented, GROUP_ABILITIES, openArrows, outSides,
   plotOptions, plotsInHand, handLimit, power, resistance, globalPower, alignments, randomDeck,
-  responseOptions, structureCards, subtree, takeoverOptions, waitingFor, DELTA, PLOTS, NWO_EFFECTS,
+  responseOptions, structureCards, subtree, takeoverOptions, waitingFor, PLOTS, NWO_EFFECTS,
   describePlay, player, leadOptions, abilitiesOf, abilityOptions, resourcesOf, canEnterPlay, HOOKS, goalsInHand, goalLimit,
 } from '../engine';
+import { attachRect, rectOf, ensureLayout, type Rect } from '../engine/geometry';
 import { chooseAction, successChance } from '../ai/ai';
 
 // ------------------------------------------------------------------ state
@@ -247,6 +248,7 @@ const gnext = (a: Area) => (G.next === a ? 'g-next' : '');
 
 function render() {
   if (!ui.game) { renderStart(); return; }
+  ensureLayout(ui.game); // a game saved before cards had real shapes
   G = computeGuide(ui.game);
   const s = ui.game;
   const rival = s.players.find((p) => p.id !== ui.me)!;
@@ -285,19 +287,23 @@ function renderSide(s: GameState, pl: string, mine: boolean): string {
   const p = player(s, pl);
   const cards = structureCards(s, pl);
   const slots = placementSlots(s, pl);
-  const xs = [...cards.map((c) => s.cards[c].x!), ...slots.map((x) => x.x)];
-  const ys = [...cards.map((c) => s.cards[c].y!), ...slots.map((x) => x.y)];
-  const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
+  // Cards are laid out at their real shape (5 × 7, on its side when hung from a side arrow);
+  // positions are card centres in half-units, drawn with --u pixels per unit.
+  const rects = [...cards.map((c) => rectOf(s, c)), ...slots.map((x) => x.r)];
+  const minX = Math.min(...rects.map((r) => r.x - r.w / 2)), maxX = Math.max(...rects.map((r) => r.x + r.w / 2));
+  const minY = Math.min(...rects.map((r) => r.y - r.h / 2)), maxY = Math.max(...rects.map((r) => r.y + r.h / 2));
+  const place = (r: { x: number; y: number; w: number; h: number }) =>
+    `left:calc(var(--u) * ${r.x - r.w / 2 - minX});top:calc(var(--u) * ${r.y - r.h / 2 - minY});width:calc(var(--u) * ${r.w});height:calc(var(--u) * ${r.h})`;
   const cells = cards.map((iid) => {
-    const c = s.cards[iid];
-    return `<div class="cell" style="grid-column:${c.x! - minX + 1};grid-row:${c.y! - minY + 1}">${tableCard(s, iid)}</div>`;
+    const r = rectOf(s, iid);
+    return `<div class="cell ${r.w > r.h ? 'sideways' : ''}" style="${place(r)}">${tableCard(s, iid)}</div>`;
   });
-  // One "+" per empty space; if two open arrows point at the same space, the button offers both.
-  const byCell = new Map<string, typeof slots>();
-  for (const sl of slots) byCell.set(`${sl.x},${sl.y}`, [...(byCell.get(`${sl.x},${sl.y}`) ?? []), sl]);
-  for (const group of byCell.values()) {
+  // One "+" per space; if two open arrows lead to exactly the same space, the button offers both.
+  const bySpot = new Map<string, typeof slots>();
+  for (const sl of slots) bySpot.set(`${sl.r.x},${sl.r.y},${sl.r.w}`, [...(bySpot.get(`${sl.r.x},${sl.r.y},${sl.r.w}`) ?? []), sl]);
+  for (const group of bySpot.values()) {
     const sl = group[0];
-    cells.push(`<button class="cell slot" style="grid-column:${sl.x - minX + 1};grid-row:${sl.y - minY + 1}" data-slot="${group.map((g) => `${g.onto}:${g.side}`).join('|')}" aria-label="Place here">+</button>`.replace('class="cell slot"', `class="cell slot ${G.ok.has('slots') ? 'g-ok' : ''}"`));
+    cells.push(`<button class="cell slot ${G.ok.has('slots') ? 'g-ok' : ''}" style="${place(sl.r)}" data-slot="${group.map((g) => `${g.onto}:${g.side}`).join('|')}" aria-label="Place here">+</button>`);
   }
   const n = goalCount(s, pl), need = goalNeeded(s, pl);
   return `
@@ -310,7 +316,7 @@ function renderSide(s: GameState, pl: string, mine: boolean): string {
         </span>
         ${mine ? '' : `<span class="muted">${p.hand.filter((i) => def(s, i).type === 'Plot').length} Plots · ${p.hand.filter((i) => def(s, i).type !== 'Plot').length} Groups in hand</span>`}
       </div>
-      <div class="board-scroll"><div class="grid" style="grid-template-columns:repeat(${maxX - minX + 1},var(--cell));grid-template-rows:repeat(${maxY - minY + 1},var(--cell))">${cells.join('')}</div></div>
+      <div class="board-scroll"><div class="field" style="width:calc(var(--u) * ${maxX - minX});height:calc(var(--u) * ${maxY - minY})">${cells.join('')}</div></div>
       ${resourcesOf(s, pl).length ? `<div class="res-row"><span class="label">Resources</span>${resourcesOf(s, pl).map((r) => {
         const c = s.cards[r];
         const sel = (ui.sel.kind === 'resource' && ui.sel.iid === r) || (ui.sel.kind === 'link' && ui.sel.resource === r);
@@ -319,7 +325,7 @@ function renderSide(s: GameState, pl: string, mine: boolean): string {
     </div>`;
 }
 
-function placementSlots(s: GameState, pl: string): { x: number; y: number; onto: string; side: Side }[] {
+function placementSlots(s: GameState, pl: string): { r: Rect; onto: string; side: Side }[] {
   if (pl !== ui.me) return [];
   const sel = ui.sel;
   let spots: { onto: string; side: Side }[] = [];
@@ -331,10 +337,7 @@ function placementSlots(s: GameState, pl: string): { x: number; y: number; onto:
     const open = openArrows(s, sel.attacker);
     if (open.length > 1) spots = open.map((side) => ({ onto: sel.attacker, side }));
   }
-  return spots.map((o) => {
-    const m = s.cards[o.onto];
-    return { x: m.x! + DELTA[o.side][0], y: m.y! + DELTA[o.side][1], ...o };
-  });
+  return spots.map((o) => ({ r: attachRect(s, o.onto, o.side), ...o }));
 }
 
 function highlightFor(s: GameState, iid: string): string {

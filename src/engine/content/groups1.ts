@@ -3,7 +3,7 @@ import { abilitiesOf, attackingGroups, matches, registerAbilities, type Match } 
 import { registerChoice, registerHooks, type AbilityParams, type ActivatedAbility } from '../hooks';
 import { def, cardName } from '../cards';
 import { alignmentPairs, alignments, attributes, power } from '../stats';
-import { DELTA, openArrows, structureCards, subtree } from '../geometry';
+import { openArrows, sideOf, structureCards, subtree } from '../geometry';
 import { NWO_EFFECTS } from '../nwo';
 import { nextRandom, roll2d6, shuffle } from '../rng';
 import {
@@ -673,10 +673,8 @@ function moveSpots(s: GameState, g: string): { onto: string; side: Side }[] {
   const out: { onto: string; side: Side }[] = [];
   for (const m of structureCards(s, c.controller)) {
     if (tree.includes(m)) continue;
-    const mc = s.cards[m];
     for (const side of openArrows(s, m, ignore)) {
-      const [dx, dy] = DELTA[side];
-      if (m === c.master && mc.x! + dx === c.x && mc.y! + dy === c.y) continue; // where it already is
+      if (m === c.master && side === sideOf(s, c.iid)) continue; // where it already is
       out.push({ onto: m, side });
     }
   }

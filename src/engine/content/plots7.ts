@@ -7,7 +7,7 @@ import { registerChoice, registerHooks } from '../hooks';
 import { cardName, def } from '../cards';
 import { type Match, matches } from '../abilities';
 import { alignments, power } from '../stats';
-import { DELTA, SIDES, openArrows, outSides, puppets, rotate, structureCards, subtree } from '../geometry';
+import { SIDES, openArrows, outSides, puppets, rotate, structureCards, subtree } from '../geometry';
 import {
   activePlayer, askChoice, discardCard, livePlayers, log, placeGroup, player, protectedPlayer, revealTo,
   startAttack, validateAttack,
@@ -127,7 +127,7 @@ registerPlots({
           const c = s.cards[l.iid];
           const m = l.master ? s.cards[l.master] : undefined;
           if (!c || c.zone !== 'hand' || !player(s, pl).hand.includes(l.iid) || !m || !inPlay(s, l.master) || m.controller !== pl) continue;
-          const side = sideBetween(m.x!, m.y!, l.x, l.y);
+          const side = l.side;
           if (!side || !openArrows(s, l.master!).includes(side)) continue;
           placeGroup(s, l.iid, pl, l.master!, side);
           back++;
@@ -536,18 +536,13 @@ registerPlots({
 
 // ---------------------------------------------------------------- effects
 
-type Layout = { iid: string; master?: string; x?: number; y?: number }[];
+type Layout = { iid: string; master?: string; x?: number; y?: number; side?: Side }[];
 const layoutOf = (e: GameEvent): Layout => ((e.data?.layout as Layout | undefined) ?? []);
-function sideBetween(mx: number, my: number, x?: number, y?: number): Side | undefined {
-  if (x === undefined || y === undefined) return undefined;
-  return SIDES.find((sd) => mx + DELTA[sd][0] === x && my + DELTA[sd][1] === y);
-}
 /** Where the Personality goes back: its old place if it is still free, else the first open arrow. */
 function jarSpot(s: GameState, pl: string, e: GameEvent): { master: string; side: Side; original: boolean } | undefined {
   const me = layoutOf(e)[0];
   if (me?.master && inPlay(s, me.master) && s.cards[me.master].controller === pl) {
-    const m = s.cards[me.master];
-    const side = sideBetween(m.x!, m.y!, me.x, me.y);
+    const side = me.side;
     if (side && openArrows(s, me.master).includes(side)) return { master: me.master, side, original: true };
   }
   for (const g of structureCards(s, pl)) {

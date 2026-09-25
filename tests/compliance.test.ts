@@ -354,6 +354,6 @@ describe('R038 moving Groups', () => {
     expect(() => act(s0, 'p1', { type: 'move', group: g, onto: ill, side: 'TOP', payWith: ill })).toThrow();
     s0.cards[ill].tokens = 1;
     const s = act(s0, 'p1', { type: 'move', group: g, onto: ill, side: 'TOP', payWith: ill });
-    expect(s.cards[g].y).toBe(-1);
+    expect(s.cards[g].side).toBe('TOP');
   });
 });

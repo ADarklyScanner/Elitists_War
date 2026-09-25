@@ -260,9 +260,9 @@ describe('Reorganization', () => {
     expect(s.turnFlags.freeMoves).toBe('p1');
     s.cards[g].tokens = 0;
     s = act(s, 'p1', { type: 'move', group: g, onto: ill(s, 'p1'), side: 'TOP', payWith: g });
-    expect(s.cards[g].y).toBe(-1);
+    expect(s.cards[g].side).toBe('TOP');
     s = act(s, 'p1', { type: 'move', group: g, onto: ill(s, 'p1'), side: 'LEFT', payWith: g });
-    expect(s.cards[g].x).toBe(-1);
+    expect(s.cards[g].side).toBe('LEFT');
     checkInvariants(s);
   });
   it('costs the Illuminati\'s action', () => {

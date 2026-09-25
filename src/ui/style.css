@@ -11,7 +11,7 @@
   --brass-soft: #d4a34033;
   --threat: #e05a4b;
   --ok: #6cc38f;
-  --cell: 96px;
+  --u: 7.4px;             /* pixels per half-unit of a 5 × 7 card: upright cards are 10u × 14u */
   --display: 'Saira Condensed', 'Arial Narrow', 'Roboto Condensed', sans-serif;
   --body: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
@@ -45,9 +45,9 @@ p { margin: 0; }
   .table > * { grid-area: auto; }
   .console { display: contents; }
   .boards { order: 1; } .panel.now { order: 2; } .hand-wrap { order: 3; } .inspect { order: 4; } .log { order: 5; }
-  :root { --cell: 84px; }
+  :root { --u: 6.6px; }
 }
-@media (max-width: 480px) { :root { --cell: 76px; } .card .name { font-size: 11px; } .turn { font-size: 12px; } }
+@media (max-width: 480px) { .bar { gap: 8px; } .brand { font-size: 16px; } .bar:has(.guide-toggle) .brand { display: none; } .turn { white-space: nowrap; } .guide-toggle { padding: 3px 8px; font-size: 12px; white-space: nowrap; } .bar .linkish { white-space: nowrap; padding-inline: 0; } :root { --u: 6.3px; } .card .name { font-size: 10px; } .card .pw { font-size: 14px; } .card .rs { font-size: 11px; } .turn { font-size: 12px; } }
 .boards { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .side { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); min-width: 0; }
 .side.active { border-color: color-mix(in srgb, var(--brass) 55%, var(--line)); }
@@ -58,8 +58,9 @@ p { margin: 0; }
 .goal-bar { width: 90px; height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; display: inline-block; }
 .goal-bar span { display: block; height: 100%; background: var(--brass); }
 .board-scroll { overflow-x: auto; padding: 14px; }
-.grid { display: grid; gap: 0; width: max-content; margin-inline: auto; }
-.cell { width: var(--cell); height: var(--cell); padding: 7px; position: relative; }
+.field { position: relative; margin-inline: auto; margin-block: 8px; }
+.cell { position: absolute; padding: 6px; }
+.cell.sideways .card .name { -webkit-line-clamp: 1; }
 
 /* ---------- table cards ---------- */
 .card {
@@ -87,18 +88,18 @@ p { margin: 0; }
 .partial { position: absolute; top: 3px; right: 4px; font-size: 10px; color: var(--muted); }
 
 /* Control arrows: filled triangles point out; a small notch marks the incoming arrow. */
-.arr { position: absolute; width: 0; height: 0; border: 7px solid transparent; }
-.arr.out.top { top: -14px; left: calc(50% - 7px); border-bottom-color: var(--brass); }
-.arr.out.bottom { bottom: -14px; left: calc(50% - 7px); border-top-color: var(--brass); }
-.arr.out.left { left: -14px; top: calc(50% - 7px); border-right-color: var(--brass); }
-.arr.out.right { right: -14px; top: calc(50% - 7px); border-left-color: var(--brass); }
+.arr { position: absolute; width: 0; height: 0; border: 6px solid transparent; }
+.arr.out.top { top: -12px; left: calc(50% - 6px); border-bottom-color: var(--brass); }
+.arr.out.bottom { bottom: -12px; left: calc(50% - 6px); border-top-color: var(--brass); }
+.arr.out.left { left: -12px; top: calc(50% - 6px); border-right-color: var(--brass); }
+.arr.out.right { right: -12px; top: calc(50% - 6px); border-left-color: var(--brass); }
 .arr.in { border-width: 5px; }
 .arr.in.top { top: 0; left: calc(50% - 5px); border-top-color: #8ea3a8; }
 .arr.in.bottom { bottom: 0; left: calc(50% - 5px); border-bottom-color: #8ea3a8; }
 .arr.in.left { left: 0; top: calc(50% - 5px); border-left-color: #8ea3a8; }
 .arr.in.right { right: 0; top: calc(50% - 5px); border-right-color: #8ea3a8; }
 .slot { border: 0; background: none; }
-.slot::before { content: ''; position: absolute; inset: 7px; border: 2px dashed var(--brass); border-radius: 7px; background: var(--brass-soft); }
+.slot::before { content: ''; position: absolute; inset: 6px; border: 2px dashed var(--brass); border-radius: 7px; background: var(--brass-soft); }
 .slot { font: 700 22px var(--display); color: var(--brass); }
 
 /* Alignment chips */

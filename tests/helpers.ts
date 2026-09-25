@@ -1,5 +1,6 @@
 import { createGame, placeGroup, type GameState, type DeckList, type Side, CARDS } from '../src/engine';
 import { randomDeck } from '../src/engine/decks';
+import { attachRect, overlaps, rectOf, sideOf } from '../src/engine/geometry';
 
 export function newGame(seed = 1, a?: Partial<DeckList>, b?: Partial<DeckList>): GameState {
   return createGame({
@@ -24,7 +25,7 @@ export function checkInvariants(s: GameState) {
     p.groupDeck.forEach((i) => note(i, `${p.id} groupDeck`));
     p.discard.forEach((i) => note(i, `${p.id} discard`));
   }
-  const cells = new Set<string>();
+  const placed: { iid: string; controller: string; r: ReturnType<typeof rectOf> }[] = [];
   for (const c of Object.values(s.cards)) {
     if (c.tokens < 0) throw new Error(`${c.iid} has negative tokens`);
     if (c.zone === 'hand' && !s.players.some((p) => p.hand.includes(c.iid))) throw new Error(`${c.iid} zone hand but not in a hand`);
@@ -32,13 +33,15 @@ export function checkInvariants(s: GameState) {
     if (c.zone === 'removed' && !s.players.find((p) => p.id === c.owner)?.eliminated) throw new Error(`${c.iid} left in limbo`);
     if (c.zone === 'structure') {
       if (seen.has(c.iid)) throw new Error(`${c.iid} in structure and ${seen.get(c.iid)}`);
-      const key = `${c.controller}:${c.x},${c.y}`;
-      if (cells.has(key)) throw new Error(`two cards at ${key}`);
-      cells.add(key);
+      const r = rectOf(s, c.iid);
+      const hit = placed.find((o) => o.controller === c.controller && overlaps(o.r, r));
+      if (hit) throw new Error(`${c.iid} overlaps ${hit.iid}`);
+      placed.push({ iid: c.iid, controller: c.controller!, r });
       if (CARDS[c.cardId].type !== 'Illuminati') {
         const m = c.master ? s.cards[c.master] : undefined;
         if (!m || m.zone !== 'structure' || m.controller !== c.controller) throw new Error(`${c.iid} has a bad master`);
-        if (Math.abs(m.x! - c.x!) + Math.abs(m.y! - c.y!) !== 1) throw new Error(`${c.iid} not adjacent to master`);
+        const want = attachRect(s, c.master!, sideOf(s, c.iid)!);
+        if (want.x !== c.x || want.y !== c.y) throw new Error(`${c.iid} is not on its master's arrow`);
       }
     }
   }
@@ -61,7 +64,7 @@ export function scenario(): GameState {
   const s = newGame(3);
   for (const c of Object.values(s.cards)) {
     if (c.zone === 'structure' && CARDS[c.cardId].type === 'Group') {
-      c.zone = 'removed'; c.controller = undefined; c.master = undefined; c.x = undefined; c.y = undefined;
+      c.zone = 'removed'; c.controller = undefined; c.master = undefined; c.x = undefined; c.y = undefined; c.side = undefined;
     }
   }
   for (const [k, c] of Object.entries(s.cards)) if (c.zone === 'removed') delete s.cards[k];

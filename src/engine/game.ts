@@ -8,7 +8,7 @@ import { RuleError } from './types';
 import { CARDS, cardName, def, inst } from './cards';
 import { roll2d6, shuffle } from './rng';
 import {
-  DELTA, OPPOSITE_SIDE, SIDES, depth, occupied, openArrows, puppets, rotate, rotationFor, structureCards, subtree,
+  DELTA, OPPOSITE_SIDE, SIDES, attachRect, depth, ensureLayout, LAYOUT_VERSION, occupied, openArrows, sideOf, puppets, rotate, rotationFor, structureCards, subtree,
 } from './geometry';
 import { abilitiesOf, attackingGroups, matches } from './abilities';
 import { alignmentPairs, alignments, attributes, globalPower, power, resistance } from './stats';
@@ -60,6 +60,7 @@ export function createGame(opts: { id?: string; seed?: number; players: NewPlaye
     };
     const ill = mk(p.deck.illuminati, 'structure');
     Object.assign(s.cards[ill], { controller: p.id, x: 0, y: 0, rot: 0 });
+    s.layout = LAYOUT_VERSION;
     const player: PlayerState = {
       id: p.id, name: p.name, isAI: p.isAI, illuminati: ill,
       plotDeck: shuffle(s, p.deck.plots.map((c) => mk(c, 'plotDeck'))),
@@ -155,6 +156,8 @@ function leadScore(s: GameState, iid: string) {
 // ---------------------------------------------------------------- helpers
 
 export function log(s: GameState, text: string, player?: string) {
+  // The offline game calls the human player "You": keep possessives readable.
+  text = text.replace(/\bYou's\b/g, 'your').replace(/^your\b/, 'Your');
   s.log.push({ turn: s.turn, player, text });
 }
 export const player = (s: GameState, id: string) => {
@@ -299,12 +302,11 @@ export function canEnterPlay(s: GameState, iid: string, playerId?: string): bool
 /** Put a Group into a structure on `side` of `master`. */
 export function placeGroup(s: GameState, iid: string, controller: string, master: string, side: Side) {
   const c = s.cards[iid];
-  const m = s.cards[master];
   const d = def(s, iid);
-  const [dx, dy] = DELTA[side];
   removeFromHand(s, iid);
+  const r = attachRect(s, master, side);
   Object.assign(c, {
-    zone: 'structure', controller, master, x: m.x! + dx, y: m.y! + dy,
+    zone: 'structure', controller, master, side, x: r.x, y: r.y,
     rot: rotationFor(d.arrowIn ?? 'TOP', side),
   });
 }
@@ -1065,14 +1067,10 @@ export function moveSubtree(s: GameState, root: string, controller: string, mast
   const all = s.cards[root].zone === 'structure' ? subtree(s, root) : [root];
   for (const iid of all) {
     const c = s.cards[iid];
-    layout[iid] = puppets(s, iid).map((child) => {
-      const ch = s.cards[child];
-      const world = SIDES.find((sd) => c.x! + DELTA[sd][0] === ch.x && c.y! + DELTA[sd][1] === ch.y)!;
-      return { child, local: rotate(world, (4 - (c.rot ?? 0)) % 4) };
-    });
+    layout[iid] = puppets(s, iid).map((child) => ({ child, local: rotate(sideOf(s, child)!, (4 - (c.rot ?? 0)) % 4) }));
   }
   // Lift the whole subtree out of play first.
-  for (const iid of all) Object.assign(s.cards[iid], { zone: 'removed' as const, x: undefined, y: undefined, master: undefined });
+  for (const iid of all) Object.assign(s.cards[iid], { zone: 'removed' as const, x: undefined, y: undefined, master: undefined, side: undefined });
   const place = (iid: string, m: string, sd: Side) => {
     placeGroup(s, iid, controller, m, sd);
     for (const { child, local } of layout[iid]) {
@@ -1104,7 +1102,7 @@ export function destroyGroup(s: GameState, iid: string, by: string) {
   const c = s.cards[iid];
   const prev = c.controller ?? c.owner;
   // Where the Group and its puppets were, for cards that bring it back (Head in a Jar).
-  const layout = c.zone === 'structure' ? subtree(s, iid).map((g) => ({ iid: g, master: s.cards[g].master, x: s.cards[g].x, y: s.cards[g].y })) : [];
+  const layout = c.zone === 'structure' ? subtree(s, iid).map((g) => ({ iid: g, master: s.cards[g].master, x: s.cards[g].x, y: s.cards[g].y, side: sideOf(s, g) })) : [];
   removeFromHand(s, iid); // a Group attacked in someone's hand (Opportunity Knocks)
   // "Draw a Plot whenever you destroy …" abilities (checked before the card loses its changes).
   let draws = 0;
@@ -1329,6 +1327,7 @@ export function waitingFor(s: GameState): string[] {
 
 export function applyAction(state: GameState, playerId: string, action: Action): GameState {
   const s: GameState = structuredClone(state);
+  ensureLayout(s); // games saved before cards had real shapes
   assertPriority(s, playerId);
   const p = player(s, playerId);
   if (p.eliminated) throw new RuleError('You have been eliminated.');

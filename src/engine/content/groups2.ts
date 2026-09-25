@@ -4,7 +4,7 @@ import { type ActivatedAbility, type CardHooks, HOOKS, activeHookCards, hooksOf,
 import { def } from '../cards';
 import { alignments, attributes, countControlled, globalPower, isOpposite, power } from '../stats';
 import { NWO_EFFECTS } from '../nwo';
-import { DELTA, SIDES, puppets, structureCards } from '../geometry';
+import { puppets, sideOf, structureCards } from '../geometry';
 import { resourceKinds } from './plots3';
 import { rollDie } from '../rng';
 import {
@@ -806,12 +806,12 @@ registerHooks({
         return null;
       },
       apply(s, pl, self, p) {
-        const c = s.cards[self], m = s.cards[c.master!];
-        const side = SIDES.find((sd) => m.x! + DELTA[sd][0] === c.x && m.y! + DELTA[sd][1] === c.y)!;
+        const c = s.cards[self];
+        const side = sideOf(s, self)!;
         const master = c.master!;
         for (const r of Object.values(s.cards)) if (r.linkedTo === self && r.zone === 'resources') r.linkedTo = p.target;
         discardCard(s, self);
-        Object.assign(c, { x: undefined, y: undefined, rot: undefined });
+        Object.assign(c, { x: undefined, y: undefined, rot: undefined, side: undefined });
         placeGroup(s, p.target!, pl, master, side);
         log(s, `${def(s, p.target!).name} takes the place of Trading Card Games.`, pl);
         hooksOf(s, p.target!)?.onEnterPlay?.(s, p.target!);

@@ -58,7 +58,8 @@ export interface CardInstance {
   controller?: string;     // player id while in a structure / on the table
   // Power Structure placement (zone === 'structure')
   master?: string;         // iid of master (undefined for Illuminati)
-  x?: number; y?: number;  // grid cell
+  x?: number; y?: number;  // card centre, in half-units of a 5 × 7 card (see geometry.ts)
+  side?: Side;             // which arrow of its master it hangs from
   rot?: number;            // quarter turns clockwise, 0..3
   tokens: number;
   capturedTurn?: number;   // turn number it was captured (no tokens that turn)
@@ -209,6 +210,7 @@ export interface GameState {
   id: string;
   version: number;         // increments on every applied action
   rng: number;             // seeded RNG state
+  layout?: number;         // card layout version (2 = real card shapes; see geometry.ts)
   settings: GameSettings;
   players: PlayerState[];  // seat order = turn order
   cards: Record<string, CardInstance>;
