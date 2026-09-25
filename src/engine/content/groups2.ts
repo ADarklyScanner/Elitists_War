@@ -420,7 +420,6 @@ registerHooks({
       timing: ['anytime'],
       usesToken: true,
       needs: { target: 'plot' },
-      ai: 'never',
       check(s, _pl, _self, p) {
         const c = p.target ? s.cards[p.target] : undefined;
         if (!c || c.zone !== 'hand' || def(s, c.iid).type !== 'Plot') return 'Choose a Plot card in a player\'s hand.';
@@ -693,7 +692,6 @@ registerHooks({
       timing: ['anytime'],
       usesToken: true,
       needs: { target: 'place' },
-      ai: 'never',
       check(s, _pl, _self, p) {
         if (!inStructure(s, p.target) || def(s, p.target!).subtype !== 'Place' || !s.cards[p.target!].devastated) return 'Choose a Devastated Place in play.';
         return null;

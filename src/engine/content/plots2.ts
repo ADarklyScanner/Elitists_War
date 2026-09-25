@@ -2,7 +2,7 @@
 // Goals, New World Orders and assorted Plots (batch 2).
 import type { Alignment, AttackCtx, GameState, PlotEffect, PlotPlay } from '../types';
 import type { PlotHandler } from '../plotTypes';
-import { registerGoals, registerPlots } from '../plotTypes';
+import { registerGoalProgress, registerGoals, registerPlots } from '../plotTypes';
 import { HOOKS, registerChoice, registerHooks } from '../hooks';
 import { def } from '../cards';
 import { matches } from '../abilities';
@@ -94,19 +94,45 @@ function destroyAndControl(destroyed: Alignment, controlled: Alignment) {
   };
 }
 
+const VIOLENT_CRIMINAL = (s: GameState, i: string) => hasAlign(s, i, 'Violent') && hasAlign(s, i, 'Criminal');
+const WEIRD_3 = (s: GameState, i: string) => hasAlign(s, i, 'Weird') && power(s, i, { goals: true }) >= 3;
+const CORPORATE_4 = (s: GameState, i: string) => hasAlign(s, i, 'Corporate') && power(s, i, { goals: true }) >= 4;
+const DESTROY_CONTROL: Record<string, [Alignment, Alignment]> = {
+  'kill-for-peace': ['Violent', 'Peaceful'],
+  'let-them-eat-cake': ['Liberal', 'Conservative'],
+  'power-to-the-people': ['Conservative', 'Liberal'],
+  'the-hand-of-madness': ['Peaceful', 'Violent'],
+  'up-against-the-wall': ['Government', 'Violent'],
+};
+const totalGoalPower = (s: GameState, pl: string) => countedGroups(s, pl).reduce((n, iid) => n + power(s, iid, { goals: true }), 0);
+
 registerGoals({
-  'criminal-overlords': doubleGoal((s, i) => hasAlign(s, i, 'Violent') && hasAlign(s, i, 'Criminal'), 'Violent Criminal Groups'),
-  'hail-eris': doubleGoal((s, i) => hasAlign(s, i, 'Weird') && power(s, i, { goals: true }) >= 3, 'Weird Groups of Power 3+'),
-  'the-corporate-masters': doubleGoal((s, i) => hasAlign(s, i, 'Corporate') && power(s, i, { goals: true }) >= 4, 'Corporate Groups of Power 4+'),
-  'kill-for-peace': destroyAndControl('Violent', 'Peaceful'),
-  'let-them-eat-cake': destroyAndControl('Liberal', 'Conservative'),
-  'power-to-the-people': destroyAndControl('Conservative', 'Liberal'),
-  'the-hand-of-madness': destroyAndControl('Peaceful', 'Violent'),
-  'up-against-the-wall': destroyAndControl('Government', 'Violent'),
+  'criminal-overlords': doubleGoal(VIOLENT_CRIMINAL, 'Violent Criminal Groups'),
+  'hail-eris': doubleGoal(WEIRD_3, 'Weird Groups of Power 3+'),
+  'the-corporate-masters': doubleGoal(CORPORATE_4, 'Corporate Groups of Power 4+'),
+  ...Object.fromEntries(Object.entries(DESTROY_CONTROL).map(([id, [d, c]]) => [id, destroyAndControl(d, c)])),
   'power-for-its-own-sake': (s, pl) => {
-    const total = countedGroups(s, pl).reduce((n, iid) => n + power(s, iid, { goals: true }), 0);
+    const total = totalGoalPower(s, pl);
     return total >= 50 ? `controls ${total} Power` : null;
   },
+});
+
+// How far a holder is toward each Goal (for computer players).
+const doubleProgress = (pred: (s: GameState, iid: string) => boolean) => (s: GameState, pl: string) =>
+  Math.min(1, goalCount(s, pl, (iid) => pred(s, iid)) / Math.max(1, goalNeeded(s, pl)));
+function destroyControlProgress(destroyed: Alignment, controlled: Alignment) {
+  return (s: GameState, pl: string) => {
+    const d = player(s, pl).destroyedCredit.filter((iid) => (def(s, iid).alignments ?? []).includes(destroyed)).reduce((n, iid) => n + goalAlignWeight(s, iid, destroyed), 0);
+    const c = countedGroups(s, pl).filter((iid) => isGroup(s, iid) && hasAlign(s, iid, controlled)).reduce((n, iid) => n + goalAlignWeight(s, iid, controlled), 0);
+    return Math.max(...COMBOS.map(([nd, nc]) => (Math.min(d, nd) + Math.min(c, nc)) / (nd + nc)));
+  };
+}
+registerGoalProgress({
+  'criminal-overlords': doubleProgress(VIOLENT_CRIMINAL),
+  'hail-eris': doubleProgress(WEIRD_3),
+  'the-corporate-masters': doubleProgress(CORPORATE_4),
+  ...Object.fromEntries(Object.entries(DESTROY_CONTROL).map(([id, [d, c]]) => [id, destroyControlProgress(d, c)])),
+  'power-for-its-own-sake': (s, pl) => Math.min(1, totalGoalPower(s, pl) / 50),
 });
 
 // ---------------------------------------------------------------- NWO constant effects

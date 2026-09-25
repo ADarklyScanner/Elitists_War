@@ -267,7 +267,7 @@ registerHooks({
   'boy-sprouts': {
     // Relief sent with the Boy Sprouts: their Power counts as 12 and their controller draws a Plot.
     actions: [{
-      id: 'relief', label: 'Send Relief (Power counts as 12, draw a Plot)', timing: ['main', 'attack'], usesToken: true, ai: 'never',
+      id: 'relief', label: 'Send Relief (Power counts as 12, draw a Plot)', timing: ['main', 'attack'], usesToken: true,
       needs: { target: 'place', helpers: true },
       check(s, pl, self, p) {
         const place = p.target;
@@ -321,7 +321,7 @@ registerHooks({
 
   'c-i-a': {
     actions: [{
-      id: 'assassinate', label: 'Make this an Assassination (Instant attack)', timing: ['attack'], usesToken: false, ai: 'never',
+      id: 'assassinate', label: 'Make this an Assassination (Instant attack)', timing: ['attack'], usesToken: false,
       check(s, pl, self, _p, ctx) {
         if (!ctx || ctx.instant || ctx.attacker !== self || ctx.attackerPlayer !== pl || ctx.type !== 'destroy') return 'Only when the C.I.A. itself attacks to destroy.';
         if (def(s, ctx.target).subtype !== 'Personality') return 'Only an attack on a Personality can become an Assassination.';
@@ -343,7 +343,7 @@ registerHooks({
       if (def(s, victim).subtype === 'Personality' && s.cards[victim].killed) s.cards[self].data = { ...s.cards[self].data, justKilled: victim, turn: s.turn };
     },
     actions: [{
-      id: 'clone', label: 'Restore the Personality just killed', timing: ['anytime'], usesToken: true, ai: 'never',
+      id: 'clone', label: 'Restore the Personality just killed', timing: ['anytime'], usesToken: true,
       needs: { target: 'ownGroup' },
       check(s, pl, self, p) {
         const d = s.cards[self].data;
@@ -423,7 +423,7 @@ registerHooks({
     },
     onCapture(s, self, victim) { if (victim === self && s.cards[self].data) s.cards[self].data = { ...s.cards[self].data, place: undefined }; },
     actions: [{
-      id: 'link', label: 'Link to any Place in play', timing: ['main'], usesToken: false, oncePerTurn: true, ai: 'never',
+      id: 'link', label: 'Link to any Place in play', timing: ['main'], usesToken: false, oncePerTurn: true,
       needs: { target: 'place' },
       check: (s, _pl, self, p) =>
         inPlay(s, p.target) && def(s, p.target!).type === 'Group' && def(s, p.target!).subtype === 'Place' ? (s.cards[self].data?.place === p.target ? 'Already linked there.' : null) : 'Choose a Place in play.',
@@ -434,7 +434,7 @@ registerHooks({
   'elders-of-zion': {
     // One reorganization of the whole Power Structure: free moves, until the player does anything else.
     actions: [{
-      id: 'reorganize', label: 'Reorganize your Power Structure (also spends an Illuminati action)', timing: ['main'], usesToken: true, ai: 'never',
+      id: 'reorganize', label: 'Reorganize your Power Structure (also spends an Illuminati action)', timing: ['main'], usesToken: true, ai: 'reorganize',
       check(s, pl) {
         if (s.turnFlags.freeMoves === pl) return 'You can already move your Groups freely.';
         return s.cards[player(s, pl).illuminati].tokens > 0 ? null : 'Your Illuminati also needs an Action token.';
@@ -470,7 +470,7 @@ registerHooks({
     // already moves or destroys linked Resources with their Group).
     lockLinks: () => true,
     actions: [{
-      id: 'gadget', label: 'Take over a Gadget from your hand and link it here', timing: ['main'], usesToken: true, ai: 'never',
+      id: 'gadget', label: 'Take over a Gadget from your hand and link it here', timing: ['main'], usesToken: true,
       needs: { target: 'resource' },
       check(s, pl, self, p) {
         const r = p.target;

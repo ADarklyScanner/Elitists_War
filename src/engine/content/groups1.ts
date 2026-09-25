@@ -226,7 +226,7 @@ function inspectTwo(kind: 'Plot' | 'Group'): ActivatedAbility {
 /** "As an action, force the discard of an exposed Plot held by a rival" (Templars, Psychiatrists). */
 function discardExposed(allowGoals: boolean): ActivatedAbility {
   return {
-    id: 'discardExposed', label: `Force a rival to discard an exposed ${allowGoals ? '' : 'non-Goal '}Plot`, timing: ['anytime'], usesToken: true, ai: 'never',
+    id: 'discardExposed', label: `Force a rival to discard an exposed ${allowGoals ? '' : 'non-Goal '}Plot`, timing: ['anytime'], usesToken: true,
     needs: { target: 'plot' },
     check(s, pl, _self, p) {
       const c = p.target ? s.cards[p.target] : undefined;
@@ -412,7 +412,7 @@ registerHooks({
 
   'nasa': {
     actions: [{
-      id: 'transferToken', label: 'Give its Action token to another Government Group of yours', timing: ['main'], usesToken: true, ai: 'never',
+      id: 'transferToken', label: 'Give its Action token to another Government Group of yours', timing: ['main'], usesToken: true,
       needs: { target: 'ownGroup' },
       check(s, pl, self, p, ctx) {
         if (ctx) return 'Not during an attack.';
@@ -510,7 +510,7 @@ registerHooks({
     // +3 Power to the one Personality it is linked to, while the same player controls both.
     powerMod: (s, self, iid) => s.cards[self].data?.link === iid && inPlay(s, self) && sameOwner(s, self, iid) && def(s, iid).subtype === 'Personality' ? 3 : 0,
     actions: [{
-      id: 'link', label: 'Link to one of your Personalities (+3 Power)', timing: ['main'], usesToken: false, oncePerTurn: true, ai: 'never',
+      id: 'link', label: 'Link to one of your Personalities (+3 Power)', timing: ['main'], usesToken: false, oncePerTurn: true,
       needs: { target: 'personality' },
       check(s, pl, self, p) {
         const t = p.target;
@@ -542,7 +542,7 @@ registerHooks({
       if (ctx.disaster && ctx.target === s.cards[self].master) relieve(s, ctx.target, self);
     },
     actions: [{
-      id: 'relief', label: 'Send Relief to one Place', timing: ['anytime'], usesToken: true, ai: 'never',
+      id: 'relief', label: 'Send Relief to one Place', timing: ['anytime'], usesToken: true,
       needs: { target: 'place' },
       check(s, _pl, _self, p) {
         if (s.window?.kind === 'roll') return 'Not during an attack roll.';
@@ -615,7 +615,7 @@ registerHooks({
 
   's-m-o-f': {
     actions: [{
-      id: 'removeToken', label: 'Remove an Action token from a rival Weird Group', timing: ['main'], usesToken: false, oncePerTurn: true, ai: 'never',
+      id: 'removeToken', label: 'Remove an Action token from a rival Weird Group', timing: ['main'], usesToken: false, oncePerTurn: true,
       needs: { target: 'rivalGroup' },
       check(s, pl, _self, p) {
         const t = p.target;
@@ -715,7 +715,7 @@ registerHooks({
 /** "Send Relief": this Group's Power counts `times` over; other Groups of yours may add theirs (R037 needs 3x printed Power). */
 function reliefAbility(times: number, word: string): ActivatedAbility {
   return {
-    id: 'relief', label: `Send Relief to a Devastated Place (its Power counts ${word})`, timing: ['main', 'attack'], usesToken: true, ai: 'never',
+    id: 'relief', label: `Send Relief to a Devastated Place (its Power counts ${word})`, timing: ['main', 'attack'], usesToken: true,
     needs: { target: 'place', helpers: true },
     check(s, pl, self, p) {
       const place = p.target;

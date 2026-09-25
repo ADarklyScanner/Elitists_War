@@ -431,7 +431,7 @@ const T: Record<string, CardHooks> = {
   'center-for-weird-studies': {
     actions: [{
       id: 'refresh', label: 'Discard a Plot: give a spent Group or Resource a new Action token', timing: ['anytime'], usesToken: false, oncePerTurn: true,
-      needs: { target: 'group' }, ai: 'never',
+      needs: { target: 'group' },
       check(s, pl, _self, p) {
         if (activePlayer(s).id !== pl) return 'Only during your own turn.';
         const hand = player(s, pl).hand;
@@ -548,7 +548,7 @@ const T: Record<string, CardHooks> = {
     },
     actions: [{
       id: 'takeover', label: 'Extra Resource takeover (discard the top Plot of your deck)', timing: ['main'], usesToken: false, oncePerTurn: true,
-      needs: { target: 'resource' }, ai: 'never',
+      needs: { target: 'resource' },
       check(s, pl, self, p) {
         if (!unlinked(s, self)) return 'Only while the Flying Saucer is unlinked.';
         const p0 = player(s, pl);
@@ -949,7 +949,7 @@ const T: Record<string, CardHooks> = {
       },
     }, {
       id: 'reveal', label: 'Turn a Resource in Warehouse 23 face up', timing: ['main', 'anytime', 'attack', 'roll'], usesToken: false,
-      needs: { target: 'resource' }, ai: 'never',
+      needs: { target: 'resource' }, ai: 'free',
       check(s, pl, self, p) {
         const t = p.target ? s.cards[p.target] : undefined;
         return t && t.hiddenUnder === self && t.controller === pl ? null : 'Choose a Resource face down under your Warehouse 23.';
@@ -961,7 +961,7 @@ const T: Record<string, CardHooks> = {
         hooksOf(s, t)?.onEnterPlay?.(s, t);
       },
     }, {
-      id: 'fetch', label: 'Bring in an Artifact or Gadget from your hand or deck', timing: ['main'], usesToken: false, needs: { target: 'resource' }, ai: 'never',
+      id: 'fetch', label: 'Bring in an Artifact or Gadget from your hand or deck', timing: ['main'], usesToken: false, needs: { target: 'resource' }, ai: 'free',
       check(s, pl, self, p) {
         const d = data(s, self);
         if (d.enteredTurn !== s.turn || d.fetched) return 'Only when Warehouse 23 is first played.';

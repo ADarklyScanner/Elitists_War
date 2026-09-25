@@ -1263,6 +1263,7 @@ export function startAttack(s: GameState, playerId: string, a: Extract<Action, {
 // ---- live Plot effects: a Plot counts unless a later, itself uncancelled Plot cancels it (R010).
 export function isCancelled(plays: PlayedPlot[], iid: string): boolean {
   const i = plays.findIndex((p) => p.iid === iid);
+  if (plays[i]?.voided) return true; // made illegal before it resolved: as if it never happened
   const part = plays[i]?.partOf;
   if (part && part !== iid && isCancelled(plays, part)) return true;
   return plays.some((q, j) => j > i && q.effect.t === 'cancelPlot' && q.effect.target === iid && !isCancelled(plays, q.iid));
@@ -1276,11 +1277,86 @@ export function isPrivileged(ctx: AttackCtx): boolean {
   return ctx.privileged || fx.some((e) => e.t === 'privileged');
 }
 export function cancelledGroups(ctx: AttackCtx): Set<string> {
-  return new Set(liveEffects(ctx).flatMap((e) => (e.t === 'cancelGroup' ? [e.group] : [])));
+  return new Set([...liveEffects(ctx).flatMap((e) => (e.t === 'cancelGroup' ? [e.group] : [])), ...(ctx.illegalGroups ?? [])]);
 }
 export function attackCancelled(ctx: AttackCtx): boolean {
+  if (ctx.illegal) return true; // the attacking action has been made illegal
   if (ctx.instantCard && isCancelled(ctx.plays, ctx.instantCard)) return true;
   return !!ctx.attacker && cancelledGroups(ctx).has(ctx.attacker);
+}
+
+// ---- plays made illegal partway through ("Cancellations, Illegal Actions, & Other Surprises").
+// A play is checked when it is made; a later play can still make it illegal (a Violent attacker made
+// Peaceful, a new immunity). Everything in the attack is checked again after each play and before the
+// attack resolves: an illegal attacking action does not happen (as if cancelled), an aiding or opposing
+// Group made illegal stops counting, and a Plot made illegal before it resolves returns to its owner's
+// hand, exposed (its costs stay paid).
+
+/** Why the attacking action itself is no longer legal, or null. Judged as if it were announced now. */
+export function attackIllegal(s: GameState, ctx: AttackCtx): string | null {
+  const tgt = ctx.target;
+  if (!s.cards[tgt]) return null;
+  // An Instant attack is its Plot: the target may have become immune to that card.
+  if (!ctx.attacker) {
+    const card = ctx.instantCard;
+    if (card && s.cards[card] && s.cards[tgt].zone === 'structure' && anyHook(s, (h, self) => !!h.immune?.(s, self, tgt, card))) return `${cardName(s, tgt)} is now immune to ${cardName(s, card)}.`;
+    return null;
+  }
+  const att = ctx.attacker;
+  if (ctx.instant) return null; // a Group's attack turned into an Instant attack (C.I.A.) keeps its own rules
+  if (s.cards[att].zone !== 'structure' || s.cards[att].controller !== ctx.attackerPlayer) return null; // gone: the card that removed it decides
+  if (!['structure', 'hand', 'discard'].includes(s.cards[tgt].zone)) return null;
+  // Immunities and restrictions are judged as they would be for a fresh announcement (no attack under way).
+  const saved = s.attack;
+  s.attack = undefined;
+  try {
+    for (const self of activeHookCards(s)) {
+      const why = HOOKS[s.cards[self].cardId].forbidAttack?.(s, self, att, tgt, ctx.type, ctx.attackerPlayer);
+      if (why) return why;
+    }
+    if (isSecret(s, tgt) && !isSecret(s, att) && def(s, att).type !== 'Illuminati' && !anyHook(s, (h, self) => !!h.secretOverride?.(s, self, att, tgt))) return `${cardName(s, tgt)} is now Secret: ${cardName(s, att)} may not attack it.`;
+    if (immuneTo(s, tgt, [att])) return `${cardName(s, tgt)} is now immune to ${cardName(s, att)}.`;
+    for (const ab of abilitiesOf(s, illuminatiOf(s, ctx.attackerPlayer))) {
+      if (ctx.type === 'destroy' && ab.kind === 'canOnlyDestroy' && !matches(s, tgt, ab.match)) return `${cardName(s, tgt)} is no longer a Group your Illuminati may destroy.`;
+    }
+  } finally { s.attack = saved; }
+  return null;
+}
+
+/** Check every play of the attack in progress again (after each play, and before it resolves). */
+export function recheckAttack(s: GameState) {
+  const ctx = s.attack;
+  if (!ctx || ctx.result) return;
+  const why = attackIllegal(s, ctx) ?? undefined;
+  if (why !== ctx.illegal) {
+    if (why) log(s, `${why} The attack is now illegal: unless that changes before the dice are rolled, it does not happen.`);
+    else log(s, 'The attack is legal again.');
+    ctx.illegal = why;
+  }
+  // Aiding and opposing Groups the target has become immune to no longer count (the attack goes on).
+  const helpers = [...ctx.aid, ...ctx.oppose].map((c) => c.iid).filter((g): g is string => !!g && g !== ctx.target && s.cards[g]?.zone === 'structure');
+  const bad = helpers.filter((g) => immuneTo(s, ctx.target, [g], ctx));
+  for (const g of bad) if (!ctx.illegalGroups?.includes(g)) log(s, `${cardName(s, ctx.target)} is now immune to ${cardName(s, g)}: its action no longer counts.`);
+  ctx.illegalGroups = bad.length ? bad : undefined;
+  // Plots whose requirements no longer hold go back to their owners' hands, exposed. (While the attacking
+  // action itself is illegal its Plots wait: if it stays illegal they share its fate.)
+  if (ctx.illegal) return;
+  for (const pp of ctx.plays) {
+    if (pp.voided || pp.ability || isCancelled(ctx.plays, pp.iid)) continue;
+    const card = s.cards[pp.iid];
+    if (!card || card.zone !== 'table' || card.linkedTo || def(s, pp.iid).type !== 'Plot' || pp.iid === ctx.instantCard) continue;
+    const h = PLOTS[card.cardId];
+    const tg = pp.play.target;
+    let bad: string | null = null;
+    if (tg && s.cards[tg]?.zone === 'structure' && anyHook(s, (hk, self) => !!hk.immune?.(s, self, tg, pp.iid))) bad = `${cardName(s, tg)} is now immune to it.`;
+    else if (h?.stillLegal) bad = h.stillLegal(s, pp.player, pp.play, ctx);
+    if (!bad) continue;
+    pp.voided = true;
+    card.zone = 'hand'; card.controller = undefined;
+    player(s, card.owner).hand.push(pp.iid);
+    exposeCards(s, [pp.iid]);
+    log(s, `${cardName(s, pp.iid)} is no longer legal (${bad}) and returns to ${player(s, card.owner).name}'s hand, exposed.`, pp.player);
+  }
 }
 
 /** Players allowed to take part in the current attack. */
@@ -1448,6 +1524,12 @@ export function attackStrength(s: GameState, ctx: AttackCtx): StrengthBreakdown 
 /** Everyone has passed: roll the dice (or fail automatically) and open the roll window. */
 function rollAttack(s: GameState) {
   const ctx = s.attack!;
+  recheckAttack(s);
+  if (ctx.illegal) {
+    log(s, 'The attacking action is illegal, so the attack does not happen.');
+    finishAttack(s);
+    return;
+  }
   const { strength } = attackStrength(s, ctx);
   if (strength < 2) {
     log(s, `Attack strength is ${strength}: it fails without a roll.`);
@@ -1493,13 +1575,24 @@ function finishAttack(s: GameState) {
     // cancelled Instant attack (e.g. a helping Group's token) stay spent.
     if (!ctx.instant) {
       for (const c of [...ctx.aid, ...ctx.oppose]) if (c.iid && s.cards[c.iid].zone === 'structure') s.cards[c.iid].tokens++;
+      const helpers = new Set([...ctx.aid, ...ctx.oppose].map((c) => c.iid).filter((g) => g && g !== ctx.attacker));
       for (const pp of ctx.plays) {
         const card = s.cards[pp.iid];
-        if (!card || pp.player === ctx.attackerPlayer || card.zone !== 'table' || pp.effect.t === 'cancelGroup' || card.linkedTo) continue;
+        if (!card || card.zone !== 'table' || pp.effect.t === 'cancelGroup' || card.linkedTo) continue;
+        const agents = def(s, pp.iid).type === 'Group';
+        // The attacker's own Plots for the attacking Group are lost; Plots used for aiding or opposing
+        // Groups come back exposed, and agents go back to their owner's hand.
+        if (pp.player === ctx.attackerPlayer && !agents && !(pp.play.target && helpers.has(pp.play.target))) continue;
         card.zone = 'hand'; card.controller = undefined;
         player(s, card.owner).hand.push(pp.iid);
-        exposeCards(s, [pp.iid]);
+        if (!agents) exposeCards(s, [pp.iid]);
       }
+    } else if (ctx.illegal && ctx.instantCard && s.cards[ctx.instantCard]?.zone === 'table') {
+      // An Instant attack made illegal before it resolved: its Plot returns to its owner's hand, exposed.
+      const card = s.cards[ctx.instantCard];
+      card.zone = 'hand'; card.controller = undefined;
+      player(s, card.owner).hand.push(ctx.instantCard);
+      exposeCards(s, [ctx.instantCard]);
     }
     // A cancelled Disaster gives back the token it took from its target (R036).
     if (ctx.disaster && ctx.tokenTaken && s.cards[tgt].zone === 'structure') s.cards[tgt].tokens++;
@@ -2264,6 +2357,8 @@ export function applyAction(state: GameState, playerId: string, action: Action):
       break;
     }
   }
+  // Anything played during an attack may have made an earlier play illegal: check them all again.
+  if (s.attack && (s.window?.kind === 'attack' || s.window?.kind === 'roll')) recheckAttack(s);
   advance(s);
   zeroPowerLosesTokens(s);
   if (!isOver(s)) checkElimination(s);
@@ -2369,7 +2464,7 @@ function settleWindows(s: GameState) {
     if (!w || s.phase === 'gameOver') return;
     if (waitingFor(s).length) return;
     if (w.kind === 'attack') rollAttack(s);
-    else if (w.kind === 'roll') { if (!beforeResult(s)) finishAttack(s); }
+    else if (w.kind === 'roll') { if (!beforeResult(s)) { recheckAttack(s); finishAttack(s); } }
     else if (w.kind === 'plot') resolvePendingPlot(s);
     else if (w.kind === 'endOfTurn') {
       s.window = undefined;
