@@ -1065,7 +1065,27 @@ function phaseTracker(s: GameState): string {
   if (s.phase === 'gameOver' || s.phase === 'setup') return '';
   const cur = s.phase === 'beginning' ? 0 : s.phase === 'main' ? 1 : 2;
   const whose = s.players[s.active].id === ui.me ? 'Your turn' : `${player(s, s.players[s.active].id).name}'s turn`;
-  return `<button class="phases" data-rules="turn" title="${esc(whose)}: tap for how a turn works"><span class="whose">${esc(whose)}</span>${['Start', 'Main', 'End'].map((n, i) => `<span class="${i === cur ? 'on' : ''}">${n}</span>`).join('<i>›</i>')}</button>`;
+  return `<button class="phases" data-rules="turn" title="${esc(whose)}: tap for how a turn works"><span class="whose">${esc(whose)}</span>${['Start', 'Main', 'End'].map((n, i) => `<span class="${i === cur ? 'on' : ''}">${n}</span>`).join('<i>›</i>')}<em class="ph-q" aria-hidden="true">?</em></button>`;
+}
+
+/** Rules window: sections stop below the sticky tabs, and the tab of the section being read is lit. */
+function rulesSpy(): void {
+  const box = app.querySelector<HTMLElement>('.modal.rules');
+  const nav = box?.querySelector<HTMLElement>('.rule-nav');
+  if (!box || !nav) return;
+  const secs = Array.from(box.querySelectorAll<HTMLElement>('section[id^="rule-"]'));
+  const tabs = Array.from(nav.querySelectorAll<HTMLElement>('button[data-rules]:not(.close-rules)'));
+  const light = () => {
+    const edge = nav.getBoundingClientRect().bottom + 8;
+    let cur = secs[0]?.id;
+    for (const sec of secs) if (sec.getBoundingClientRect().top <= edge) cur = sec.id;
+    if (box.scrollTop + box.clientHeight >= box.scrollHeight - 4) cur = secs[secs.length - 1]?.id ?? cur;
+    for (const t of tabs) t.classList.toggle('on', `rule-${t.dataset.rules}` === cur);
+  };
+  for (const sec of secs) sec.style.scrollMarginTop = `${nav.offsetHeight + 8}px`;
+  if (ui.showRules) box.querySelector(`#rule-${ui.showRules}`)?.scrollIntoView({ block: 'start' });
+  box.onscroll = light;
+  light();
 }
 
 /** A plain-words summary of the real rules, so what you learn here works at a real table. */
@@ -1079,7 +1099,7 @@ function rulesHtml(s: GameState): string {
   <nav class="rule-nav">${[['goal', 'Your goal'], ['card', 'Reading a card'], ['turn', 'A turn'], ['tokens', 'Actions'], ['attack', 'Attacks'], ['roll', 'The roll'], ['help', 'Helping'], ['plots', 'Plots'], ['more', 'More rules'], ...(s.players.some((p) => p.isAI && p.aiStyle) ? [['foes', 'Opponents']] : [])].map(([id, t]) => `<button data-rules="${id}">${t}</button>`).join('')}<button class="rb-open-btn" data-rulebook="">Full rulebook</button><button class="close-rules" data-rules="" aria-label="Close rules">✕</button></nav>
   ${sec('goal', 'Your goal', `<p>You win by <b>declaring victory</b> when you meet a Goal at the end of a turn (yours or anyone's; never in the first round), and then surviving your rivals' attempts to stop you. Nobody wins without declaring. There are three kinds of Goal:</p><ul>
     <li><b>Basic Goal:</b> control ${goalNeeded(s, ui.me)} Groups, counting your Illuminati. You have ${goalCount(s, ui.me)}.</li>
-    <li><b>Your Illuminati's Special Goal</b> (${esc(ill.name)}): ${esc(ill.text.replace(/^Power [^.]+\.\s*/, ''))}</li>
+    <li><b>Your Illuminati's Special Goal</b> (${esc(ill.name)}): ${esc(cardFace(ill.id)?.goal.replace(/^Special Goal:\s*/, '') || ill.text.replace(/^Power [^.]+\.\s*/, ''))}</li>
     <li><b>A Goal card</b> in your hand${goals.length ? ` (you hold: ${esc(goals.join(', '))})` : ''}. You may hold only one Goal card${goalLimit(s, ui.me) > 1 ? ` (your Illuminati allows ${goalLimit(s, ui.me)})` : ''}.</li></ul>
     <p>Groups under a Devastated Place do not count. A player whose Illuminati has no Groups left after their third turn is out, and if all your rivals are out, you win at once.</p>
     <p><b>Declaring:</b> press <i>End turn and declare victory</i> on your turn, or <i>Declare victory</i> while a turn is ending. A Goal card is shown to everyone; nobody can touch it while the claim is decided. Every rival may then use Plots and abilities (including Assassinations and Disasters) to stop you. If your Goal is still met when they all pass, you win; if two players' claims both hold, they share the win. If you are stopped, the turn ends and a Goal card you showed stays exposed.</p>`)}
@@ -2034,6 +2054,7 @@ function bind() {
     render();
     if (ui.showRules) app.querySelector(`#rule-${ui.showRules}`)?.scrollIntoView({ block: 'start' });
   });
+  rulesSpy();
   app.querySelectorAll<HTMLElement>('[data-handjump]').forEach((b) => b.onclick = () => {
     if (ui.handMin) { ui.handMin = false; render(); }
     app.querySelector<HTMLElement>(`.hand-sec.${b.dataset.handjump}`)?.scrollIntoView({ inline: 'start', block: 'nearest', behavior: 'smooth' });
