@@ -17,6 +17,7 @@ export class MemoryStore implements Store {
   async listForUser(userId: string) {
     return [...this.games.values()].filter((r) => r.seats.some((s) => s.userId === userId)).map((r) => structuredClone(r));
   }
+  async delete(id: string) { this.games.delete(id); }
   async listWithDeadlines(_before: number) {
     return [...this.games.values()].filter((r) => r.state && r.state.phase !== 'gameOver').map((r) => structuredClone(r));
   }

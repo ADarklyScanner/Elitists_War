@@ -34,6 +34,7 @@ export interface Store {
   put(rec: GameRecord, expectedUpdatedAt?: number): Promise<void>; // throws on a stale write
   listForUser(userId: string): Promise<GameRecord[]>;
   listWithDeadlines(before: number): Promise<GameRecord[]>;
+  delete(id: string): Promise<void>;
 }
 
 /** Why a player is being alerted. Only these few moments are worth a message outside the app. */
@@ -118,6 +119,24 @@ export async function submit(store: Store, gameId: string, userId: string, actio
   await store.put(rec, before); // a stale write means two moves raced: the client retries
   await notifyNew(rec, snapshot, notifier, userId);
   return rec;
+}
+
+/**
+ * The host (who created the game) may delete it at any time, for everyone. Anyone else may leave a
+ * game that has not started yet, which frees their seat for someone new.
+ */
+export async function deleteOrLeave(store: Store, gameId: string, userId: string): Promise<'deleted' | 'left'> {
+  const rec = await store.get(gameId);
+  if (!rec) throw new RuleError('No such game.');
+  const seat = rec.seats.find((s) => s.userId === userId);
+  if (!seat) throw new RuleError('You are not playing in this game.');
+  if (seat.id === rec.seats[0].id) { await store.delete(gameId); return 'deleted'; }
+  if (rec.state) throw new RuleError('Only the player who created this game can delete it once it has started.');
+  const before = rec.updatedAt;
+  Object.assign(seat, { userId: undefined, name: '', illuminati: undefined });
+  rec.updatedAt = Date.now();
+  await store.put(rec, before);
+  return 'left';
 }
 
 export async function setOrders(store: Store, gameId: string, userId: string, orders: Partial<StandingOrders>): Promise<GameRecord> {

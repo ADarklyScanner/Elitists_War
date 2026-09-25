@@ -824,7 +824,7 @@ declare const __ONLINE__: boolean;
 declare const __SB_URL__: string;
 declare const __SB_KEY__: string;
 
-interface GameSummary { id: string; invite: string; seats: { id: string; name: string; isAI: boolean; joined: boolean }[]; me?: string; started: boolean; finished: boolean; yourMove: boolean; progress: string; illuminati?: string; updatedAt: number }
+interface GameSummary { id: string; invite: string; seats: { id: string; name: string; isAI: boolean; joined: boolean }[]; me?: string; host?: boolean; started: boolean; finished: boolean; yourMove: boolean; progress: string; illuminati?: string; updatedAt: number }
 interface Online {
   client: any; // eslint-disable-line @typescript-eslint/no-explicit-any
   userId?: string;
@@ -936,7 +936,8 @@ function renderOnline() {
       <section class="panel"><h2>Waiting for players</h2>
       <p>Send your friends this invite code. The game starts as soon as every seat is filled.</p>
       <div class="invite"><code id="code">${esc(o.summary.invite)}</code><button data-o="copy">Copy code</button></div>
-      <ul class="seats">${o.summary.seats.map((x) => `<li>${esc(x.isAI ? 'Computer' : x.name)} ${x.joined ? '✓' : '<span class="muted">(waiting)</span>'}</li>`).join('')}</ul></section></div>`;
+      <ul class="seats">${o.summary.seats.map((x) => `<li>${esc(x.isAI ? 'Computer' : x.name)} ${x.joined ? '✓' : '<span class="muted">(waiting)</span>'}</li>`).join('')}</ul>
+      <div class="btns"><button class="danger" data-del="${o.summary.id}" data-host="${o.summary.host ? 1 : ''}">${o.summary.host ? 'Delete this game' : 'Leave this game'}</button></div></section></div>`;
     bindOnline();
     return;
   }
@@ -946,7 +947,7 @@ function renderOnline() {
     ${msg}
     <section><div class="label">Your games</div><div class="saves">${o.games.map((g) => `
       <div class="save"><button data-open="${g.id}"><b>${g.yourMove ? '● Your move — ' : ''}${esc(g.seats.map((x) => x.isAI ? 'Computer' : x.name).join(' vs '))}</b>
-      <span class="muted">${g.finished ? 'Finished' : g.started ? `${esc(g.illuminati ?? '')} · ${esc(g.progress)}` : `Waiting for players · invite ${esc(g.invite)}`}</span></button></div>`).join('') || '<p class="muted">No games yet.</p>'}</div></section>
+      <span class="muted">${g.finished ? 'Finished' : g.started ? `${esc(g.illuminati ?? '')} · ${esc(g.progress)}` : `Waiting for players · invite ${esc(g.invite)}`}</span></button>${g.host || !g.started ? `<button class="del" data-del="${g.id}" data-host="${g.host ? 1 : ''}" aria-label="${g.host ? 'Delete game' : 'Leave game'}">${g.host ? 'Delete' : 'Leave'}</button>` : ''}</div>`).join('') || '<p class="muted">No games yet.</p>'}</div></section>
     ${alertsPanel()}
     <section class="panel"><h2>Join a friend's game</h2>
       <form id="join" class="row"><label>Invite code <input id="j-code" required maxlength="6" autocapitalize="characters"></label><button class="primary" type="submit">Join</button></form></section>
@@ -999,6 +1000,15 @@ function alertsPanel(): string {
 
 function bindOnline() {
   const o = online!;
+  app.querySelectorAll<HTMLElement>('[data-del]').forEach((b) => b.onclick = async () => {
+    const host = !!b.dataset.host;
+    if (!confirm(host ? 'Delete this game for every player? This cannot be undone.' : 'Leave this game? Your seat opens up for someone else.')) return;
+    try {
+      await api({ op: 'delete', gameId: b.dataset.del });
+      o.gameId = undefined; o.summary = undefined; o.channel?.unsubscribe(); ui.game = null;
+      await loadGames();
+    } catch (e) { o.msg = (e as Error).message; render(); }
+  });
   app.querySelectorAll<HTMLElement>('[data-open]').forEach((b) => b.onclick = () => openGame(b.dataset.open!));
   app.querySelectorAll<HTMLElement>('[data-o]').forEach((b) => b.onclick = async () => {
     const what = b.dataset.o;

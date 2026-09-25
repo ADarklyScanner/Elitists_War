@@ -66,3 +66,22 @@ describe('website API handler', () => {
     await expect(handle(store, 'u3', { op: 'view', gameId: made.game.id })).rejects.toThrow(/not found/);
   });
 });
+
+describe('deleting and leaving games', () => {
+  it('lets the host delete a game for everyone, and others only leave one that has not started', async () => {
+    const { deleteOrLeave } = await import('../src/server/service');
+    const store = new MemoryStore();
+    const t = await newTable(store, { userId: 'ann', name: 'Ann', illuminati: 'bavarian-illuminati' }, { seats: 3 });
+    await joinTable(store, t.invite, { userId: 'bob', name: 'Bob', illuminati: 'ufos' });
+    expect(await deleteOrLeave(store, t.id, 'bob')).toBe('left');
+    expect((await store.get(t.id))!.seats.some((x) => x.userId === 'bob')).toBe(false);
+    await expect(deleteOrLeave(store, t.id, 'eve')).rejects.toThrow(/not playing/);
+    // Once it has started, only the host may remove it.
+    await joinTable(store, t.invite, { userId: 'bob', name: 'Bob', illuminati: 'ufos' });
+    await joinTable(store, t.invite, { userId: 'cat', name: 'Cat', illuminati: 'the-network' });
+    expect((await store.get(t.id))!.state).not.toBeNull();
+    await expect(deleteOrLeave(store, t.id, 'cat')).rejects.toThrow(/created this game/);
+    expect(await deleteOrLeave(store, t.id, 'ann')).toBe('deleted');
+    expect(await store.get(t.id)).toBeUndefined();
+  });
+});

@@ -52,6 +52,11 @@ export class SupabaseStore implements Store {
     return (data ?? []).map(rowToRecord);
   }
 
+  async delete(id: string) {
+    const { error } = await this.db.from('ew_games').delete().eq('id', id); // pings go with it (cascade)
+    if (error) throw new Error(error.message);
+  }
+
   async listWithDeadlines(_before: number) {
     const { data, error } = await this.db.from('ew_games').select('record').eq('finished', false).limit(500);
     if (error) throw new Error(error.message);

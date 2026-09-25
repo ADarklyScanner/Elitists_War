@@ -212,3 +212,6 @@ p { margin: 0; }
 .guide-step { margin-bottom: 10px; padding: 8px 10px; border-left: 2px solid var(--ok); background: #6cc38f14; border-radius: 4px; font-size: 13px; }
 .guide-step b { color: var(--ok); font-family: var(--display); text-transform: uppercase; letter-spacing: .08em; font-size: 12px; margin-right: 4px; }
 @media (prefers-reduced-motion: no-preference) { .guide .g-next { transition: box-shadow .3s; } }
+
+.save .del, .danger { border: 1px solid #e05a4b66; background: transparent; color: #f0a79d; border-radius: 7px; padding: 6px 10px; font-size: 12.5px; }
+.save .del:hover, .danger:hover { background: #e05a4b1a; }

@@ -1,6 +1,6 @@
 // Request handler for the ew-game Edge Function. Every request carries the player's Supabase
 // session; the function works out who they are and returns only what that player may see.
-import { joinTable, newTable, setOrders, submit, tick, viewFor, type GameRecord, type Notifier, type Store } from './service';
+import { deleteOrLeave, joinTable, newTable, setOrders, submit, tick, viewFor, type GameRecord, type Notifier, type Store } from './service';
 import { normalizePhone } from './sms';
 
 /** Reading and saving a player's text-alert settings. */
@@ -11,7 +11,7 @@ export interface AlertSettings {
 import { RuleError, goalCount, goalNeeded, waitingFor, cardName, type Action } from '../engine';
 
 export interface ApiRequest {
-  op: 'list' | 'new' | 'join' | 'view' | 'move' | 'orders' | 'tick' | 'alerts';
+  op: 'list' | 'new' | 'join' | 'view' | 'move' | 'orders' | 'tick' | 'alerts' | 'delete';
   gameId?: string;
   code?: string;
   name?: string;
@@ -32,6 +32,7 @@ function summary(rec: GameRecord, userId: string) {
     id: rec.id, invite: rec.invite, updatedAt: rec.updatedAt,
     seats: rec.seats.map((x) => ({ id: x.id, name: x.name || '(open seat)', isAI: x.isAI, joined: !!x.userId || x.isAI })),
     me: seat?.id,
+    host: !!seat && seat.id === rec.seats[0].id,
     started: !!s,
     finished: s?.phase === 'gameOver',
     yourMove: !!s && !!seat && waitingFor(s).includes(seat.id),
@@ -68,6 +69,8 @@ export async function handle(store: Store, userId: string, req: ApiRequest, noti
       return reply(await submit(store, req.gameId ?? '', userId, req.action!, notifier), userId);
     case 'orders':
       return reply(await setOrders(store, req.gameId ?? '', userId, req.orders ?? {}), userId);
+    case 'delete':
+      return { result: await deleteOrLeave(store, req.gameId ?? '', userId) };
     case 'tick':
       return { changed: await tick(store, Date.now(), 72, notifier) };
     case 'alerts': {
