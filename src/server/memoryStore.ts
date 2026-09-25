@@ -1,8 +1,10 @@
 // In-memory Store for tests and local play. A hosted version implements the same interface on a database.
 import type { GameRecord, Store } from './service';
+import type { PlayProfile } from '../ai/profile';
 
 export class MemoryStore implements Store {
   private games = new Map<string, GameRecord>();
+  profiles = new Map<string, PlayProfile>();
 
   async get(id: string) { const r = this.games.get(id); return r && structuredClone(r); }
   async getByInvite(code: string) {
@@ -21,4 +23,6 @@ export class MemoryStore implements Store {
   async listWithDeadlines(_before: number) {
     return [...this.games.values()].filter((r) => r.state && r.state.phase !== 'gameOver').map((r) => structuredClone(r));
   }
+  async getProfile(userId: string) { const p = this.profiles.get(userId); return p && structuredClone(p); }
+  async setProfile(userId: string, profile: PlayProfile) { this.profiles.set(userId, structuredClone(profile)); }
 }

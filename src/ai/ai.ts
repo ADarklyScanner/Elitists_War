@@ -10,7 +10,7 @@ import {
 } from '../engine';
 import { OPPOSITE } from '../engine/cards';
 import { abilityOptions, attackOptions, responseOptions } from '../engine/moves';
-import { BASE_STYLE, styleOf, type Style } from './personas';
+import { BASE_STYLE, clampStyle, styleOf, type Style } from './personas';
 import { attackChance, attackOutcomeScore, bestBySimulation, evaluate, rollout, spread, standing, successChance } from './evaluate';
 
 /** Activated abilities of our cards with a given AI hint, tried against a few likely targets. */
@@ -419,8 +419,17 @@ function respondToRoll(s: GameState, pl: string): Action {
 }
 
 export function chooseAction(s: GameState, pl: string): Action {
-  P = PROFILES[player(s, pl).aiLevel ?? 'normal'] ?? PROFILES.normal;
-  S = styleOf(player(s, pl).aiStyle);
+  const me = player(s, pl);
+  const level = me.aiLevel ?? 'normal';
+  P = PROFILES[level] ?? PROFILES.normal;
+  S = styleOf(me.aiStyle);
+  // A mirror carries the habits learned from a person's games. On Normal it also slips as often as
+  // they do; Easy keeps its own slips, and Hard plays their habits without mistakes.
+  if (me.aiStyleData) {
+    const { mistakes, ...knobs } = clampStyle(me.aiStyleData);
+    S = { ...BASE_STYLE, ...knobs };
+    if (level === 'normal' && mistakes !== undefined) P = { ...P, mistakes };
+  }
   if (player(s, pl).aiStyle === 'chaos') return chaosMove(s, pl);
   return decide(s, pl);
 }

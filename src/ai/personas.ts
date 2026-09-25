@@ -83,7 +83,41 @@ export const WILD_STYLE: PlayStyle = {
   names: { easy: 'Pudding', normal: 'Pudding', hard: 'Pudding' }, favours: [], s: {},
 };
 
-export const styleById = (id?: string) => (id === 'chaos' ? WILD_STYLE : STYLES.find((p) => p.id === id));
+/**
+ * A mirror: a computer that plays like a real person, from the habits recorded in their recent games
+ * (src/ai/profile.ts). Its knobs travel with the player (aiStyleData); this entry only names the style.
+ */
+export const MIRROR_STYLE: PlayStyle = {
+  id: 'mirror', style: 'Mirror', blurb: 'Plays like you, from your recent games.',
+  tell: 'It has your habits. Whatever you would exploit in your own play, look for it here.',
+  names: { easy: 'Your Echo', normal: 'Your Mirror', hard: 'Your Shadow' }, favours: [], s: {},
+};
+/** Each level's mirror has its own name, so two of them at one table can be told apart. */
+export const MIRROR_WORD: Record<AiLevel, string> = { easy: 'Echo', normal: 'Mirror', hard: 'Shadow' };
+/** "Your Mirror" offline; "Ann's Mirror" when the table needs to know whose it is. */
+export const mirrorName = (level: AiLevel, owner?: string) => (owner ? `${owner}'s ${MIRROR_WORD[level]}` : `Your ${MIRROR_WORD[level]}`);
+
+/** The range each knob takes among the built-in styles; a mirror is kept inside them. */
+export const STYLE_RANGES = {
+  risk: [-0.14, 0.12], defend: [-0.1, 0.15], destroy: [0.5, 1.8], control: [0.8, 1.15], fromHand: [-3, 4],
+  leader: [1, 2.4], weakest: [1, 2], plotHand: [4, 7], mistakes: [0, 0.3],
+} as const;
+const FLAGS = ['fullDefense', 'safeBets', 'schemer', 'collector', 'meddler'] as const;
+
+/** Only known knobs, each inside its range (whatever a saved game or a request says). */
+export function clampStyle(raw: Record<string, unknown> | undefined): Partial<Style> & { mistakes?: number } {
+  const out: Partial<Style> & { mistakes?: number } = {};
+  if (!raw) return out;
+  for (const [k, [lo, hi]] of Object.entries(STYLE_RANGES)) {
+    const v = raw[k];
+    if (typeof v === 'number' && Number.isFinite(v)) (out as Record<string, number>)[k] = Math.min(hi, Math.max(lo, v));
+  }
+  if (out.plotHand !== undefined) out.plotHand = Math.round(out.plotHand);
+  for (const k of FLAGS) if (typeof raw[k] === 'boolean') out[k] = raw[k] as boolean;
+  return out;
+}
+
+export const styleById = (id?: string) => (id === 'chaos' ? WILD_STYLE : id === 'mirror' ? MIRROR_STYLE : STYLES.find((p) => p.id === id));
 export const styleOf = (id?: string): Style => ({ ...BASE_STYLE, ...(styleById(id)?.s ?? {}) });
 /** The style and level behind a computer's name, e.g. "Grimsby" → Wrecker, Normal. */
 export const whoIs = (name: string) => {

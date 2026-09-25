@@ -86,6 +86,8 @@ export interface PlayerState {
   isAI: boolean;
   aiLevel?: AiLevel;       // how well a computer player plays (default 'normal')
   aiStyle?: string;        // which named computer this is: its habits (see src/ai/personas.ts)
+  /** A mirror's habits, learned from a real player's games (src/ai/profile.ts); overrides the style's. */
+  aiStyleData?: Record<string, number | boolean | undefined>;
   illuminati: string;      // iid
   plotDeck: string[];      // top of deck = index 0
   groupDeck: string[];
@@ -261,6 +263,8 @@ export interface GameState {
   log: LogEntry[];
   winners?: string[];
   setup?: { picks: Record<string, string | undefined>; banned: string[]; setAside: string[] };
+  /** How each person has played this game so far (counters kept by src/ai/profile.ts; people only). */
+  habits?: Record<string, Record<string, unknown>>;
 }
 
 // ---------------- Actions a player can submit ----------------

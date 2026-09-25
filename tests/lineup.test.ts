@@ -1,7 +1,7 @@
 // Choosing computer players: hand-picked ones plus random ones per difficulty and wild cards.
 import { describe, expect, it } from 'vitest';
-import { assignIlluminati, lineupSize, resolveLineup, specOf } from '../src/ui/lineup';
-import { WILD_CARDS } from '../src/ai/personas';
+import { assignIlluminati, lineupRequest, lineupSize, resolveLineup, specOf } from '../src/ui/lineup';
+import { styleById, WILD_CARDS } from '../src/ai/personas';
 
 describe('computer line-up', () => {
   it('keeps a favourite and fills the rest at random from the chosen difficulties', () => {
@@ -24,6 +24,14 @@ describe('computer line-up', () => {
     expect(specOf('nobody:hard')).toBeUndefined();
     const l = { picked: [], random: { easy: 2, normal: 2, hard: 2, wild: 1 } };
     expect(resolveLineup(l, 3)).toEqual(resolveLineup(l, 3));
+  });
+  it('knows your mirror in each difficulty, and sends random seats and mirrors to the server as placeholders', () => {
+    expect(specOf('mirror:easy')).toEqual({ name: 'Your Echo', level: 'easy', style: 'mirror' });
+    expect(specOf('mirror:wild')).toBeUndefined();
+    expect(styleById('mirror')?.blurb).toMatch(/Plays like you/);
+    const req = lineupRequest({ picked: ['mirror:hard', 'wrecker:normal'], random: { easy: 1, normal: 0, hard: 1, wild: 1 } }, 4);
+    expect(req.map((b) => b.style)).toEqual(['mirror', 'wrecker', 'random', 'random', 'chaos']);
+    expect(req.some((b) => b.data)).toBe(false); // the client never sends learned knobs
   });
   it('gives each computer a different Illuminati, never yours, suited to its style when free', () => {
     const bots = resolveLineup({ picked: ['turtle:normal'], random: { easy: 3, normal: 0, hard: 3, wild: 0 } }, 1);

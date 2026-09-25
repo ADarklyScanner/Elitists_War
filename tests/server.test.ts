@@ -3,6 +3,9 @@ import { MemoryStore } from '../src/server/memoryStore';
 import { joinTable, newTable, setOrders, submit, tick, viewFor } from '../src/server/service';
 import { applyAction, openArrows, waitingFor, type Action, type GameState } from '../src/engine';
 import { give, scenario } from './helpers';
+import type { AiLevel } from '../src/engine';
+import { emptyHabits, emptyProfile, foldGame, mirrorStyle, type PlayProfile } from '../src/ai/profile';
+import { STYLE_RANGES, STYLES } from '../src/ai/personas';
 
 describe('online play service', () => {
   it('starts a game once a friend joins with the invite code, and hides each hand from the other player', async () => {
@@ -153,5 +156,74 @@ describe('viewFor keeps hidden cards hidden', () => {
     expect(seen(viewFor(s, 'p2'))).toBeUndefined();
     expect(seen(viewFor(s, 'p1'))).toBe(hawaii);
     expect(s.window!.event!.data!.action).toEqual(action); // the real game state is untouched
+  });
+});
+
+describe('mirrors online', () => {
+  const games = (n: number, odds = 0.25): PlayProfile => {
+    let p = emptyProfile();
+    for (let g = 0; g < n; g++) p = foldGame(p, { ...emptyHabits(), turns: 8, attacks: 4, chanceSum: odds * 4, control: 3, destroy: 1 }, { won: false, illuminati: g ? 'ufos' : 'shangri-la', gameId: `old${g}`, now: 1 });
+    return p;
+  };
+  type Bot = { name: string; level: AiLevel; style: string };
+
+  it('folds a finished game into each person\'s stored profile, once', async () => {
+    const store = new MemoryStore();
+    const t = await newTable(store, { userId: 'ann', name: 'Ann', illuminati: 'the-network' }, { seats: 2, computerSeats: 1 });
+    const rec = (await store.get(t.id))!;
+    rec.state!.habits = { p1: { ...emptyHabits(), turns: 6, attacks: 2, chanceSum: 0.4 } as unknown as Record<string, unknown> };
+    rec.state!.phase = 'gameOver'; rec.state!.winners = ['p1'];
+    await store.put(rec);
+    await setOrders(store, t.id, 'ann', { passWhenNothing: true });
+    await setOrders(store, t.id, 'ann', { passWhenNothing: false });
+    const p = (await store.getProfile('ann'))!;
+    expect(p).toMatchObject({ games: 1, wins: 1 });
+    expect(p.traits.odds!.v).toBeCloseTo(0.2);
+    expect(p.illuminatiPicks).toEqual({ 'the-network': 1 });
+    expect(store.profiles.size).toBe(1); // computers have no profile
+    const { handle } = await import('../src/server/api');
+    const r = await handle(store, 'ann', { op: 'profile' }) as { profile: { games: number; ready: boolean } };
+    expect(r.profile).toMatchObject({ games: 1, ready: false });
+  });
+
+  it('never takes mirror knobs from the request: a mirror is made from the stored profile', async () => {
+    const store = new MemoryStore();
+    const forged = { name: 'Evil Twin', level: 'hard', style: 'mirror', aiStyleData: { risk: -5, mistakes: 0 } } as Bot;
+    const styled = { name: 'Vex', level: 'normal', style: 'gambler', aiStyleData: { risk: -5 } } as Bot;
+    // No profile yet: the mirror seat becomes an ordinary Hard computer, and no knobs get through.
+    const a = await newTable(store, { userId: 'ann', name: 'Ann', illuminati: 'the-network' }, { seats: 3, computerSeats: 2, bots: [forged, styled] });
+    expect(a.seats[1]).toMatchObject({ isAI: true, aiLevel: 'hard' });
+    expect(a.seats[1].aiStyle).not.toBe('mirror');
+    expect(a.seats.every((x) => !x.aiStyleData)).toBe(true);
+    expect(a.state!.players.every((x) => !x.aiStyleData)).toBe(true);
+    // With enough games stored, the seat is Ann's own mirror, with knobs from her profile.
+    await store.setProfile('ann', games(3));
+    const b = await newTable(store, { userId: 'ann', name: 'Ann', illuminati: 'the-network' }, { seats: 3, computerSeats: 2, bots: [forged, styled] });
+    expect(b.seats[1]).toMatchObject({ name: "Ann's Shadow", aiLevel: 'hard', aiStyle: 'mirror' });
+    expect(b.seats[1].aiStyleData!.risk).toBeGreaterThanOrEqual(STYLE_RANGES.risk[0]);
+    expect(b.seats[2].aiStyleData).toBeUndefined();
+    expect(b.state!.players[1].aiStyleData).toEqual(b.seats[1].aiStyleData);
+    expect(b.state!.cards[b.state!.players[1].illuminati].cardId).toBe('shangri-la'); // Ann's second favourite
+    expect(mirrorStyle(games(3)).risk).toBeLessThan(0);
+  });
+
+  it('random seats wait for every person, then draw from built-in players and everyone\'s mirrors', async () => {
+    const store = new MemoryStore();
+    await store.setProfile('bob', games(2));
+    const random: Bot = { name: '', level: 'normal', style: 'random' };
+    const t = await newTable(store, { userId: 'ann', name: 'Ann', illuminati: 'the-network' }, { seats: 6, computerSeats: 4, bots: [random, random, random, random] });
+    expect(t.state).toBeNull();
+    expect(t.seats.slice(2).every((x) => x.pending === 'random')).toBe(true);
+    const g = await joinTable(store, t.invite, { userId: 'bob', name: 'Bob', illuminati: 'ufos' });
+    expect(g.state).not.toBeNull();
+    const bots = g.seats.slice(2);
+    expect(bots).toHaveLength(4);
+    expect(new Set(bots.map((x) => x.name)).size).toBe(4);
+    for (const x of bots) {
+      expect(x.pending).toBeUndefined();
+      expect(x.aiLevel).toBe('normal');
+      if (x.aiStyle === 'mirror') expect(x.name).toBe("Bob's Mirror"); // Ann has no games: only Bob's mirror is in the pool
+      else expect(STYLES.map((st) => st.names.normal)).toContain(x.name);
+    }
   });
 });

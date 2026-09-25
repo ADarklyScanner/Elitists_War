@@ -1,6 +1,7 @@
 // Store backed by the ew_games table (service role only). Used inside the Edge Function.
 import type { GameRecord, Store } from './service';
 import { waitingFor } from '../engine';
+import { normalizeProfile, type PlayProfile } from '../ai/profile';
 
 // Minimal shape of the supabase-js client we use, so this file doesn't depend on the package.
 interface Db {
@@ -61,6 +62,18 @@ export class SupabaseStore implements Store {
     const { data, error } = await this.db.from('ew_games').select('record').eq('finished', false).limit(500);
     if (error) throw new Error(error.message);
     return (data ?? []).map(rowToRecord);
+  }
+
+  /** Play profiles (table ew_profiles, service role only): what each player's mirrors are made from. */
+  async getProfile(userId: string): Promise<PlayProfile | undefined> {
+    const { data, error } = await this.db.from('ew_profiles').select('profile').eq('user_id', userId).maybeSingle();
+    if (error) throw new Error(error.message);
+    return data ? normalizeProfile(data.profile) : undefined;
+  }
+
+  async setProfile(userId: string, profile: PlayProfile): Promise<void> {
+    const { error } = await this.db.from('ew_profiles').upsert({ user_id: userId, profile, updated_at: new Date().toISOString() });
+    if (error) throw new Error(error.message);
   }
 }
 

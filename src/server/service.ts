@@ -8,8 +8,20 @@ import {
 } from '../engine';
 import { chooseAction } from '../ai/ai';
 import { seatComputers, styleById, WILD_CARDS } from '../ai/personas';
+import { foldGame, habitsIn, mirrorSeats, noteAttacks, normalizeProfile, observeHuman, type MirrorSeat, type PlayProfile } from '../ai/profile';
+import { resolveLineup, type BotSpec } from '../ui/lineup';
 
-export interface Seat { id: string; name: string; isAI: boolean; aiLevel?: AiLevel; aiStyle?: string; userId?: string; illuminati?: string }
+export interface Seat {
+  id: string; name: string; isAI: boolean; aiLevel?: AiLevel; aiStyle?: string; userId?: string; illuminati?: string;
+  /** A mirror's learned knobs: only ever made here, from a stored profile, never taken from a request. */
+  aiStyleData?: Record<string, number | boolean | undefined>;
+  /** Illuminati this computer would like (a mirror's player's second favourite). */
+  preferIlluminati?: string;
+  /** A seat filled when the game starts, once every person at the table is known. */
+  pending?: 'random' | 'mirror';
+  /** For a pending mirror: whose mirror (user id). */
+  mirrorOf?: string;
+}
 
 export interface StandingOrders {
   /** Pass automatically in windows where you have no legal response. */
@@ -27,6 +39,8 @@ export interface GameRecord {
   createdAt: number;
   updatedAt: number;
   settings: Partial<GameSettings>;
+  /** Set once the finished game has been folded into each person's play profile. */
+  profilesFolded?: boolean;
 }
 
 export interface Store {
@@ -36,6 +50,9 @@ export interface Store {
   listForUser(userId: string): Promise<GameRecord[]>;
   listWithDeadlines(before: number): Promise<GameRecord[]>;
   delete(id: string): Promise<void>;
+  /** Each signed-in player's play profile (src/ai/profile.ts), which their mirrors are made from. */
+  getProfile?(userId: string): Promise<PlayProfile | undefined>;
+  setProfile?(userId: string, profile: PlayProfile): Promise<void>;
 }
 
 /** Why a player is being alerted. Only these few moments are worth a message outside the app. */
@@ -51,10 +68,19 @@ function inviteCode() {
 
 // ------------------------------------------------------------------ lobby
 
-/** Accept a computer seat from the client only if it is a real style and name (names are never free text). */
-function cleanBot(b?: { name: string; level: AiLevel; style: string }) {
+const LEVEL_NAME: Record<AiLevel, string> = { easy: 'Easy', normal: 'Normal', hard: 'Hard' };
+const ALL_ILLUMINATI = ['bavarian-illuminati', 'gnomes-of-zurich', 'the-network', 'servants-of-cthulhu', 'discordian-society', 'ufos', 'shangri-la', 'adepts-of-hermes', 'bermuda-triangle'];
+
+/**
+ * Accept a computer seat from the client only if it is a real style and name (names are never free
+ * text). A random seat ('random') or a mirror ('mirror') is only a placeholder here: it is filled when
+ * the game starts, from the pool and the stored profiles. Nothing else a request sends is kept.
+ */
+function cleanBot(b?: { name: string; level: AiLevel; style: string }): { name: string; level: AiLevel; style: string; pending?: 'random' | 'mirror' } | undefined {
   if (!b) return undefined;
   const level: AiLevel = b.level === 'easy' || b.level === 'hard' ? b.level : 'normal';
+  if (b.style === 'random') return { name: `Random ${LEVEL_NAME[level]} player`, level, style: 'random', pending: 'random' };
+  if (b.style === 'mirror') return { name: `Mirror (${LEVEL_NAME[level]})`, level, style: 'mirror', pending: 'mirror' };
   if (b.style === 'chaos') {
     const w = WILD_CARDS.find((x) => b.name === x.name || b.name.startsWith(`${x.name} `));
     return w && { name: b.name.slice(0, 24), level: 'normal' as AiLevel, style: 'chaos' };
@@ -75,13 +101,15 @@ export async function newTable(store: Store, host: { userId: string; name: strin
   const named = levels.map((_, k) => cleanBot(opts.bots?.[k]) ?? { name: auto[k].name, level: auto[k].level, style: auto[k].style.id });
   for (let i = 2; i <= opts.seats; i++) {
     const k = i - firstAi; // 0 for the first computer player
-    seats.push(k >= 0 ? { id: `p${i}`, name: named[k].name, isAI: true, aiLevel: named[k].level, aiStyle: named[k].style } : { id: `p${i}`, name: '', isAI: false });
+    const b = named[k];
+    seats.push(k >= 0 ? { id: `p${i}`, name: b.name, isAI: true, aiLevel: b.level, aiStyle: b.style, ...('pending' in b && b.pending ? { pending: b.pending, ...(b.pending === 'mirror' ? { mirrorOf: host.userId } : {}) } : {}) } : { id: `p${i}`, name: '', isAI: false });
   }
   const now = Date.now();
   const rec: GameRecord = {
     id: `g${now.toString(36)}${Math.random().toString(36).slice(2, 6)}`, state: null, seats, orders: {},
     invite: inviteCode(), createdAt: now, updatedAt: now, settings: opts.settings ?? {},
   };
+  await fillPending(store, rec);
   maybeStart(rec);
   await store.put(rec);
   await notifyStart(rec, host.userId, notifier);
@@ -96,6 +124,7 @@ export async function joinTable(store: Store, code: string, who: { userId: strin
   if (!seat) throw new RuleError('That game is full.');
   const before = rec.updatedAt;
   Object.assign(seat, { userId: who.userId, name: who.name, illuminati: who.illuminati });
+  await fillPending(store, rec);
   maybeStart(rec); // the last seat was just filled: the game starts now
   rec.updatedAt = Date.now();
   await store.put(rec, before);
@@ -103,8 +132,42 @@ export async function joinTable(store: Store, code: string, who: { userId: strin
   return rec;
 }
 
-function maybeStart(rec: GameRecord) {
+/**
+ * Once every person has a seat, fill the random and mirror seats. A random seat of a level draws
+ * from the whole pool of that level: the built-in players not already seated plus the mirrors of
+ * every person at the table (those with enough games). A picked mirror is its picker's own, or a
+ * random seat if they have too few games yet.
+ */
+async function fillPending(store: Store, rec: GameRecord) {
   if (rec.state || rec.seats.some((s) => !s.isAI && !s.userId)) return;
+  const pending = rec.seats.filter((s) => s.pending);
+  if (!pending.length) return;
+  const seed = Math.floor(Math.random() * 2 ** 31);
+  const byUser = new Map<string, MirrorSeat[]>();
+  for (const [i, h] of rec.seats.filter((s) => !s.isAI && s.userId).entries()) {
+    let profile: PlayProfile | undefined;
+    try { profile = store.getProfile ? normalizeProfile(await store.getProfile(h.userId!)) : undefined; } catch { profile = undefined; }
+    byUser.set(h.userId!, mirrorSeats(profile, seed + i, h.name, ALL_ILLUMINATI));
+  }
+  const everyone = [...byUser.values()].flat();
+  const seated: BotSpec[] = rec.seats.filter((s) => s.isAI && !s.pending).map((s) => ({ name: s.name, level: s.aiLevel ?? 'normal', style: s.aiStyle ?? '' }));
+  pending.forEach((seat, k) => {
+    const level = seat.aiLevel ?? 'normal';
+    const own = seat.pending === 'mirror' ? (byUser.get(seat.mirrorOf ?? '') ?? []).filter((m) => m.level === level) : [];
+    const none = { easy: 0, normal: 0, hard: 0, wild: 0 };
+    const [b] = own.length
+      ? resolveLineup({ picked: [`mirror:${level}`], random: none }, seed + k, { mirrors: own, seated })
+      : resolveLineup({ picked: [], random: { ...none, [level]: 1 } }, seed + k, { mirrors: everyone, seated });
+    Object.assign(seat, { name: b.name, aiLevel: b.level, aiStyle: b.style, aiStyleData: b.data, preferIlluminati: b.illuminati });
+    delete seat.pending; delete seat.mirrorOf;
+    if (!seat.aiStyleData) delete seat.aiStyleData;
+    if (!seat.preferIlluminati) delete seat.preferIlluminati;
+    seated.push(b);
+  });
+}
+
+function maybeStart(rec: GameRecord) {
+  if (rec.state || rec.seats.some((s) => (!s.isAI && !s.userId) || s.pending)) return;
   const seed = Math.floor(Math.random() * 2 ** 31);
   const used = new Set(rec.seats.map((s) => s.illuminati).filter(Boolean));
   rec.state = createGame({
@@ -112,11 +175,11 @@ function maybeStart(rec: GameRecord) {
     players: rec.seats.map((s, i) => {
       let ill = s.illuminati;
       if (!ill) {
-        // A named computer takes an Illuminati that suits its style when one is free.
-        ill = [...(styleById(s.aiStyle)?.favours ?? []), 'bavarian-illuminati', 'gnomes-of-zurich', 'the-network', 'servants-of-cthulhu', 'discordian-society', 'ufos', 'shangri-la', 'adepts-of-hermes', 'bermuda-triangle'].find((x) => !used.has(x))!;
+        // A named computer takes an Illuminati that suits its style when one is free (a mirror, its player's second favourite).
+        ill = [...(s.preferIlluminati ? [s.preferIlluminati] : []), ...(styleById(s.aiStyle)?.favours ?? []), ...ALL_ILLUMINATI].find((x) => !used.has(x))!;
         used.add(ill);
       }
-      return { id: s.id, name: s.name, isAI: s.isAI, aiLevel: s.aiLevel, aiStyle: s.aiStyle, deck: randomDeck(seed + i, ill) };
+      return { id: s.id, name: s.name, isAI: s.isAI, aiLevel: s.aiLevel, aiStyle: s.aiStyle, aiStyleData: s.isAI ? s.aiStyleData : undefined, deck: randomDeck(seed + i, ill) };
     }),
   });
   rec.state = settle(rec, rec.state);
@@ -133,9 +196,11 @@ export async function submit(store: Store, gameId: string, userId: string, actio
   const before = rec.updatedAt;
   const snapshot = alertSnapshot(rec.state);
   let s = applyAction(rec.state, seat.id, action);
+  observeHuman(rec.state, s, seat.id, action); // habits for this player's mirror
   s = settle(rec, s);
   rec.state = s;
   rec.updatedAt = Date.now();
+  await foldProfiles(store, rec);
   await store.put(rec, before); // a stale write means two moves raced: the client retries
   await notifyNew(rec, snapshot, notifier, userId);
   return rec;
@@ -168,6 +233,7 @@ export async function setOrders(store: Store, gameId: string, userId: string, or
   rec.orders[seat.id] = { ...DEFAULT_ORDERS, ...rec.orders[seat.id], ...orders };
   if (rec.state) rec.state = settle(rec, rec.state);
   rec.updatedAt = Date.now();
+  await foldProfiles(store, rec);
   await store.put(rec, before);
   return rec;
 }
@@ -181,10 +247,11 @@ export function settle(rec: GameRecord, state: GameState): GameState {
     if (ai) {
       try { s = applyAction(s, ai, chooseAction(s, ai)); }
       catch { s = applyAction(s, ai, s.window ? { type: 'pass' } : s.prompt?.kind === 'takeover' ? { type: 'skipTakeover' } : { type: 'endTurn' }); }
+      noteAttacks(s); // attacks on people, and how their own attacks ended
       continue;
     }
     const auto = waiting.find((id) => s.window && autoPasses(rec, s, id));
-    if (auto) { s = applyAction(s, auto, { type: 'pass' }); continue; }
+    if (auto) { s = applyAction(s, auto, { type: 'pass' }); noteAttacks(s); continue; }
     break;
   }
   return s;
@@ -197,6 +264,24 @@ function autoPasses(rec: GameRecord, s: GameState, pl: string): boolean {
   if (o.passWhenNothing && !hasResponse(s, pl)) return true;
   if (o.passWhenUninvolved && s.attack && s.attack.attackerPlayer !== pl && s.attack.targetPlayer !== pl) return true;
   return false;
+}
+
+/**
+ * A finished game is folded into each signed-in player's profile, once (the record remembers, and
+ * the profile itself ignores a game it already has, should the save that follows be retried).
+ */
+async function foldProfiles(store: Store, rec: GameRecord) {
+  const s = rec.state;
+  if (!s || s.phase !== 'gameOver' || rec.profilesFolded || !store.getProfile || !store.setProfile) return;
+  rec.profilesFolded = true;
+  for (const seat of rec.seats) {
+    const p = s.players.find((x) => x.id === seat.id);
+    if (seat.isAI || !seat.userId || !p) continue;
+    try {
+      const cur = normalizeProfile(await store.getProfile(seat.userId));
+      await store.setProfile(seat.userId, foldGame(cur, habitsIn(s, seat.id), { won: !!s.winners?.includes(seat.id), illuminati: s.cards[p.illuminati]?.cardId, gameId: rec.id }));
+    } catch { /* a profile must never break a move */ }
+  }
 }
 
 // ------------------------------------------------------------------ deadlines
@@ -219,8 +304,10 @@ export async function tick(store: Store, now = Date.now(), turnHours = 72, notif
       const a: Action = s.prompt?.kind === 'takeover' ? { type: 'skipTakeover' } : s.prompt ? chooseAction(s, pl) : s.window ? { type: 'pass' } : { type: 'endTurn' };
       s = applyAction(s, pl, a);
     } else continue;
+    noteAttacks(s);
     rec.state = settle(rec, s);
     rec.updatedAt = now;
+    await foldProfiles(store, rec);
     await store.put(rec, before);
     await notifyNew(rec, snapshot, notifier);
     changed++;
@@ -320,6 +407,8 @@ export function viewFor(s: GameState, viewer: string): GameState {
   // A Goal or note written under a card (a card named in secret) stays secret, even once the card has
   // left play: only its controller (or, out of play, its owner) sees it.
   for (const c of Object.values(v.cards)) if (c.note && (c.controller ?? c.owner) !== viewer) c.note = '(secret)';
+  // Each player sees only their own habits.
+  if (v.habits) for (const k of Object.keys(v.habits)) if (k !== viewer) delete v.habits[k];
   if (v.setup) for (const k of Object.keys(v.setup.picks)) if (k !== viewer && v.setup.picks[k]) v.setup.picks[k] = 'chosen';
   return v;
 }

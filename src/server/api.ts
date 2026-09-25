@@ -3,6 +3,7 @@
 import { deleteOrLeave, joinTable, newTable, setOrders, submit, tick, viewFor, type GameRecord, type Notifier, type Store } from './service';
 import { normalizePhone } from './sms';
 import type { AiLevel } from '../engine/types';
+import { normalizeProfile, profileSummary } from '../ai/profile';
 
 /** Reading and saving a player's text-alert settings. */
 export interface AlertSettings {
@@ -12,7 +13,7 @@ export interface AlertSettings {
 import { RuleError, goalCount, goalNeeded, waitingFor, cardName, type Action } from '../engine';
 
 export interface ApiRequest {
-  op: 'list' | 'new' | 'join' | 'view' | 'move' | 'orders' | 'tick' | 'alerts' | 'delete';
+  op: 'list' | 'new' | 'join' | 'view' | 'move' | 'orders' | 'tick' | 'alerts' | 'delete' | 'profile';
   gameId?: string;
   code?: string;
   name?: string;
@@ -23,7 +24,7 @@ export interface ApiRequest {
   /** Difficulty of the computer seats: 'easy' | 'normal' | 'hard'. */
   level?: string;
   levels?: string[];         // one difficulty per computer player
-  bots?: { name: string; level: AiLevel; style: string }[]; // or a full line-up from the setup screen
+  bots?: { name: string; level: AiLevel; style: string }[]; // or a full line-up from the setup screen ('random' / 'mirror' seats are filled by the server)
   action?: Action;
   orders?: { passWhenNothing?: boolean; passWhenUninvolved?: boolean };
   /** op 'alerts': omit to read the current settings. */
@@ -80,6 +81,11 @@ export async function handle(store: Store, userId: string, req: ApiRequest, noti
       return { result: await deleteOrLeave(store, req.gameId ?? '', userId) };
     case 'tick':
       return { changed: await tick(store, Date.now(), 72, notifier) };
+    case 'profile': {
+      // The caller's own mirror: how many games it is based on and its strongest habits.
+      const p = normalizeProfile(store.getProfile ? await store.getProfile(userId) : undefined);
+      return { profile: profileSummary(p) };
+    }
     case 'alerts': {
       if (!alertSettings) return { available: false };
       if (req.alerts) {

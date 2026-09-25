@@ -11,8 +11,9 @@ import {
 import { attachRect, rectOf, ensureLayout, type Rect } from '../engine/geometry';
 import { chooseAction, successChance } from '../ai/ai';
 import { suggestBots, type TableLevel } from './botMix';
-import { styleById, STYLES, WILD_CARDS } from '../ai/personas';
-import { assignIlluminati, emptyLineup, lineupSize, pickId, resolveLineup, SECTIONS, specOf, type BotSpec, type Lineup, type Section } from './lineup';
+import { mirrorName, styleById, STYLES, WILD_CARDS } from '../ai/personas';
+import { foldGame, habitsIn, habitsReport, MIN_GAMES, mirrorSeats, normalizeProfile, observeHuman, type PlayProfile, type ProfileSummary } from '../ai/profile';
+import { assignIlluminati, emptyLineup, lineupRequest, lineupSize, pickId, resolveLineup, SECTIONS, specOf, type BotSpec, type Lineup, type Section } from './lineup';
 
 // ------------------------------------------------------------------ state
 
@@ -109,11 +110,33 @@ function deleteSave(id: string) {
   try { const s = loadSaves(); delete s[id]; localStorage.setItem(SAVE_KEY, JSON.stringify(s)); } catch { /* ignore */ }
 }
 
+// ------------------------------------------------------------------ your play profile (mirrors)
+
+/** How you play, learned from your finished games in this browser; your mirrors are made from it. */
+const PROFILE_KEY = 'elitists-war.profile';
+function loadProfile(): PlayProfile {
+  try { return normalizeProfile(JSON.parse(localStorage.getItem(PROFILE_KEY) ?? 'null')); } catch { return normalizeProfile(null); }
+}
+function saveProfile(p: PlayProfile) {
+  try { localStorage.setItem(PROFILE_KEY, JSON.stringify(p)); } catch { /* storage unavailable: the mirror just does not learn */ }
+}
+/** A finished game is added to your profile once (the profile remembers which games it has). */
+function foldFinished(s: GameState) {
+  const me = s.players.find((p) => p.id === ui.me);
+  if (online || s.phase !== 'gameOver' || !me || me.isAI) return;
+  const cur = loadProfile();
+  if (cur.recent.includes(s.id)) return;
+  saveProfile(foldGame(cur, habitsIn(s, ui.me), { won: !!s.winners?.includes(ui.me), illuminati: s.cards[me.illuminati]?.cardId, gameId: s.id }));
+}
+/** Finished games your mirror is based on (offline: this browser; online: your account). */
+const mirrorGames = () => (online ? online.profile?.games ?? 0 : loadProfile().games);
+
 // ------------------------------------------------------------------ game flow
 
 function commit(next: GameState) {
   ui.game = next;
   ui.error = undefined;
+  foldFinished(next);
   saveGame(next);
   render();
   schedule();
@@ -124,6 +147,7 @@ function act(a: Action) {
   if (online) { onlineMove(a); return; }
   try {
     const next = applyAction(s, ui.me, a);
+    observeHuman(s, next, ui.me, a); // your habits, for your mirror
     ui.sel = { kind: 'none' };
     commit(next);
   } catch (e) {
@@ -152,8 +176,10 @@ function schedule() {
         a = s.window ? { type: 'pass' } : s.prompt?.kind === 'takeover' ? { type: 'skipTakeover' } : { type: 'endTurn' };
         next = applyAction(s, ai.id, a);
       }
+      observeHuman(s, next, ai.id, a); // notes attacks on you
       const quick = a.type === 'pass';
       ui.game = next;
+      foldFinished(next);
       saveGame(next);
       render();
       timer = window.setTimeout(schedule, quick ? 60 : 0);
@@ -245,16 +271,20 @@ const SECTION_INFO: Record<Section, [string, string]> = {
 function botsEditor(humans: number, minBots: number): string {
   const l = loadLineup(), max = 8 - humans, n = lineupSize(l), total = humans + n, full = n >= max;
   const preset = loadTableLevel();
-  const card = (id: string, name: string, style: string, blurb: string) => {
-    const on = l.picked.includes(id);
-    return `<label class="bot-card ${on ? 'on' : ''} ${!on && full ? 'off' : ''}"><input type="checkbox" data-pick-bot="${id}" ${on ? 'checked' : ''} ${!on && full ? 'disabled' : ''}>
+  const card = (id: string, name: string, style: string, blurb: string, locked = false) => {
+    const on = l.picked.includes(id), off = !on && (full || locked);
+    return `<label class="bot-card ${on ? 'on' : ''} ${off ? 'off' : ''}"><input type="checkbox" data-pick-bot="${id}" ${on ? 'checked' : ''} ${off ? 'disabled' : ''}>
       <span><b>${esc(name)}</b><span class="small muted">${esc(style)} · ${esc(blurb)}</span></span></label>`;
   };
+  // Your mirror: a computer that plays like you, once enough of your games are known.
+  const games = mirrorGames(), ready = games >= MIN_GAMES;
+  const mirrorCard = (lv: AiLevel) => card(`mirror:${lv}`, mirrorName(lv), 'Mirror',
+    ready ? `plays like you, based on ${games} game${games === 1 ? '' : 's'}` : `plays like you; unlocks after ${MIN_GAMES} finished games (${games} so far)`, !ready);
   const section = (sec: Section) => {
     const [title, what] = SECTION_INFO[sec];
     const cards = sec === 'wild'
       ? WILD_CARDS.map((w) => card(`wild:${w.id}`, w.name, 'Wild card', 'random moves')).join('')
-      : STYLES.map((st) => card(pickId(st, sec), st.names[sec], st.style, st.blurb)).join('');
+      : mirrorCard(sec) + STYLES.map((st) => card(pickId(st, sec), st.names[sec], st.style, st.blurb)).join('');
     const picked = l.picked.filter((id) => (sec === 'wild' ? id.startsWith('wild:') : id.endsWith(`:${sec}`))).length;
     return `<details class="lv-sec lv-${sec}" ${picked || l.random[sec] ? 'open' : ''}><summary><b>${title}</b> <span class="muted small">${esc(what)}</span>
         ${picked + l.random[sec] ? `<span class="lv-count">${picked + l.random[sec]} at the table</span>` : ''}</summary>
@@ -271,7 +301,7 @@ function botsEditor(humans: number, minBots: number): string {
       ${n < minBots ? '<span class="bad"> · add at least one computer</span>' : ''}${full ? '<span class="muted"> · table full</span>' : ''}</div>
     ${recommend(humans, total)}
     ${SECTIONS.map(section).join('')}
-    <p class="muted small">Each name always plays the same way; a style's Easy, Normal and Hard players share its habits, the harder ones just play them better. 7–8 players works, but rounds take longer.</p></div>`;
+    <p class="muted small">Each name always plays the same way; a style's Easy, Normal and Hard players share its habits, the harder ones just play them better. Random seats can also draw your mirror once it is unlocked. 7–8 players works, but rounds take longer.</p></div>`;
 }
 
 /** Players generally find 4 or 6 at the table the sweet spot; offer one tap to get there. */
@@ -314,10 +344,13 @@ function bindBots(rerender: () => void) {
   });
 }
 
-/** The computers for a new game, with at least `min` of them. */
+/**
+ * The computers for a new game, with at least `min` of them. Offline your mirrors join the pool;
+ * online the server fills random seats and mirrors itself, from the profiles it keeps.
+ */
 function botsForGame(seed: number, min: number, maxBots: number): BotSpec[] {
   const l = loadLineup();
-  const bots = resolveLineup(l, seed).slice(0, maxBots);
+  const bots = (online ? lineupRequest(l, seed) : resolveLineup(l, seed, { mirrors: mirrorSeats(loadProfile(), seed, undefined, ILLUMINATI.map((c) => c.id)) })).slice(0, maxBots);
   return bots.length >= min ? bots : [...bots, ...resolveLineup(presetRandoms(emptyLineup(), min - bots.length, 'standard'), seed + 1)];
 }
 
@@ -332,7 +365,7 @@ function newGame(illuminati: string, quick: boolean) {
     seed,
     players: [
       { id: 'p1', name: 'You', isAI: false, deck: randomDeck(seed, illuminati) },
-      ...bots.map((b, i) => ({ id: `p${i + 2}`, name: b.name, isAI: true, aiLevel: b.level, aiStyle: b.style, deck: randomDeck(seed + i + 1, ills[i]) })),
+      ...bots.map((b, i) => ({ id: `p${i + 2}`, name: b.name, isAI: true, aiLevel: b.level, aiStyle: b.style, aiStyleData: b.data, deck: randomDeck(seed + i + 1, ills[i]) })),
     ],
     settings: { houseRules: quick ? ['quickGame'] : [] },
     chooseLeads: true,
@@ -340,6 +373,18 @@ function newGame(illuminati: string, quick: boolean) {
   ui.sel = { kind: 'none' };
   ui.inspect = undefined;
   commit(s);
+}
+
+/** Game over: what you did this game, and how far along your mirror is. */
+function habitsPanel(s: GameState): string {
+  const found = habitsReport(habitsIn(s, ui.me), online ? undefined : loadProfile());
+  const games = mirrorGames();
+  const mirror = online && !online.profile ? '' : games >= MIN_GAMES
+    ? `Your mirror is now based on ${games} game${games === 1 ? '' : 's'}. Pick it in any difficulty when you start a game.`
+    : `Your mirror is based on ${games} game${games === 1 ? '' : 's'} so far; it unlocks after ${MIN_GAMES}.`;
+  if (!found.length && !mirror) return '';
+  return `<h3>Your habits this game</h3>${found.length ? `<ul class="tells">${found.map((f) => `<li>${esc(f)}</li>`).join('')}</ul>` : ''}
+    ${mirror ? `<p class="muted small">${esc(mirror)}</p>` : ''}`;
 }
 
 // ------------------------------------------------------------------ helpers
@@ -1099,6 +1144,7 @@ function renderConsole(s: GameState): string {
         const st = styleById(p.aiStyle)!;
         return `<li><b>${esc(p.name)}</b> (${esc(st.style)}): ${esc(st.tell)}</li>`;
       }).join('')}</ul>` : ''}
+      ${habitsPanel(s)}
       <div class="btns"><button class="primary" data-act="home">New game</button></div>`;
   } else if (s.prompt?.player === ui.me && s.prompt.kind === 'choose' && s.prompt.choice) {
     const ch = s.prompt.choice;
@@ -1561,6 +1607,9 @@ interface Online {
   busy: boolean;
   msg?: string;
   alerts?: { available: boolean; phone: string; optIn: boolean; msg?: string };
+  /** Your mirror, as the server knows it; `profileFor` is the finished game it was last read after. */
+  profile?: ProfileSummary;
+  profileFor?: string;
 }
 let online: Online | null = null;
 
@@ -1581,6 +1630,12 @@ function applyReply(r: { game: GameSummary; state: GameState | null; orders?: On
   online!.orders = r.orders ?? { passWhenNothing: true, passWhenUninvolved: false };
   ui.game = r.state;
   if (r.game.me) ui.me = r.game.me;
+  // The server adds a finished game to your profile: read it again to show the new count.
+  if (r.state?.phase === 'gameOver' && online!.profileFor !== r.game.id) { online!.profileFor = r.game.id; void loadProfileSummary(); }
+}
+
+async function loadProfileSummary() {
+  try { online!.profile = (await api({ op: 'profile' })).profile; render(); } catch { /* the mirror is optional */ }
 }
 
 async function onlineMove(a: Action) {
@@ -1598,6 +1653,7 @@ async function refreshGame() {
 async function loadGames() {
   try { online!.games = (await api({ op: 'list' })).games; } catch (e) { online!.msg = (e as Error).message; }
   if (!online!.alerts) try { online!.alerts = await api({ op: 'alerts' }); } catch { /* alerts are optional */ }
+  if (!online!.profile) try { online!.profile = (await api({ op: 'profile' })).profile; } catch { /* the mirror is optional */ }
   render();
 }
 
@@ -1674,6 +1730,7 @@ function renderOnline() {
       <div class="save"><button data-open="${g.id}"><b>${g.yourMove ? '● Your move — ' : ''}${esc(g.seats.map((x) => x.name || 'Open seat').join(' vs '))}</b>
       <span class="muted">${g.finished ? 'Finished' : g.started ? `${esc(g.illuminati ?? '')} · ${esc(g.progress)}` : `Waiting for players · invite ${esc(g.invite)}`}</span></button>${g.host || !g.started ? `<button class="del" data-del="${g.id}" data-host="${g.host ? 1 : ''}" aria-label="${g.host ? 'Delete game' : 'Leave game'}">${g.host ? 'Delete' : 'Leave'}</button>` : ''}</div>`).join('') || '<p class="muted">No games yet.</p>'}</div></section>
     ${alertsPanel()}
+    ${mirrorPanel()}
     <section class="panel"><h2>Join a friend's game</h2>
       <form id="join" class="row"><label>Invite code <input id="j-code" required maxlength="6" autocapitalize="characters"></label><button class="primary" type="submit">Join</button></form></section>
     <section><div class="label">Start a new game — choose your Illuminati</div>
@@ -1714,6 +1771,16 @@ function renderOnline() {
   };
 }
 
+/** Your mirror: how many games it has learned from and its strongest habits. */
+function mirrorPanel(): string {
+  const p = online?.profile;
+  if (!p) return '';
+  return `<section class="panel"><h2>Your mirror</h2>
+    <p>${p.ready ? `A computer player that plays like you, based on ${p.games} finished game${p.games === 1 ? '' : 's'}.` : `Finish ${p.minGames} games and the game makes a computer player that plays like you (${p.games} so far).`}</p>
+    ${p.traits.length ? `<p class="muted small">Your habits so far: ${esc(p.traits.join('; '))}.</p>` : ''}
+    <p class="muted small">Pick it in any difficulty below. Random seats can also draw the mirror of anyone at the table.</p></section>`;
+}
+
 /** Opt-in text alerts: only for a game starting, your turn, or an Attack to Destroy on you. */
 function alertsPanel(): string {
   const a = online?.alerts;
@@ -1741,7 +1808,7 @@ function bindOnline() {
   app.querySelectorAll<HTMLElement>('[data-open]').forEach((b) => b.onclick = () => openGame(b.dataset.open!));
   app.querySelectorAll<HTMLElement>('[data-o]').forEach((b) => b.onclick = async () => {
     const what = b.dataset.o;
-    if (what === 'signout') { await o.client.auth.signOut(); o.games = []; o.alerts = undefined; }
+    if (what === 'signout') { await o.client.auth.signOut(); o.games = []; o.alerts = undefined; o.profile = undefined; }
     if (what === 'lobby') { o.gameId = undefined; o.summary = undefined; o.channel?.unsubscribe(); await loadGames(); }
     if (what === 'copy') {
       try { await navigator.clipboard.writeText(o.summary!.invite); b.textContent = 'Copied'; } catch { window.getSelection()?.selectAllChildren(app.querySelector('#code')!); }
