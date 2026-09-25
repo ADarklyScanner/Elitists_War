@@ -19,7 +19,8 @@ const html = `<title>Elitists War</title>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700&family=Crimson+Pro:ital,wght@0,400;0,600;0,700;1,400&display=swap">
 <style>${css}</style>
-${online ? '<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">\n<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>' : ''}
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+${online ? '<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>' : ''}
 <div id="app"></div>
 <script>${js}</script>
 `;

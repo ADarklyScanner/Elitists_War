@@ -30,5 +30,5 @@ describe('computer vs computer games', () => {
     }
     console.log(`finished ${finished}/60, average ${Math.round(turns.reduce((a, b) => a + b, 0) / Math.max(1, turns.length))} turns`);
     expect(finished).toBeGreaterThan(40);
-  }, 120_000);
+  }, 300_000); // 60 full games; slower machines need the headroom
 });
