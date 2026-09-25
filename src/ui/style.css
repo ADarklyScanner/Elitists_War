@@ -489,3 +489,5 @@ p { margin: 0; }
 .sweet .small { color: var(--ink); }
 .sweet-btn { border: 1px solid var(--brass); background: none; color: var(--brass); border-radius: 999px; padding: 3px 12px; font-size: 12.5px; }
 .sweet-on { color: var(--ok); font-size: 12.5px; font-weight: 600; }
+.table-level { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 8px 10px; border: 1px solid #d4a34066; border-radius: 8px; background: #d4a3400d; }
+.table-level .seg button.on { background: var(--brass); }
