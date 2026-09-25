@@ -9,7 +9,7 @@ import {
   describePlay, player, leadOptions, type AiLevel, actionCancelled, actionSummary, abilitiesOf, abilityOptions, resourcesOf, canEnterPlay, HOOKS, goalsInHand, goalLimit,
   declareOptions, victoryReminder,
   type Deal, type DealGroup, type DealSide, dealText, dealsAllowed, offersTo, offersFrom, I_LIED, MAX_NOTE, sideEmpty,
-  legal, canExpose, specialGoalProgress,
+  legal, canExpose, specialGoalProgress, agentProblem, agentsOf, reliefPledgesFor, type PlaceCapturedData,
 } from '../engine';
 import { attachRect, rectOf, ensureLayout, type Rect } from '../engine/geometry';
 import { applyDealAnswer, chooseAction, computerDealAnswer, successChance } from '../ai/ai';
@@ -33,13 +33,18 @@ type Sel =
   | { kind: 'discard'; cards: string[] }
   | { kind: 'resource'; iid: string }
   | { kind: 'link'; resource: string }
-  | { kind: 'deck'; deck: 'plot' | 'group' };
+  | { kind: 'deck'; deck: 'plot' | 'group' }
+  | { kind: 'rearrange'; group: string };
 
 interface Ui {
   slotChoice?: string[];
   picked?: string[];
   buyPick?: string[];
-  reliefPick?: { place: string; groups: string[] };
+  reliefPick?: { place: string; groups: string[]; partners: string[] };
+  /** Groups being pledged toward a Relief several players pay together (R037). */
+  pledgePick?: { place: string; groups: string[] };
+  /** The Illuminati arrow the lead Group will hang from (R025). */
+  leadSide?: Side;
   browse?: { kind: 'discard' | 'destroyed'; player: string };
   game: GameState | null;
   me: string;
@@ -298,6 +303,24 @@ function presetRandoms(l: Lineup, n: number, level: TableLevel): Lineup {
   return { ...l, random: { ...l.random, easy: mix.filter((x) => x === 'easy').length, normal: mix.filter((x) => x === 'normal').length, hard: mix.filter((x) => x === 'hard').length } };
 }
 const goalFor = (n: number) => (n <= 3 ? 12 : n === 4 ? 11 : 10);
+
+/**
+ * The Basic Goal the players agree on before the game (R016): the book's number for the table size
+ * unless changed. With two players it never goes below 12, as the two-player rules advise.
+ */
+function goalInput(id: string, players: number, agreed?: number): string {
+  const book = goalFor(players);
+  const min = players === 2 ? 12 : 4;
+  return `<label class="goal-set">Basic Goal <input type="number" id="${id}" min="${min}" max="20" step="1" value="${agreed ?? book}"> Groups
+    <span class="muted small">(the rulebook's number for ${players} players is ${book}; change it only if everyone agrees${players === 2 ? '; never below 12 with two players' : ''})</span></label>`;
+}
+function bindGoalInput(id: string) {
+  const el = app.querySelector<HTMLInputElement>(`#${id}`);
+  if (el) el.onchange = () => {
+    const n = Math.round(Number(el.value));
+    (ui as Ui & { goal?: number }).goal = Number.isFinite(n) && n >= Number(el.min) && n <= 20 ? n : undefined;
+  };
+}
 const LEVEL_NAME: Record<AiLevel, string> = { easy: 'Easy', normal: 'Normal', hard: 'Hard' };
 const SECTION_INFO: Record<Section, [string, string]> = {
   easy: ['Easy', 'Make mistakes and miss chances. Good for learning.'],
@@ -396,7 +419,7 @@ function botsForGame(seed: number, min: number, maxBots: number): BotSpec[] {
   return bots.length >= min ? bots : [...bots, ...resolveLineup(presetRandoms(emptyLineup(), min - bots.length, 'standard'), seed + 1)];
 }
 
-function newGame(illuminati: string, quick: boolean) {
+function newGame(illuminati: string, quick: boolean, basicGoal?: number) {
   const seed = Math.floor(Math.random() * 1e9);
   const bots = botsForGame(seed, 1, 7);
   // Each computer plays on an Illuminati that suits its style, when one is free.
@@ -409,7 +432,7 @@ function newGame(illuminati: string, quick: boolean) {
       { id: 'p1', name: 'You', isAI: false, deck: randomDeck(seed, illuminati) },
       ...bots.map((b, i) => ({ id: `p${i + 2}`, name: b.name, isAI: true, aiLevel: b.level, aiStyle: b.style, aiStyleData: b.data, deck: randomDeck(seed + i + 1, ills[i]) })),
     ],
-    settings: { houseRules: quick ? ['quickGame'] : [], victoryReminder: ui.help !== 'off' },
+    settings: { houseRules: quick ? ['quickGame'] : [], victoryReminder: ui.help !== 'off', ...(basicGoal ? { basicGoal } : {}) },
     chooseLeads: true,
   });
   ui.sel = { kind: 'none' };
@@ -464,6 +487,11 @@ function computeGuide(s: GameState): Guide {
   const pr = s.prompt?.player === ui.me ? s.prompt : undefined;
   if (ui.slotChoice) { g.next = 'console'; g.text = 'Pick which arrow the card attaches to.'; return g; }
   if (pr?.kind === 'choose' || pr?.kind === 'chooseLead') { g.next = 'console'; g.text = 'Make your choice in the panel.'; return g; }
+  if (pr?.kind === 'placeCaptured') {
+    if (sel.kind === 'rearrange') { g.ok.add('slots'); g.next = 'board'; g.text = 'Tap a green + beside its master to put the Group there.'; }
+    else { g.next = 'console'; g.text = 'Pick a new Group to move in the panel, or tap Done.'; }
+    return g;
+  }
   if (pr?.kind === 'draw') {
     const d = pr.data as { plot: number; group: number };
     (d.plot > 0 ? g.ok : g.no).add('deck-plot');
@@ -485,7 +513,7 @@ function computeGuide(s: GameState): Guide {
     return g;
   }
   if (pr?.kind === 'discardToLimit') {
-    mark(hand, (h) => def(s, h).type === 'Plot');
+    mark(hand, (h) => plotsInHand(s, ui.me).includes(h));
     g.next = 'hand'; g.text = 'Tap the green Plots you want to get rid of, then confirm in the panel.';
     return g;
   }
@@ -530,6 +558,7 @@ function computeGuide(s: GameState): Guide {
   mark(hand, (h) => {
     const d = def(s, h);
     if (d.type === 'Plot') return plotOptions(s, ui.me, h).length > 0;
+    if (d.type === 'Illuminati') return !agentProblem(s, ui.me, h);
     if (d.type === 'Resource') return !s.turnFlags.resourcePlayed && s.cards[me.illuminati].tokens > 0 && canEnterPlay(s, h, ui.me);
     return false; // Groups in hand come into play by takeover or an Attack to Control from the board
   });
@@ -579,6 +608,7 @@ function render() {
       <button class="hud-btn" data-act="log">Log</button>
       ${dealsAllowed(s) && s.phase !== 'gameOver' ? `<button class="hud-btn ${offersTo(s, ui.me).length ? 'alert' : ''}" data-act="deals" title="Offer trades and gifts to other players">Deals${offersTo(s, ui.me).length ? ` (${offersTo(s, ui.me).length})` : ''}</button>` : ''}
       <button class="hud-btn" data-act="style" title="Deck style" aria-label="Deck style">🎨</button>
+      ${s.phase !== 'gameOver' && !me.eliminated ? '<button class="hud-btn" data-act="resign" title="Leave this game for good: it counts as being eliminated">Leave</button>' : ''}
       <button class="guide-toggle ${ui.guide ? 'on' : ''} ${ui.help}" data-act="guide" title="${esc(HELP_TITLE[ui.help])}" aria-label="Help level: ${HELP_LABEL[ui.help]} (tap to change)">${HELP_LABEL[ui.help]}</button>
     </header>
     <main class="tablearea">
@@ -686,8 +716,9 @@ function onDeck(deck: 'plot' | 'group') {
 /** Your hand in two parts, as you'd hold it: secret Plots, and the Groups and Resources waiting to come into play. */
 function handSections(s: GameState): string {
   const me = player(s, ui.me);
-  const plots = me.hand.filter((i) => def(s, i).type === 'Plot');
-  const groups = me.hand.filter((i) => def(s, i).type !== 'Plot');
+  // A spare Illuminati card came from the Plot deck and is held with the Plots (R044).
+  const plots = plotsInHand(s, ui.me);
+  const groups = me.hand.filter((i) => !plots.includes(i));
   const sec = (cls: string, label: string, note: string, cards: string[], empty: string) => `
     <section class="hand-sec ${cls}" aria-label="${label}">
       <div class="sec-label">${label} <b>${cards.length}</b> <span class="muted">${note}</span></div>
@@ -708,7 +739,7 @@ function playerChip(s: GameState, pl: string): string {
   const p = player(s, pl);
   const n = goalCount(s, pl), need = goalNeeded(s, pl);
   const active = s.players[s.active].id === pl && s.phase !== 'gameOver';
-  const inHand = pl === ui.me ? '' : ` · ${p.hand.filter((i) => def(s, i).type === 'Plot').length}P ${p.hand.filter((i) => def(s, i).type !== 'Plot').length}G`;
+  const inHand = pl === ui.me ? '' : ` · ${plotsInHand(s, pl).length}P ${p.hand.length - plotsInHand(s, pl).length}G`;
   const who = p.isAI ? styleById(p.aiStyle) : undefined;
   return `<span class="pchip ${active ? 'active' : ''} ${pl === ui.me ? 'me' : ''} ${p.eliminated ? 'out' : ''}" title="${esc(p.name)}${who ? ` (${who.style}, ${LEVEL_NAME[p.aiLevel ?? 'normal']}): ${who.blurb}` : ''} ${n} of ${need} Groups${inHand ? `; ${inHand.slice(3)} in hand` : ''}">
     <b>${esc(pl === ui.me ? 'You' : p.name)}</b><span class="goal-bar"><span style="width:${Math.min(100, (n / need) * 100)}%"></span></span><span class="mono">${n}/${need}</span><span class="muted">${inHand}</span></span>`;
@@ -891,7 +922,7 @@ function seatRail(s: GameState, pl: string, mine: boolean): string {
   const destroyedPile = Object.values(s.cards).filter((c) => c.owner === pl && c.zone === 'destroyed');
   const destroyedTop = destroyedPile[destroyedPile.length - 1];
   const destroyed = destroyedPile.length ? spot('Destroyed', `<button class="discard-top" data-browse="destroyed:${pl}" title="Browse the destroyed pile (${destroyedPile.length} cards)"><b>${esc(cardName(s, destroyedTop.iid))}</b></button><span class="spot-count">${destroyedPile.length}</span>`, 'discard-spot') : '';
-  const plots = p.hand.filter((i) => def(s, i).type === 'Plot').length, groups = p.hand.length - plots;
+  const plots = plotsInHand(s, pl).length, groups = p.hand.length - plots;
   const fan = (deck: 'plot' | 'group', k: number) => Array.from({ length: Math.min(k, 6) }, () => `<span class="cardback ${deck}"></span>`).join('');
   // A player's exposed Plots are face up and public, even in a rival's hand (R048).
   const exposed = mine ? [] : exposedPlotsOf(s, pl);
@@ -899,11 +930,13 @@ function seatRail(s: GameState, pl: string, mine: boolean): string {
       <div class="fan">${fan('plot', plots)}${fan('group', groups)}</div><span class="spot-label">Hand · ${plots} Plots · ${groups} Groups</span>
       ${exposed.length ? `<div class="exposed-plots">${exposed.map((iid) => `<button class="exposed-plot" data-inspect="${iid}" title="Exposed Plot (face up)">${esc(cardName(s, iid))}</button>`).join('')}</div>` : ''}</div>`;
   const res = resourcesOf(s, pl);
-  const tray = `<div class="spot res-tray"><div class="res-row">${res.map((r) => {
+  // Agents (spare Illuminati played inside a rival Illuminati) lie with the Resources, face up (R044).
+  const agentCards = agentsOf(s, pl).map((a) => `<button class="res agent" data-inspect="${a}"><b>Agent: ${esc(cardName(s, a))}</b><span class="muted small">+3 against its Power Structure</span></button>`).join('');
+  const tray = `<div class="spot res-tray"><div class="res-row">${agentCards}${res.map((r) => {
     const c = s.cards[r];
     const sel = (ui.sel.kind === 'resource' && ui.sel.iid === r) || (ui.sel.kind === 'link' && ui.sel.resource === r);
     return `<button class="res ${sel ? 'selected' : ''} ${gcls(r)}" data-res="${r}"><b>${esc(cardName(s, r))}</b>${c.tokens ? '<span class="token-inline"></span>' : ''}<span class="muted small">${c.hiddenUnder ? `face down under ${esc(cardName(s, c.hiddenUnder))}` : c.linkedTo && s.cards[c.linkedTo] && def(s, c.linkedTo).type !== 'Illuminati' ? `linked to ${esc(cardName(s, c.linkedTo))}` : 'unlinked'}</span></button>`;
-  }).join('') || '<span class="spot-empty">none in play</span>'}</div><span class="spot-label">Resources</span></div>`;
+  }).join('') || (agentCards ? '' : '<span class="spot-empty">none in play</span>')}</div><span class="spot-label">Resources</span></div>`;
   // Your own decks live on the rail at the left of the screen, where you tap to draw.
   return `<div class="seat-rail">${mine ? '' : pile('plot', p.plotDeck.length) + pile('group', p.groupDeck.length)}${discard}${destroyed}${hand}${tray}</div>`;
 }
@@ -919,6 +952,13 @@ function placementSlots(s: GameState, pl: string): { r: Rect; onto: string; side
   } else if (sel.kind === 'confirm' && sel.type === 'control') {
     const open = openArrows(s, sel.attacker);
     if (open.length > 1) spots = open.map((side) => ({ onto: sel.attacker, side }));
+  } else if (sel.kind === 'rearrange' && s.prompt?.kind === 'placeCaptured' && s.prompt.player === ui.me) {
+    // A new Group keeps its master: only that master's open arrows are offered (R031, R038).
+    const d = s.prompt.data as unknown as PlaceCapturedData;
+    const waiting = d.pending.find((x) => x.group === sel.group);
+    const master = waiting ? waiting.master : s.cards[sel.group]?.master;
+    const ignore = waiting ? new Set<string>() : new Set(subtree(s, sel.group));
+    spots = master && s.cards[master]?.zone === 'structure' ? openArrows(s, master, ignore).map((side) => ({ onto: master, side })) : [];
   }
   return spots.map((o) => ({ r: attachRect(s, o.onto, o.side), ...o }));
 }
@@ -966,17 +1006,19 @@ function tableCard(s: GameState, iid: string): string {
 
 function handCard(s: GameState, iid: string): string {
   const d = def(s, iid);
-  const isPlot = d.type === 'Plot';
-  const playable = isPlot && !!PLOTS[d.id];
+  const spare = d.type === 'Illuminati';
+  const isPlot = d.type === 'Plot' || spare;
+  const playable = spare ? !agentProblem(s, ui.me, iid) : isPlot && !!PLOTS[d.id];
   const sel = ui.sel;
   const selected = (sel.kind === 'plot' && sel.card === iid) || (sel.kind === 'takeover' && sel.card === iid) || (sel.kind === 'discard' && sel.cards.includes(iid));
   const targetable = sel.kind === 'attack' && sel.type === 'control' && attackOptions(s, ui.me, sel.attacker).some((o) => o.target === iid);
   return `
     <button class="hcard ${isPlot ? 'plot' : 'group'} ${selected ? 'selected' : ''} ${targetable ? 'targetable' : ''} ${isPlot && !playable ? 'inactive' : ''} ${gcls(iid)}" data-hand="${iid}">
-      <span class="kind">${isPlot ? esc(d.subtype === 'Plot' ? 'Plot' : d.subtype) : d.type === 'Resource' ? 'Resource' : esc(d.subtype)}</span>
+      <span class="kind">${spare ? 'Spare Illuminati' : isPlot ? esc(d.subtype === 'Plot' ? 'Plot' : d.subtype) : d.type === 'Resource' ? 'Resource' : esc(d.subtype)}</span>
       <span class="name">${esc(d.name)}</span>
-      ${tutorial() && isPlot && plotTiming(d.id, d.subtype, true) ? `<span class="timing">${esc(plotTiming(d.id, d.subtype, true))}</span>` : ''}
-      ${isPlot || d.type === 'Resource' ? `<span class="txt">${esc(d.modifier ?? d.text)}</span>` : `
+      ${tutorial() && isPlot && !spare && plotTiming(d.id, d.subtype, true) ? `<span class="timing">${esc(plotTiming(d.id, d.subtype, true))}</span>` : ''}
+      ${spare ? '<span class="txt">Play it as an agent inside a rival of this Illuminati: +3 to attack or defend against that Power Structure. Costs the top card of both your decks.</span>'
+        : isPlot || d.type === 'Resource' ? `<span class="txt">${esc(d.modifier ?? d.text)}</span>` : `
         <span class="aligns">${(d.alignments ?? []).map(chip).join('')}</span>
         <span class="stats"><span class="pw">${d.power}${d.globalPower ? `<small>/${d.globalPower}</small>` : ''}</span><span class="rs">${d.resistance}</span></span>`}
     </button>`;
@@ -1235,11 +1277,30 @@ function renderConsole(s: GameState): string {
       </div>`;
   } else if (s.prompt?.player === ui.me && s.prompt.kind === 'chooseLead') {
     const opts = leadOptions(s, ui.me).sort((a, b) => (def(s, b).arrowsOut?.length ?? 0) - (def(s, a).arrowsOut?.length ?? 0) || (def(s, b).power ?? 0) - (def(s, a).power ?? 0));
+    const leadSide = ui.leadSide ?? 'BOTTOM';
+    const arrowName: Record<Side, string> = { TOP: 'Top', RIGHT: 'Right', BOTTOM: 'Bottom', LEFT: 'Left' };
     body = `<h2>Choose your lead Group</h2><p>Pick a Group from your deck to start under your Illuminati. Your rival picks at the same time; if you both pick the same Group, you both pick again.</p>
+      <div class="label">Illuminati arrow it hangs from</div>
+      <div class="opts">${(['TOP', 'RIGHT', 'BOTTOM', 'LEFT'] as Side[]).map((sd) => `<button class="${sd === leadSide ? 'on' : ''}" data-lead-side="${sd}">${sd === leadSide ? '✓ ' : ''}${arrowName[sd]}</button>`).join('')}</div>
+      <div class="label">Lead Group</div>
       <div class="opts">${opts.map((iid) => { const d = def(s, iid); return `<button data-lead="${iid}"><b>${esc(d.name)}</b> · ${d.power}${d.globalPower ? `/${d.globalPower}` : ''} Power, ${d.resistance} Resistance, ${d.arrowsOut?.length ?? 0} arrow${(d.arrowsOut?.length ?? 0) === 1 ? '' : 's'} out${(d.alignments ?? []).length ? ' · ' + (d.alignments ?? []).join(', ') : ''}</button>`; }).join('')}</div>`;
   } else if (s.prompt?.player === ui.me && s.prompt.kind === 'takeover') {
     body = `<h2>Automatic takeover</h2><p>Pick a Group from your hand, then tap a + to place it. No roll needed.${s.players.length === 2 ? ' In a two-player game your Illuminati gets no Action token this turn if you do.' : ''}</p>
       <div class="btns"><button data-act="skipTakeover">Skip takeover</button></div>`;
+  } else if (s.prompt?.player === ui.me && s.prompt.kind === 'placeCaptured') {
+    const d = s.prompt.data as unknown as PlaceCapturedData;
+    const picked = ui.sel.kind === 'rearrange' ? ui.sel.group : undefined;
+    const placed = d.cards.filter((g) => s.cards[g]?.zone === 'structure' && s.cards[g].controller === ui.me);
+    const btn = (g: string, label: string) => `<button class="${picked === g ? 'on' : ''}" data-rearrange="${g}">${picked === g ? '✓ ' : ''}${esc(label)}</button>`;
+    const masterOf = (g: string) => d.pending.find((x) => x.group === g)?.master ?? s.cards[g]?.master;
+    body = `<h2>Arrange the new Groups</h2>
+      <p>Some Groups that just came in could not keep their places. You may move any new Group to another open arrow of the same master.${d.pending.length ? ` Groups that still have no room when you tap Done are ${d.overflow === 'discard' ? 'discarded' : 'returned to your hand'}.` : ''}</p>
+      ${d.pending.length ? `<div class="label">Still need room</div><div class="opts">${d.pending.map((x) => btn(x.group, `${cardName(s, x.group)} (under ${cardName(s, x.master)})`)).join('')}</div>` : ''}
+      <div class="label">New Groups in place</div><div class="opts">${placed.map((g) => btn(g, cardName(s, g))).join('')}</div>
+      ${picked ? (placementSlots(s, ui.me).length
+        ? `<p class="muted">Tap a + beside ${esc(cardName(s, masterOf(picked) ?? picked))} to put ${esc(cardName(s, picked))} there.</p>`
+        : `<p class="muted">${esc(cardName(s, masterOf(picked) ?? picked))} has no open arrow right now. Moving one of its other new puppets may make room.</p>`) : ''}
+      <div class="btns"><button class="primary" data-act="placeDone">Done</button></div>`;
   } else if (s.prompt?.player === ui.me && s.prompt.kind === 'discardToLimit') {
     const sel = ui.sel.kind === 'discard' ? ui.sel.cards : [];
     // Goal cards: never more than the Goal limit. Plots: the hand limit applies outside your own turn.
@@ -1289,7 +1350,7 @@ function renderConsole(s: GameState): string {
     const rivalClaim = s.window.kind === 'endOfTurn' && !!s.claims?.some((c) => c.player !== ui.me);
     body = `${s.claims?.length ? claimPanel(s, opts.length > 0) : ''}${s.attack ? attackPanel(s) : ''}${head}${declarePanel(s, false)}
       <div class="opts">${opts.map((o, i) => `<button data-opt="${i}">${esc(o.label)}</button>`).join('')}</div>
-      <div class="btns"><button class="primary" data-act="pass">${s.window.kind === 'attack' && s.attack?.attackerPlayer === ui.me ? '🎲 Roll the dice' : rivalClaim ? (opts.length ? 'Pass: let the claim stand' : 'Let the claim stand') : 'Pass'}</button>${s.window.kind === 'attack' && s.attack?.attackerPlayer === ui.me && !s.attack.instant && !s.attack.plays.some((pp) => pp.player === ui.me) ? '<button data-act="callOff">Call off the attack</button>' : ''}</div>
+      <div class="btns"><button class="primary" data-act="pass">${s.window.kind === 'attack' && s.attack?.attackerPlayer === ui.me ? '🎲 Roll the dice' : rivalClaim ? (opts.length ? 'Pass: let the claim stand' : 'Let the claim stand') : 'Pass'}</button>${s.window.kind === 'attack' && s.attack?.attackerPlayer === ui.me && !s.attack.instant && !s.attack.committed && !s.attack.plays.some((pp) => pp.player === ui.me) && ![...s.attack.aid, ...s.attack.oppose].some((c) => c.player === ui.me) ? '<button data-act="callOff">Call off the attack</button>' : ''}</div>
       ${anyTimeBar(s)}${voluntaryBar(s)}`;
     (window as unknown as { __opts: typeof opts }).__opts = opts;
   } else if (idle(s)) {
@@ -1320,6 +1381,7 @@ function renderMainConsole(s: GameState): string {
         <button ${canControl ? '' : 'disabled'} data-act="atk-control">Attack to control</button>
         <button ${canDestroy ? '' : 'disabled'} data-act="atk-destroy">Attack to destroy</button>
         ${canMove ? `<button data-act="move">Move</button>` : ''}
+        ${s.cards[sel.iid].tokens ? '<button data-act="dropToken" title="You may take a token off your own card whenever you like">Remove its token</button>' : ''}
         <button class="linkish" data-inspect="${sel.iid}">Details</button>
         <button class="linkish" data-act="clear">Cancel</button>
       </div>
@@ -1457,7 +1519,7 @@ function anyTimeBar(s: GameState): string {
     if (ui.buyPick) {
       const picked = ui.buyPick;
       const ok = picked.length === 2 && new Set(picked).size === 2;
-      buy = `<div class="label">Buy a Plot: choose 2 Groups to pay</div><div class="opts">${allPayers.map((g) => `<button class="${picked.includes(g) ? 'on' : ''}" data-buy-toggle="${g}">${picked.includes(g) ? '✓ ' : ''}${esc(cardName(s, g))}</button>`).join('')}</div>
+      buy = `<div class="label">Buy a Plot: choose 2 Groups to pay</div><div class="opts">${allPayers.map((g) => `<button class="${picked.includes(g) ? 'on' : ''}" data-act="buy-toggle" data-buy-toggle="${g}">${picked.includes(g) ? '✓ ' : ''}${esc(cardName(s, g))}</button>`).join('')}</div>
         <div class="btns"><button class="primary" data-act="buy-confirm" ${ok ? '' : 'disabled'}>Confirm</button><button class="linkish" data-act="buy-cancel">Cancel</button></div>`;
     } else {
       buy = `<div class="btns">
@@ -1466,26 +1528,50 @@ function anyTimeBar(s: GameState): string {
       </div>`;
     }
   }
-  const reliefs = Object.values(s.cards).filter((c) => c.zone === 'structure' && c.devastated && legal(s, ui.me, { type: 'relief', place: c.iid, payWith: structureCards(s, ui.me).filter((g) => s.cards[g].tokens > 0) }));
+  // Relief (R037): one player alone, or several together. Other players' Groups join through the
+  // pledges they have made; a player who cannot pay alone may pledge his Groups for someone else to send.
+  const pool = structureCards(s, ui.me).filter((g) => s.cards[g].tokens > 0 && !tokenBarred(s, g)).sort((a, b) => power(s, b) - power(s, a));
+  const places = me.eliminated ? [] : Object.values(s.cards).filter((c) => c.zone === 'structure' && c.devastated).map((c) => c.iid);
   let relief = '';
-  if (reliefs.length) {
-    const pool = structureCards(s, ui.me).filter((g) => s.cards[g].tokens > 0).sort((a, b) => power(s, b) - power(s, a));
-    relief = `<div class="label">Relief for Devastated Places (needs 3× printed Power)</div><div class="opts">${reliefs.map((c) => {
-      const need = 3 * (def(s, c.iid).power ?? 0);
-      if (ui.reliefPick?.place === c.iid) return '';
-      return `<button data-relief-open="${c.iid}">Relieve ${esc(cardName(s, c.iid))} (needs ${need})</button>`;
-    }).join('')}</div>`;
-    if (ui.reliefPick && reliefs.some((c) => c.iid === ui.reliefPick!.place)) {
-      const place = ui.reliefPick.place;
-      const need = 3 * (def(s, place).power ?? 0);
-      const picked = ui.reliefPick.groups;
-      const tot = picked.reduce((n, g) => n + power(s, g), 0);
-      relief += `<div class="label">Relieve ${esc(cardName(s, place))}: choose which Groups pay (${tot} of ${need} Power)</div>
-        <div class="opts">${pool.map((g) => `<button class="${picked.includes(g) ? 'on' : ''}" data-relief-toggle="${g}">${picked.includes(g) ? '✓ ' : ''}${esc(cardName(s, g))} (${power(s, g)})</button>`).join('')}</div>
-        <div class="btns"><button class="primary" data-act="relief-confirm" ${tot >= need ? '' : 'disabled'}>Confirm</button><button class="linkish" data-act="relief-cancel">Cancel</button></div>`;
-    }
+  const rows: string[] = [];
+  for (const place of places) {
+    const need = 3 * (def(s, place).power ?? 0);
+    const pledges = reliefPledgesFor(s, place, ui.me);
+    const canSend = legal(s, ui.me, { type: 'relief', place, payWith: pool, partners: pledges.map((x) => x.player) });
+    const alone = legal(s, ui.me, { type: 'relief', place, payWith: pool });
+    const mine = s.reliefPledges?.find((x) => x.player === ui.me && x.place === place);
+    const note = pledges.length ? `; pledged: ${pledges.map((x) => `${player(s, x.player).name} ${x.power}`).join(', ')}` : '';
+    const btns = [
+      canSend && ui.reliefPick?.place !== place ? `<button data-act="relief-open" data-relief-open="${place}">Relieve ${esc(cardName(s, place))} (needs ${need}${esc(note)})</button>` : '',
+      !alone && pool.length && ui.pledgePick?.place !== place ? `<button data-pledge-open="${place}">${mine ? 'Change my pledge' : 'Pledge Groups'} toward Relief for ${esc(cardName(s, place))} (needs ${need}${esc(note)})</button>` : '',
+      mine ? `<button class="linkish" data-pledge-withdraw="${place}">Withdraw my pledge for ${esc(cardName(s, place))}</button>` : '',
+    ].filter(Boolean).join('');
+    if (btns) rows.push(btns);
   }
-  return buy + relief;
+  if (rows.length) relief = `<div class="label">Relief for Devastated Places (needs 3× printed Power, from one player or several together)</div><div class="opts">${rows.join('')}</div>`;
+  if (ui.reliefPick && places.includes(ui.reliefPick.place)) {
+    const place = ui.reliefPick.place;
+    const need = 3 * (def(s, place).power ?? 0);
+    const picked = ui.reliefPick.groups;
+    const pledges = reliefPledgesFor(s, place, ui.me);
+    const partners = ui.reliefPick.partners.filter((x) => pledges.some((y) => y.player === x));
+    const tot = picked.reduce((n, g) => n + power(s, g), 0) + pledges.filter((x) => partners.includes(x.player)).reduce((n, x) => n + x.power, 0);
+    relief += `<div class="label">Relieve ${esc(cardName(s, place))}: choose which Groups pay (${tot} of ${need} Power)</div>
+      <div class="opts">${pool.map((g) => `<button class="${picked.includes(g) ? 'on' : ''}" data-act="relief-toggle" data-relief-toggle="${g}">${picked.includes(g) ? '✓ ' : ''}${esc(cardName(s, g))} (${power(s, g)})</button>`).join('')}
+      ${pledges.map((x) => `<button class="${partners.includes(x.player) ? 'on' : ''}" data-relief-partner="${x.player}">${partners.includes(x.player) ? '✓ ' : ''}${esc(player(s, x.player).name)}'s pledge: ${esc(x.groups.map((g) => cardName(s, g)).join(', '))} (${x.power})</button>`).join('')}</div>
+      <div class="btns"><button class="primary" data-act="relief-confirm" ${tot >= need ? '' : 'disabled'}>Send Relief</button><button class="linkish" data-act="relief-cancel">Cancel</button></div>`;
+  }
+  if (ui.pledgePick && places.includes(ui.pledgePick.place)) {
+    const place = ui.pledgePick.place;
+    const picked = ui.pledgePick.groups;
+    relief += `<div class="label">Pledge toward Relief for ${esc(cardName(s, place))}: nothing is spent until someone sends the Relief with your pledge; it lapses when this turn ends</div>
+      <div class="opts">${pool.map((g) => `<button class="${picked.includes(g) ? 'on' : ''}" data-pledge-toggle="${g}">${picked.includes(g) ? '✓ ' : ''}${esc(cardName(s, g))} (${power(s, g)})</button>`).join('')}</div>
+      <div class="btns"><button class="primary" data-act="pledge-confirm" ${picked.length ? '' : 'disabled'}>Pledge</button><button class="linkish" data-act="pledge-cancel">Cancel</button></div>`;
+  }
+  // Spare Illuminati cards that can become agents now (R044).
+  const spare = me.hand.filter((c) => def(s, c).type === 'Illuminati' && !agentProblem(s, ui.me, c));
+  const agents = spare.length ? `<div class="label">Spare Illuminati</div><div class="opts">${spare.map((c) => `<button data-agent="${c}">Play ${esc(cardName(s, c))} as an agent (+3 against it; discards the top card of both your decks)</button>`).join('')}</div>` : '';
+  return buy + relief + agents;
 }
 
 /** A button that opens the "tidy your hand" picker: discard, return a Plot to your deck, or expose a
@@ -1499,7 +1585,7 @@ function voluntaryBar(s: GameState): string {
 /** The picker for voluntary discards/returns/exposes: tap cards in the hand strip, then a button here. */
 function renderVoluntaryDiscard(s: GameState, sel: Extract<Sel, { kind: 'discard' }>): string {
   const cards = sel.cards;
-  const allPlots = cards.length > 0 && cards.every((c) => def(s, c).type === 'Plot');
+  const allPlots = cards.length > 0 && cards.every((c) => plotsInHand(s, ui.me).includes(c));
   const canExposeAll = allPlots && cards.every((c) => !s.cards[c].exposed && canExpose(s, c));
   return `<h2>Tidy your hand</h2><p>Tap cards in your hand to select them, then choose what to do. Legal at any time.</p>
     <div class="btns">
@@ -1508,6 +1594,7 @@ function renderVoluntaryDiscard(s: GameState, sel: Extract<Sel, { kind: 'discard
       <button data-act="voluntary-return-middle" ${allPlots ? '' : 'disabled'}>Return to deck: middle</button>
       <button data-act="voluntary-return-bottom" ${allPlots ? '' : 'disabled'}>Return to deck: bottom</button>
       ${canExposeAll && cards.length === 1 ? '<button data-act="voluntary-expose">Expose</button>' : ''}
+      ${canExposeAll && cards.length === 1 ? rivalsLive(s).map((r) => `<button data-show-to="${r.id}">Show it to ${esc(r.name)} only</button>`).join('') : ''}
       <button class="linkish" data-act="clear">Cancel</button>
     </div>
     ${!cards.length ? '<p class="muted small">Only Plot cards can be returned to your deck or exposed.</p>' : ''}`;
@@ -1767,6 +1854,7 @@ function renderStart() {
   const saves = Object.values(loadSaves()).sort((a, b) => b.updated - a.updated);
   const pick = (ui as Ui & { pick?: string }).pick ?? 'bavarian-illuminati';
   const quick = (ui as Ui & { quick?: boolean }).quick ?? false;
+  const agreed = (ui as Ui & { goal?: number }).goal;
   app.innerHTML = `
     <div class="start">
       <header class="hero">
@@ -1787,6 +1875,7 @@ function renderStart() {
         <div class="label">Computer players</div>
         ${botsEditor(1, 1)}
         <div class="row">
+          ${goalInput('goal', 1 + Math.max(1, lineupSize(loadLineup())), agreed)}
           <label class="toggle"><input type="checkbox" id="quick" ${quick ? 'checked' : ''}> Quick game: first to 8 Groups (house rule; the official goal is ${goalFor(1 + Math.max(1, lineupSize(loadLineup())))})</label>
           <button class="primary" data-act="start">Start game</button>
         </div>
@@ -1796,7 +1885,8 @@ function renderStart() {
   app.querySelectorAll<HTMLElement>('[data-pick]').forEach((b) => b.onclick = () => { (ui as Ui & { pick?: string }).pick = b.dataset.pick; renderStart(); });
   bindBots(renderStart);
   app.querySelector<HTMLInputElement>('#quick')!.onchange = (e) => { (ui as Ui & { quick?: boolean }).quick = (e.target as HTMLInputElement).checked; };
-  app.querySelector<HTMLElement>('[data-act="start"]')!.onclick = () => newGame(pick, (ui as Ui & { quick?: boolean }).quick ?? false);
+  bindGoalInput('goal');
+  app.querySelector<HTMLElement>('[data-act="start"]')!.onclick = () => newGame(pick, (ui as Ui & { quick?: boolean }).quick ?? false, (ui as Ui & { goal?: number }).goal);
   app.querySelectorAll<HTMLElement>('[data-load]').forEach((b) => b.onclick = () => {
     const sv = loadSaves()[b.dataset.load!];
     if (sv) { ui.game = sv.state; ui.sel = { kind: 'none' }; ui.inspect = undefined; foldFinished(sv.state); render(); schedule(); }
@@ -1816,6 +1906,9 @@ function onTableCard(iid: string) {
     if (opt) { ui.sel = { kind: 'confirm', attacker: sel.attacker, target: iid, type: sel.type, side: opt.sides[0], plots: [] }; render(); return; }
   }
   if (sel.kind === 'link' && s.cards[iid].controller === ui.me) { act({ type: 'link', resource: sel.resource, to: iid }); return; }
+  if (s.prompt?.player === ui.me && s.prompt.kind === 'placeCaptured' && (s.prompt.data as unknown as PlaceCapturedData).cards.includes(iid)) {
+    ui.sel = { kind: 'rearrange', group: iid };
+  }
   if (idle(s) && s.cards[iid].controller === ui.me && sel.kind !== 'move') {
     ui.sel = { kind: 'group', iid };
   }
@@ -1832,7 +1925,7 @@ function onHandCard(iid: string) {
   const d = def(s, iid);
   const sel = ui.sel;
   if (s.prompt?.player === ui.me && s.prompt.kind === 'discardToLimit') {
-    if (d.type !== 'Plot') return render();
+    if (!plotsInHand(s, ui.me).includes(iid)) return render();
     const cards = sel.kind === 'discard' ? sel.cards : [];
     ui.sel = { kind: 'discard', cards: cards.includes(iid) ? cards.filter((c) => c !== iid) : [...cards, iid] };
   } else if (sel.kind === 'discard') {
@@ -1875,6 +1968,7 @@ function bind() {
     const [onto, side] = choice.split(':') as [string, Side];
     const sel = ui.sel;
     if (sel.kind === 'takeover') act({ type: 'takeover', card: sel.card, onto, side });
+    else if (sel.kind === 'rearrange') act({ type: 'placeCaptured', group: sel.group, onto, side });
     else if (sel.kind === 'move') {
       const g = s.cards[sel.group];
       const free = s.turnFlags.freeMoves === ui.me;
@@ -1935,7 +2029,33 @@ function bind() {
   app.querySelectorAll<HTMLElement>('[data-style-backs]').forEach((b) => b.onclick = () => { saveBacks(b.dataset.styleBacks!); render(); });
   app.querySelectorAll<HTMLElement>('[data-deck]').forEach((b) => b.onclick = () => onDeck(b.dataset.deck as 'plot' | 'group'));
   app.querySelectorAll<HTMLElement>('[data-info]').forEach((b) => b.onclick = (e) => { e.stopPropagation(); ui.info = ui.info === b.dataset.info ? undefined : b.dataset.info; render(); });
-  app.querySelectorAll<HTMLElement>('[data-lead]').forEach((b) => b.onclick = () => act({ type: 'chooseLead', card: b.dataset.lead! }));
+  app.querySelectorAll<HTMLElement>('[data-lead]').forEach((b) => b.onclick = () => act({ type: 'chooseLead', card: b.dataset.lead!, side: ui.leadSide ?? 'BOTTOM' }));
+  app.querySelectorAll<HTMLElement>('[data-lead-side]').forEach((b) => b.onclick = () => { ui.leadSide = b.dataset.leadSide as Side; render(); });
+  app.querySelectorAll<HTMLElement>('[data-rearrange]').forEach((b) => b.onclick = () => { ui.sel = { kind: 'rearrange', group: b.dataset.rearrange! }; render(); });
+  app.querySelectorAll<HTMLElement>('[data-show-to]').forEach((b) => b.onclick = () => {
+    if (ui.sel.kind === 'discard' && ui.sel.cards.length === 1) act({ type: 'showCard', card: ui.sel.cards[0], to: b.dataset.showTo! });
+  });
+  app.querySelectorAll<HTMLElement>('[data-agent]').forEach((b) => b.onclick = () => act({ type: 'playAgent', card: b.dataset.agent! }));
+  app.querySelectorAll<HTMLElement>('[data-relief-partner]').forEach((b) => b.onclick = () => {
+    if (!ui.reliefPick) return;
+    const x = b.dataset.reliefPartner!;
+    const cur = ui.reliefPick.partners;
+    ui.reliefPick = { ...ui.reliefPick, partners: cur.includes(x) ? cur.filter((y) => y !== x) : [...cur, x] };
+    render();
+  });
+  app.querySelectorAll<HTMLElement>('[data-pledge-open]').forEach((b) => b.onclick = () => {
+    const place = b.dataset.pledgeOpen!;
+    ui.pledgePick = { place, groups: s.reliefPledges?.find((x) => x.player === ui.me && x.place === place)?.groups ?? [] };
+    render();
+  });
+  app.querySelectorAll<HTMLElement>('[data-pledge-toggle]').forEach((b) => b.onclick = () => {
+    if (!ui.pledgePick) return;
+    const g = b.dataset.pledgeToggle!;
+    const cur = ui.pledgePick.groups;
+    ui.pledgePick = { ...ui.pledgePick, groups: cur.includes(g) ? cur.filter((x) => x !== g) : [...cur, g] };
+    render();
+  });
+  app.querySelectorAll<HTMLElement>('[data-pledge-withdraw]').forEach((b) => b.onclick = () => act({ type: 'pledgeRelief', place: b.dataset.pledgeWithdraw!, payWith: [] }));
   app.querySelectorAll<HTMLElement>('[data-relief]').forEach((b) => b.onclick = () => {
     const r = (window as unknown as { __relief: { place: string; pay: string[] }[] }).__relief[Number(b.dataset.relief)];
     act({ type: 'relief', place: r.place, payWith: r.pay });
@@ -2001,12 +2121,27 @@ function bind() {
       case 'buy-cancel': ui.buyPick = undefined; render(); break;
       case 'relief-open': {
         const place = b.dataset.reliefOpen!;
-        const need = 3 * (def(s, place).power ?? 0);
-        const pool = structureCards(s, ui.me).filter((g) => s.cards[g].tokens > 0).sort((a, c) => power(s, c) - power(s, a));
+        // Other players' pledges count first; your strongest Groups make up the rest.
+        const pledges = reliefPledgesFor(s, place, ui.me);
+        const need = 3 * (def(s, place).power ?? 0) - pledges.reduce((n, x) => n + x.power, 0);
+        const pool = structureCards(s, ui.me).filter((g) => s.cards[g].tokens > 0 && !tokenBarred(s, g)).sort((a, c) => power(s, c) - power(s, a));
         const groups: string[] = []; let tot = 0;
         for (const g of pool) { if (tot >= need) break; groups.push(g); tot += power(s, g); }
-        ui.reliefPick = { place, groups };
+        ui.reliefPick = { place, groups, partners: pledges.map((x) => x.player) };
+        ui.pledgePick = undefined;
         render(); break;
+      }
+      case 'pledge-confirm': if (ui.pledgePick) { const pk = ui.pledgePick; ui.pledgePick = undefined; act({ type: 'pledgeRelief', place: pk.place, payWith: pk.groups }); } break;
+      case 'pledge-cancel': ui.pledgePick = undefined; render(); break;
+      case 'placeDone': act({ type: 'placeCapturedDone' }); break;
+      case 'dropToken': if (sel.kind === 'group') act({ type: 'removeToken', card: sel.iid }); break;
+      case 'resign': {
+        if (!confirm('Leave this game? At a real table this counts as being eliminated: your hand, decks, Resources and Power Structure leave play, and you cannot come back.')) break;
+        if (online) { act({ type: 'resign' }); break; }
+        act({ type: 'resign' });
+        // Offline, the computers would only play on among themselves: the game is put away.
+        clearTimeout(timer); deleteSave(s.id); ui.game = null; ui.view = undefined; ui.inspect = undefined; render();
+        break;
       }
       case 'relief-toggle': {
         const g = b.dataset.reliefToggle!;
@@ -2015,7 +2150,7 @@ function bind() {
         ui.reliefPick = { ...ui.reliefPick, groups: cur.includes(g) ? cur.filter((x) => x !== g) : [...cur, g] };
         render(); break;
       }
-      case 'relief-confirm': if (ui.reliefPick) { const r = ui.reliefPick; ui.reliefPick = undefined; act({ type: 'relief', place: r.place, payWith: r.groups }); } break;
+      case 'relief-confirm': if (ui.reliefPick) { const r = ui.reliefPick; ui.reliefPick = undefined; act({ type: 'relief', place: r.place, payWith: r.groups, ...(r.partners.length ? { partners: r.partners } : {}) }); } break;
       case 'relief-cancel': ui.reliefPick = undefined; render(); break;
       case 'tidy': ui.sel = { kind: 'discard', cards: [] }; render(); break;
       case 'voluntary-discard': if (sel.kind === 'discard' && sel.cards.length) act({ type: 'discard', cards: sel.cards }); break;
@@ -2182,7 +2317,7 @@ function renderOnline() {
     ${msg}
     <section><div class="label">Your games</div><div class="saves">${o.games.map((g) => `
       <div class="save"><button data-open="${g.id}"><b>${g.yourMove ? '● Your move — ' : g.offers ? '● An offer for you — ' : ''}${esc(g.seats.map((x) => x.name || 'Open seat').join(' vs '))}</b>
-      <span class="muted">${g.finished ? 'Finished' : g.started ? `${esc(g.illuminati ?? '')} · ${esc(g.progress)}` : `Waiting for players · invite ${esc(g.invite)}`}</span></button>${g.host || !g.started ? `<button class="del" data-del="${g.id}" data-host="${g.host ? 1 : ''}" aria-label="${g.host ? 'Delete game' : 'Leave game'}">${g.host ? 'Delete' : 'Leave'}</button>` : ''}</div>`).join('') || '<p class="muted">No games yet.</p>'}</div></section>
+      <span class="muted">${g.finished ? 'Finished' : g.started ? `${esc(g.illuminati ?? '')} · ${esc(g.progress)}` : `Waiting for players · invite ${esc(g.invite)}`}</span></button>${g.host || !g.finished ? `<button class="del" data-del="${g.id}" data-host="${g.host ? 1 : ''}" data-started="${g.started ? 1 : ''}" aria-label="${g.host ? 'Delete game' : 'Leave game'}">${g.host ? 'Delete' : 'Leave'}</button>` : ''}</div>`).join('') || '<p class="muted">No games yet.</p>'}</div></section>
     ${alertsPanel()}
     ${mirrorPanel()}
     <section class="panel"><h2>Join a friend's game</h2>
@@ -2195,6 +2330,7 @@ function renderOnline() {
       <div class="label">Computer players</div>
       ${friends >= 7 ? '<p class="muted small">The table is full: 8 players.</p>' : botsEditor(1 + friends, friends ? 0 : 1)}
       <div class="row">
+        ${goalInput('n-goal', 1 + friends + Math.max(friends ? 0 : 1, lineupSize(loadLineup())), (ui as Ui & { goal?: number }).goal)}
         <label class="toggle"><input type="checkbox" id="n-quick"> Quick game (8 Groups, house rule)</label>
         <button class="primary" type="submit">Create game</button></div>
         <p class="muted small">With friends invited you get an invite code to send them. Everyone moves when they like; the game waits (up to 24 hours per response, 3 days per turn).</p></form>
@@ -2216,12 +2352,14 @@ function renderOnline() {
     try { applyReply(await api({ op: 'join', code, illuminati: pick })); await openGame(online!.gameId!); } catch (err) { o.msg = (err as Error).message; render(); }
   };
   bindBots(render);
+  bindGoalInput('n-goal');
   app.querySelector<HTMLSelectElement>('#n-friends')!.onchange = (e) => { (ui as Ui & { friends?: number }).friends = Number((e.target as HTMLSelectElement).value); render(); };
   app.querySelector<HTMLFormElement>('#new')!.onsubmit = async (e) => {
     e.preventDefault();
     const bots = friends >= 7 ? [] : botsForGame(Math.floor(Math.random() * 1e9), friends ? 0 : 1, 7 - friends);
     const quick = (app.querySelector('#n-quick') as HTMLInputElement).checked;
-    try { applyReply(await api({ op: 'new', seats: 1 + friends + bots.length, computerSeats: bots.length, bots, quick, illuminati: pick })); await openGame(online!.gameId!); } catch (err) { o.msg = (err as Error).message; render(); }
+    const basicGoal = (ui as Ui & { goal?: number }).goal;
+    try { applyReply(await api({ op: 'new', seats: 1 + friends + bots.length, computerSeats: bots.length, bots, quick, illuminati: pick, ...(basicGoal ? { basicGoal } : {}) })); await openGame(online!.gameId!); } catch (err) { o.msg = (err as Error).message; render(); }
   };
 }
 
@@ -2252,7 +2390,10 @@ function bindOnline() {
   const o = online!;
   app.querySelectorAll<HTMLElement>('[data-del]').forEach((b) => b.onclick = async () => {
     const host = !!b.dataset.host;
-    if (!confirm(host ? 'Delete this game for every player? This cannot be undone.' : 'Leave this game? Your seat opens up for someone else.')) return;
+    const started = !!b.dataset.started;
+    if (!confirm(host ? 'Delete this game for every player? This cannot be undone.'
+      : started ? 'Leave this game for good? It counts as being eliminated: your cards leave play and the others play on.'
+      : 'Leave this game? Your seat opens up for someone else.')) return;
     try {
       await api({ op: 'delete', gameId: b.dataset.del });
       o.gameId = undefined; o.summary = undefined; o.channel?.unsubscribe(); ui.game = null;

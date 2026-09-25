@@ -60,7 +60,15 @@ function plotKind(id: string): 'goal' | 'nwo' | 'boost' | 'defense' | 'instant' 
   return 'other';
 }
 
-export function randomDeck(seed: number, illuminati?: string, opts: { groups?: number; plots?: number } = {}): DeckList {
+/** How often a generated deck carries one spare Illuminati card in its Plot deck (R025, R044). */
+export const SPARE_ILLUMINATI_CHANCE = 0.2;
+
+/**
+ * `spareIlluminati`: the chance (0 to 1) that one Plot is swapped for a spare copy of another
+ * Illuminati, which can be played as an agent inside a rival of that Illuminati (R044). The deck
+ * keeps its size, so its Plot deck (Plots plus the spare) stays inside the book's 24-32.
+ */
+export function randomDeck(seed: number, illuminati?: string, opts: { groups?: number; plots?: number; spareIlluminati?: number } = {}): DeckList {
   const r = rng(seed);
   const shuffle = <T>(arr: T[]) => {
     const a = [...arr];
@@ -138,5 +146,11 @@ export function randomDeck(seed: number, illuminati?: string, opts: { groups?: n
   add(byKind('roll'), 1);
   add(byKind('other'), nPlots);
   add(pool.filter((p) => !['goal', 'nwo'].includes(plotKind(p.id))), nPlots);
+  // The rules let a player hide extra Illuminati cards in his Plot deck: now and then one replaces the
+  // last Plot picked (drawn last, so every other choice above stays the same for a given seed).
+  if (plots.length && r() < (opts.spareIlluminati ?? SPARE_ILLUMINATI_CHANCE)) {
+    const others = ILLUMINATI.filter((c) => c.id !== ill);
+    plots[plots.length - 1] = others[Math.floor(r() * others.length)].id;
+  }
   return { illuminati: ill, groups: [...chosen, ...resources].map((g) => g.id), plots };
 }

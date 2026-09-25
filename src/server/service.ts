@@ -208,15 +208,20 @@ export async function submit(store: Store, gameId: string, userId: string, actio
 
 /**
  * The host (who created the game) may delete it at any time, for everyone. Anyone else may leave a
- * game that has not started yet, which frees their seat for someone new.
+ * game that has not started yet, which frees their seat for someone new. Leaving a game that has
+ * started is resigning: it counts as being eliminated (R049), and the others play on.
  */
-export async function deleteOrLeave(store: Store, gameId: string, userId: string): Promise<'deleted' | 'left'> {
+export async function deleteOrLeave(store: Store, gameId: string, userId: string, notifier?: Notifier): Promise<'deleted' | 'left' | 'resigned'> {
   const rec = await store.get(gameId);
   if (!rec) throw new RuleError('No such game.');
   const seat = rec.seats.find((s) => s.userId === userId);
   if (!seat) throw new RuleError('You are not playing in this game.');
   if (seat.id === rec.seats[0].id) { await store.delete(gameId); return 'deleted'; }
-  if (rec.state) throw new RuleError('Only the player who created this game can delete it once it has started.');
+  if (rec.state) {
+    const me = rec.state.players.find((p) => p.id === seat.id);
+    if (rec.state.phase !== 'gameOver' && me && !me.eliminated) await submit(store, gameId, userId, { type: 'resign' }, notifier);
+    return 'resigned';
+  }
   const before = rec.updatedAt;
   Object.assign(seat, { userId: undefined, name: '', illuminati: undefined });
   rec.updatedAt = Date.now();
@@ -373,7 +378,8 @@ export function viewFor(s: GameState, viewer: string): GameState {
   v.rng = 0;
   const hide = (iid: string) => {
     const c = v.cards[iid];
-    const kind = def(s, iid).type === 'Plot' ? 'hidden-plot' : 'hidden-group';
+    // A spare Illuminati card lives in the Plot deck and has a Plot's back (R044).
+    const kind = def(s, iid).type === 'Plot' || def(s, iid).type === 'Illuminati' ? 'hidden-plot' : 'hidden-group';
     v.cards[iid] = { iid, cardId: kind, owner: c.owner, zone: c.zone, tokens: 0, mods: [] };
   };
   const known = new Set(s.players.find((p) => p.id === viewer)?.known ?? []);
@@ -402,9 +408,10 @@ export function viewFor(s: GameState, viewer: string): GameState {
   hideAnnounced(v.window?.event);
   for (const e of v.events ?? []) hideAnnounced(e);
   for (const q of v.promptQueue ?? []) hideChoice(q);
-  // Resources face down under Warehouse 23: rivals see only a card back where it lies.
+  // Resources face down under Warehouse 23: rivals see only a card back where it lies, unless its
+  // controller has shown it to stop a rival's copy (R041). Whether a hidden copy was given up stays secret.
   for (const c of Object.values(s.cards)) {
-    if (c.zone !== 'resources' || !c.hiddenUnder || c.controller === viewer) continue;
+    if (c.zone !== 'resources' || !c.hiddenUnder || c.controller === viewer || c.shown) continue;
     v.cards[c.iid] = { iid: c.iid, cardId: 'hidden-resource', owner: c.owner, zone: c.zone, controller: c.controller, linkedTo: c.linkedTo, hiddenUnder: c.hiddenUnder, tokens: 0, mods: [] };
   }
   // A Goal or note written under a card (a card named in secret) stays secret, even once the card has

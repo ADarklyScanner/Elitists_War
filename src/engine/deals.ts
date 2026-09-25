@@ -86,9 +86,13 @@ export function handCardProblem(s: GameState, giver: string, iid: string): strin
   return null;
 }
 
-/** Has a Resource been used this turn (an activated ability)? A used Resource cannot be given away until next turn. */
+/**
+ * Has a Resource been used this turn (an activated ability, or a benefit it lent: a bonus in an attack,
+ * an extra token or draw)? A used Resource cannot be given away until next turn (R040, R042).
+ */
 export function resourceUsed(s: GameState, iid: string): boolean {
-  return Object.values(s.cards[iid]?.abilityTurns ?? {}).includes(s.turn);
+  const c = s.cards[iid];
+  return !!c && (c.benefitTurn === s.turn || Object.values(c.abilityTurns ?? {}).includes(s.turn));
 }
 
 export function resourceProblem(s: GameState, giver: string, receiver: string, iid: string): string | null {
@@ -407,8 +411,10 @@ function concrete(s: GameState, d: Deal, a: Extract<Action, { type: 'respondDeal
   }) };
   // Cards of my choice.
   const choose = [...new Set(a.choose ?? [])];
-  const plots = choose.filter((c) => s.cards[c] && def(s, c).type === 'Plot');
-  const others = choose.filter((c) => s.cards[c] && def(s, c).type !== 'Plot');
+  // A spare Illuminati card drawn from the Plot deck counts as a Plot (R044).
+  const plotBack = (c: string) => def(s, c).type === 'Plot' || def(s, c).type === 'Illuminati';
+  const plots = choose.filter((c) => s.cards[c] && plotBack(c));
+  const others = choose.filter((c) => s.cards[c] && !plotBack(c));
   if (choose.some((c) => !me.hand.includes(c) || get.cards!.includes(c) || c === a.lie)) throw new RuleError('Choose other cards from your own hand.');
   if (plots.length !== (d.get.anyPlots ?? 0) || others.length !== (d.get.anyCards ?? 0) || others.some((c) => def(s, c).type === 'Illuminati')) {
     const want = [d.get.anyPlots ? `${d.get.anyPlots} Plot${d.get.anyPlots === 1 ? '' : 's'}` : '', d.get.anyCards ? `${d.get.anyCards} Group or Resource card${d.get.anyCards === 1 ? '' : 's'}` : ''].filter(Boolean).join(' and ');

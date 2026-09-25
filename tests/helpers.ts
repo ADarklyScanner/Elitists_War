@@ -30,7 +30,10 @@ export function checkInvariants(s: GameState) {
     if (c.tokens < 0) throw new Error(`${c.iid} has negative tokens`);
     if (c.zone === 'hand' && !s.players.some((p) => p.hand.includes(c.iid))) throw new Error(`${c.iid} zone hand but not in a hand`);
     if (c.zone === 'discard' && !seen.has(c.iid)) throw new Error(`${c.iid} zone discard but not in a pile`);
-    if (c.zone === 'removed' && !s.players.find((p) => p.id === c.owner)?.eliminated) throw new Error(`${c.iid} left in limbo`);
+    // Out of the game only for an eliminated owner, a card set aside after a duplicate replaced it in a
+    // capture (R031), or a Group still waiting for room while its new controller rearranges (R031, R038).
+    const waiting = s.prompt?.kind === 'placeCaptured' || s.promptQueue?.some((q) => q.kind === 'placeCaptured');
+    if (c.zone === 'removed' && !c.setAside && !waiting && !s.players.find((p) => p.id === c.owner)?.eliminated) throw new Error(`${c.iid} left in limbo`);
     if (c.zone === 'structure') {
       if (seen.has(c.iid)) throw new Error(`${c.iid} in structure and ${seen.get(c.iid)}`);
       const r = rectOf(s, c.iid);

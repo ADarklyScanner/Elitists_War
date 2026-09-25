@@ -173,7 +173,7 @@ ${app('cards have real 5 × 7 shapes: a card lying sideways on a side arrow can 
 <h4>First-turn protection</h4>
 <p>Until a player has finished their first turn, nobody may do anything to them: no attacks on their Groups, no interfering in their attacks, no card aimed at them. Effects that hit everyone (a New World Order, say) and abilities that work all the time still apply to them.</p>
 <p>There is one exception. If a player attacks you during their own first turn, you are free to answer that player in any way you can.</p>
-${app('your deck and the computers\' decks are generated for you (see <i>Building a deck</i>). You choose your lead Group from a list, the computers pick the strongest they can, and identical picks are re-chosen as above. The dice for first player are rolled for you, with ties rolled again. The first-turn exception is not modelled: a player who attacks you in their first turn stays protected from you until that turn ends.')}
+${app('your deck and the computers\' decks are generated for you (see <i>Building a deck</i>). You choose your lead Group from a list and the Illuminati arrow it hangs from (the bottom one unless you pick another); the computers pick the strongest Group they can, and identical picks are re-chosen as above. The dice for first player are rolled for you, with ties rolled again. The first-turn exception applies: once a player attacks one of your Groups during their first turn, you may answer them with anything you have, while everyone else still leaves them alone until that turn ends. The Basic Goal is set on the start screen, where the book\'s number for the table size is filled in; change it only if everyone at a real table would agree.')}
 `,
   },
   // ------------------------------------------------------------------ Playing a turn
@@ -257,7 +257,7 @@ ${app('play passes in seat order, the order players joined. At the start of your
 <h4>Buying Plots</h4>
 <p>At any time you may trade 1 token from your Illuminati, or 2 tokens from your other Groups, for the top card of your Plot deck. This is not an action by those Groups, and rivals cannot cancel it. A common habit is to cash in any tokens still unspent when your next turn comes round, just before the refresh gives you new ones.</p>
 ${ex('the rhythm of tokens', `<p>On your turn the Pentagon leads an attack and spends its token. During the next player's turn the Pentagon has nothing left, so it cannot defend itself or help your other Groups. Meanwhile your Federal Reserve, which sat still, can oppose an attack on any Government Group of yours in that turn. Either way it holds exactly one token again when your own turn begins (a Group that kept its token gets no second one), so acting in a rival's turn costs you nothing on your own.</p>`)}
-${app('tokens are the gold dots on the cards. Buying a Plot is never announced to rivals, exactly as the rules say it cannot be answered. When you pay with non-Illuminati tokens, they must come from two different Groups; the printed rule only says “two tokens from your other Groups”.')}
+${app('tokens are the gold dots on the cards. Buying a Plot is never announced to rivals, exactly as the rules say it cannot be answered. When you pay with non-Illuminati tokens, they must come from two different Groups; the printed rule only says “two tokens from your other Groups”. To take a token off one of your own Groups for your own reasons, select the Group and use <i>Remove its token</i>.')}
 `,
   },
   {
@@ -280,7 +280,7 @@ ${app('tokens are the gold dots on the cards. Buying a Plot is never announced t
 <p>If both players agree, a Group can be moved into the other player's structure during the main phase of either one's turn. It still costs a token, which may come from the Group, its old master, its new master, or either player's Illuminati.</p>
 <h4>Balance</h4>
 <p>A Group carrying a long chain of puppets is a single point of failure: whoever captures it captures the lot. If everything you own hangs off one Illuminati arrow, one lucky attack can knock you out. Spread out.</p>
-${app('you can move a Group only within your own Power Structure (the printed rules speak of “any open arrow on any Group in play”, which the app reads as your own). Handing a Group to another player is not available yet. When a move leaves puppets without room, the app places them on other free arrows of the same master for you and returns any that still do not fit to your hand.')}
+${app('you can move a Group only within your own Power Structure (the printed rules speak of “any open arrow on any Group in play”, which the app reads as your own). Handing a Group to another player is done with a deal (see <i>Deals, gifts and trades</i>). When a move leaves puppets without room, the app first tries the other free arrows of the same master; if any Group had to change arrows or still has no room, you get an <i>Arrange the new Groups</i> panel where you may put each one on another open arrow of its own master, and anything still without room goes back to your hand when you tap Done. Computer players keep the first arrangement.')}
 `,
   },
   // ------------------------------------------------------------------ Attacks
@@ -342,7 +342,7 @@ ${app('you can move a Group only within your own Power Structure (the printed ru
 <p>Declare your bonuses. One you forget is lost once the dice have been rolled. If a player keeps quiet about a free bonus on purpose and a rival points it out, it must be counted; but nobody can be forced to use a bonus that has a cost, such as a token or a discard.</p>
 <h4>No speed play</h4>
 <p>You may not announce and roll in one breath. Everyone must get a real chance to react before the dice are thrown. See also ${see('timing', 'Timing')}.</p>
-${app('the app keeps every bonus that costs nothing on the scoreboard for you, so nothing is ever forgotten, and it shows the chance of success before you roll. A +10 Plot that boosts the attacker is played when you declare the attack. Every player gets a response window before the dice, and the attack meter shows the strength as it changes.')}
+${app('calling off is offered until you commit: a Plot, an agents card, one of your own Groups aiding or opposing, or a token you took off a card during the attack. The app keeps every bonus that costs nothing on the scoreboard for you, so nothing is ever forgotten, and it shows the chance of success before you roll. A +10 Plot that boosts the attacker is played when you declare the attack. Every player gets a response window before the dice, and the attack meter shows the strength as it changes.')}
 `,
   },
   {
@@ -507,7 +507,7 @@ ${app('two Instant attacks can never overlap. The target\'s Power is frozen at t
 <h4>Relief</h4>
 <p>Relief restores a Devastated Place to normal. Spend actions whose Power adds up to at least <b>three times the Place's printed Power</b>. The actions may come from one or more players, at any time, provided they are all spent together. The Place and everything below it count again and can receive tokens again at the next refresh.</p>
 ${ex('Relief for Canada', `<p>Canada's printed Power is 3, so Relief costs actions totalling 9 Power. The Democrats (6) and the Red Cross (2) come to 8, not enough; add the United Nations (1) and it is exactly 9. The Center for Disease Control can do the whole job alone with its special ability.</p>`)}
-${app('Relief must be paid by one player\'s Groups; several players cannot yet chip in to the same Relief. Under the Plot Corruption, the Relief just sent is cancelled, the Place stays Devastated, and no new Relief may be tried there until after that player\'s next turn (a house ruling on an unclear card).')}
+${app('Relief may be paid by one player or by several at once. A player who cannot pay alone uses <i>Pledge Groups</i> to offer some of his Groups toward it; nothing is spent yet. Whoever sends the Relief may include those pledges, and then every pledged Group and his own spend their tokens together. A pledge can be changed or withdrawn at any time and lapses when the turn ends. Computer players use pledges made toward their own Places but do not pledge for others. Under the Plot Corruption, the Relief just sent is cancelled, the Place stays Devastated, and no new Relief may be tried there until after that player\'s next turn (a house ruling on an unclear card).')}
 `,
   },
   // ------------------------------------------------------------------ Cards and schemes
@@ -562,7 +562,7 @@ ${app('Relief must be paid by one player\'s Groups; several players cannot yet c
 <li><b>Reload</b> cards (per later corrections) need an Illuminati action and refresh at most 5 Power's worth of Groups, or any single Group. None may refresh a Group captured this turn.</li>
 <li><b>Cancels</b> such as Hoax and Secrets Man Was Not Meant To Know stop another Plot as it is played (${see('timing', 'Timing and cancelling')}).</li>
 </ul>
-${app('rivals always see how many hidden Plots you hold, never which. The hand limit is checked the moment a player outside their own turn goes over it, even in the middle of someone else\'s action, and the extra Plots can go to the discard pile or back into the deck. At any other time you can also discard cards, return Plots to the top, middle or bottom of your deck, or expose a Plot, with the <i>Discard or return cards from my hand</i> button. Buying Plots is never announced. The card set in this app contains no Zap, Paralyze or Attribute Freeze cards.')}
+${app('rivals always see how many hidden Plots you hold, never which. The hand limit is checked the moment a player outside their own turn goes over it, even in the middle of someone else\'s action, and the extra Plots can go to the discard pile or back into the deck. At any other time you can also discard cards, return Plots to the top, middle or bottom of your deck, expose a Plot, or show one hidden Plot to a single rival, with the <i>Discard or return cards from my hand</i> button. A spare Illuminati card drawn from the Plot deck counts as one of your Plots for all of this. Buying Plots is never announced. The card set in this app contains no Zap, Paralyze or Attribute Freeze cards.')}
 `,
   },
   {
@@ -613,7 +613,7 @@ ${app('rivals always see how many hidden Plots you hold, never which. The hand l
 <li>A Resource whose link becomes illegal for good stays in play. If its link was permanent it sits there inactive, waking up if the link ever becomes legal again; otherwise its owner re-links it in their next main phase.</li>
 </ul>
 ${ex('a link that goes quiet', `<p>Cyborg Soldiers are linked to your Violent Semiconscious Liberation Army, doubling its Power. A rival uses the Orbital Mind Control Lasers to flip it from Violent to Peaceful until the end of the turn. The link is now illegal, but only for a while: the Cyborg Soldiers stay linked and do nothing, then start working again when the alignment change expires.</p>`)}
-${app('Resources come into play by your takeover, once per turn for an Illuminati token, or by cards. Link restrictions on cards are enforced and each link moves at most once per turn, but a Resource that already helped this turn may still have its link moved. A Unique Resource hidden face down under Warehouse 23 simply blocks a rival\'s copy; the reveal-or-lose rule is not modelled.')}
+${app('Resources come into play by your takeover, once per turn for an Illuminati token, or by cards. Link restrictions on cards are enforced and each link moves at most once per turn. A Resource counts as used for the turn once one of its abilities is used or once it gives a benefit: a bonus in an attack (including Power it lends to a Group taking part), an extra token or an extra draw. After that its link cannot be moved and it cannot be given away until the next turn. When someone tries to play a Unique Resource while a copy lies face down under your Warehouse 23, the app asks you at once: show it (the play fails, and the rival pays nothing) or keep it hidden (the rival gets the Resource, and yours is discarded if you ever turn it face up). Computer players always show it.')}
 `,
   },
   {
@@ -694,7 +694,7 @@ ${app('whole-structure immunity reaches the owner\'s hand, decks and discard pil
 </ul>
 <h4>Spare Illuminati as agents</h4>
 <p>You may shuffle extra Illuminati cards into your Plot deck. If you draw one that matches a rival's Illuminati, you may play it at any time by discarding the top card of your Plot deck and the top card of your Group deck. It is laid beside your Resources without being one, and it stands for your spies inside that conspiracy: <b>+3</b> to your attacks and defences against that Illuminati's entire Power Structure, and against every faction of it if several players run it. You may have only one agent per kind of Illuminati, and never one for the Illuminati you play yourself.</p>
-${app('decks never contain spare Illuminati, so Illuminati agents (+3) do not come up. When a duplicate helps capture a Group, the original card moves to the capturer; the exchange of copies is not modelled. Everything else above is enforced, including the +5 between factions and the ban on replaying destroyed Groups.')}
+${app('about one generated deck in five hides a spare Illuminati card among its Plots. It is held with your Plots (it counts toward the hand limit and can be traded, discarded or returned to the deck like one), and while a rival plays that Illuminati you can use <i>Play as an agent</i> at any time you could act: the top card of each of your decks is discarded and the card lies beside your Resources, giving +3 to your attacks on that Illuminati\'s Groups and to your defence against them (not to Instant attacks). When your own duplicate helps you capture a Group from someone else, your copy goes into your Power Structure with everything the Group carried, and the original card is set aside for its owner, out of the game. Everything else above is enforced, including the +5 between factions and the ban on replaying destroyed Groups.')}
 `,
   },
   {
@@ -798,7 +798,7 @@ ${app('plays are handled one at a time, so a truly simultaneous roll-off never a
 <li>Factions of the same Illuminati can never share. If they meet their Goals together, neither wins and the game continues, unless some other player met a Goal at the same moment, in which case that player wins alone. The exception is Shangri-La's Special Goal, which all Shangri-La players share.</li>
 </ul>
 ${ex('counting double', `<p>In a four-player game you need 11 Groups. You play the Gnomes of Zurich, whose Special Goal lets Corporate Groups and Banks with Power 4 or more count double. You control your Illuminati and seven other Groups, three of which qualify: Wall Street (Power 4, Bank), the Multinational Oil Companies (Power 6) and Tobacco Companies (Power 4). That is 8 cards counting as 11: a win at the end of the turn, if nobody stops it. A fourth qualifying Group would add only 1, because no more than three Groups may count double.</p>`)}
-${app('victory works as described above: nobody wins without declaring. Use <i>End turn and declare victory</i> on your own turn, or <i>Declare victory</i> while any turn is ending, and name the Goal you claim. A claim for a Goal you do not meet is simply refused, with no penalty. In Tutorial and Guided help the app reminds you when you could declare; with help off, it stays silent, as a strict table would. Goal cards in hand are checked automatically, the Goal-card limit is enforced at all times, and no more than three Groups ever count double. The optional Quick game is a house rule that lowers the Basic Goal to 8.')}
+${app('victory works as described above: nobody wins without declaring. Use <i>End turn and declare victory</i> on your own turn, or <i>Declare victory</i> while any turn is ending, and name the Goal you claim. A claim for a Goal you do not meet is simply refused, with no penalty. In Tutorial and Guided help the app reminds you when you could declare; with help off, it stays silent, as a strict table would. Goal cards in hand are checked automatically, the Goal-card limit is enforced at all times, and no more than three Groups ever count double. The Basic Goal is the book\'s number unless you change it on the start screen (never below 12 with two players); the optional Quick game is a house rule that lowers it to 8.')}
 `,
   },
   {
@@ -814,7 +814,7 @@ ${app('victory works as described above: nobody wins without declaring. Use <i>E
 </ul>
 <h4>The Servants of Cthulhu exception</h4>
 <p>Suppose the Servants of Cthulhu already have seven kills and make their eighth by wiping out the only puppet they have left: they stay in the game and win when that turn ends.</p>
-${app('you cannot resign from a game once it has started, so leaving never counts as elimination. Everything else above is enforced: nobody is knocked out before finishing a third turn, and an eliminated player\'s Resources leave play (or pass to the faction of the same Illuminati that knocked them out).')}
+${app('the <i>Leave</i> button (or <i>Leave</i> beside an online game) takes you out for good, and counts as being eliminated: your hand, decks, Resources and agents vanish, and so does your Power Structure (cards you own leave the game; captured cards go to their owners\' discard piles). An attack you are part of ends as if it never happened, and if it was your turn, play passes on. Offline the game is then put away, since only computers would be left; online the others play on. Before the lead Groups are chosen, an online game can only be deleted by its host. Everything else above is enforced: nobody is knocked out before finishing a third turn, and an eliminated player\'s Resources leave play (or pass to the faction of the same Illuminati that knocked them out).')}
 `,
   },
   {
@@ -907,7 +907,7 @@ ${app('the app does the bookkeeping and gives each player a response window befo
 <li>For duels, lean aggressive. For bigger tables, carry more defence and grow steadily; racing ahead makes everyone gang up on you.</li>
 </ul>
 <p>No deck is perfect. A good player who knows your deck can beat it, so vary your cards and your plans between games. Lead with the same Group every time and rivals will pack copies of it to steal it from you.</p>
-${app('you cannot build your own deck yet. Each player gets a generated deck of 45 cards: the Illuminati, a Group deck of 12 to 20 cards (a few of them Resources) and 24 to 32 Plots, which is the typical shape the rules recommend. The Groups are chosen to suit the Illuminati: one or two alignments that do not clash, its favourite attribute, Groups with room to grow, and some strong attackers.')}
+${app('you cannot build your own deck yet. Each player gets a generated deck of 45 cards: the Illuminati, a Group deck of 12 to 20 cards (a few of them Resources) and 24 to 32 Plots, which is the typical shape the rules recommend. The Groups are chosen to suit the Illuminati: one or two alignments that do not clash, its favourite attribute, Groups with room to grow, and some strong attackers. About one deck in five also hides a spare copy of another Illuminati in the Plot deck, in place of one Plot, for use as an agent.')}
 `,
   },
   {
