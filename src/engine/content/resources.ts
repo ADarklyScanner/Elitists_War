@@ -12,7 +12,7 @@ import { alignments, countControlled, power } from '../stats';
 import { openArrows, structureCards, subtree } from '../geometry';
 import { rollDie, roll2d6, shuffle } from '../rng';
 import {
-  activePlayer, askChoice, attackCancelled, canAid, canEnterPlay, canOppose, controllerOf2, currentOutcome, destroyGroup,
+  activePlayer, announcedCancel, askChoice, attackCancelled, canAid, canEnterPlay, canOppose, controllerOf2, currentOutcome, destroyGroup,
   discardCard, drawPlot, giveToken, isCancelled, isPrivileged, liveEffects, log, moveSubtree, player, playResourceCard,
   protectedPlayer, tokenBarred,
 } from '../game';
@@ -109,6 +109,19 @@ function bonus(s: GameState, pl: string, self: string, ctx: AttackCtx, amount: n
 /** A live effect produced by a card on its own (not an activated ability), recorded like an ability use. */
 function hookEffect(s: GameState, ctx: AttackCtx, self: string, pl: string, id: string, effect: PlotEffect) {
   ctx.plays.push({ iid: `ability:${self}:${id}:${s.version}:${ctx.plays.length}`, player: pl, play: { card: self }, effect, ability: self });
+}
+
+const isMedia = (s: GameState, g: string) => is(s, g, { attributes: ['Media'] });
+
+/** A cancel that also answers a rival's matching Group announcing an action outside an attack (Bigfoot). */
+function alsoAfterAnnouncedActions(ab: ActivatedAbility, ok: (s: GameState, g: string) => boolean): ActivatedAbility {
+  const outside = announcedCancel(ok);
+  const now = (s: GameState, ctx?: AttackCtx) => !ctx && s.window?.kind === 'event';
+  return {
+    ...ab, timing: [...ab.timing, 'event'], listens: outside.listens,
+    check: (s, pl, self, p, ctx) => (now(s, ctx) ? outside.check(s, pl, self, p) : ab.check(s, pl, self, p, ctx)),
+    apply: (s, pl, self, p, ctx) => (now(s, ctx) ? outside.apply(s, pl, self, p) : ab.apply(s, pl, self, p, ctx)),
+  };
 }
 
 const needAttack = (ctx?: AttackCtx) => (!ctx ? 'Use this during an attack.' : null);
@@ -380,14 +393,14 @@ const T: Record<string, CardHooks> = {
 
   'bigfoot': {
     hasAction: true,
-    // Media actions in an attack are cancelled with the ability; Relief sent by a rival's Media Group is
-    // offered for cancelling when it happens (the 'relief' event).
-    // PENDING: other Media actions outside attacks (moving, buying Plots, activated abilities) raise no
-    // event and open no response window, so they cannot be cancelled.
-    actions: [cancelAction('Cancel a Media Group\'s action', 'a Media Group', (s, g) => is(s, g, { attributes: ['Media'] }))],
+    // Media actions in an attack are cancelled with the ability. Outside attacks, a rival's Media Group
+    // announcing an action (a move, an ability, Relief) opens a response window where Bigfoot may cancel
+    // it. Buying Plots is not an action and cannot be cancelled (R027). Relief sent while another window
+    // is open is not announced: Bigfoot is offered to cancel it when it happens (the 'relief' event).
+    actions: [alsoAfterAnnouncedActions(cancelAction('Cancel a Media Group\'s action', 'a Media Group', isMedia), isMedia)],
     onEvent(s, self, e) {
       const pl = ctrl(s, self);
-      if (e.type !== 'relief' || !pl || !active(s, self) || s.cards[self].tokens < 1 || !e.player || e.player === pl || !e.card) return;
+      if (e.type !== 'relief' || e.data?.announced || !pl || !active(s, self) || s.cards[self].tokens < 1 || !e.player || e.player === pl || !e.card) return;
       if (protectedPlayer(s, pl, e.player)) return;
       const media = (e.cards ?? []).filter((g) => is(s, g, { attributes: ['Media'] }));
       if (!media.length) return;

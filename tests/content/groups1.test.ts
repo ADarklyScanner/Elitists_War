@@ -992,3 +992,152 @@ describe('Vampires', () => {
     expect(b.s.cards[b.bjorne].data?.removedFromGame).toBe(true);
   });
 });
+
+/** Pass for everyone until no response window is open. */
+function settle(s: GameState): GameState {
+  for (let i = 0; i < 20 && s.window; i++) s = act(s, waitingFor(s)[0], { type: 'pass' });
+  return s;
+}
+
+describe('cancelling actions outside attacks', () => {
+  const move = (s: GameState, group: string, side: 'LEFT' | 'RIGHT' | 'TOP', payWith = group) =>
+    act(s, 'p1', { type: 'move', group, onto: ill(s, 'p1'), side, payWith });
+
+  it('Nuclear Power Companies cancel a rival\'s move: the token stays spent and the Group stays put', () => {
+    let s = scenario();
+    const npc = under(s, 'p2', 'nuclear-power-companies');
+    const mafia = under(s, 'p1', 'the-mafia');
+    s = move(s, mafia, 'LEFT');
+    expect(s.window?.kind).toBe('event');
+    expect(s.window?.event?.type).toBe('action');
+    expect(s.cards[mafia].side).toBe('BOTTOM');
+    s = use(s, 'p2', npc, 'cancelAction', { target: mafia });
+    s = settle(s);
+    expect(s.cards[mafia].side).toBe('BOTTOM');
+    expect(s.cards[mafia].tokens).toBe(0);
+    expect(s.cards[npc].tokens).toBe(0);
+    expect(s.log.some((l) => /action cancelled/.test(l.text))).toBe(true);
+  });
+  it('Nuclear Power Companies can cancel the Illuminati\'s Group draw, which may then be tried again', () => {
+    let s = scenario();
+    const npc = under(s, 'p2', 'nuclear-power-companies');
+    const before = hand(s, 'p1').length;
+    s.cards[ill(s, 'p1')].tokens = 2;
+    s = act(s, 'p1', { type: 'drawGroup' });
+    s = use(s, 'p2', npc, 'cancelAction', { target: ill(s, 'p1') });
+    s = settle(s);
+    expect(hand(s, 'p1').length).toBe(before);
+    expect(s.cards[ill(s, 'p1')].tokens).toBe(1);
+    s = act(s, 'p1', { type: 'drawGroup' });
+    expect(s.window).toBeUndefined(); // the Nuclear Power Companies have no token left: nobody can respond
+    expect(hand(s, 'p1').length).toBe(before + 1);
+  });
+  it('without an Action token, Nuclear Power Companies open no window', () => {
+    let s = scenario();
+    const npc = under(s, 'p2', 'nuclear-power-companies');
+    s.cards[npc].tokens = 0;
+    const mafia = under(s, 'p1', 'the-mafia');
+    s = move(s, mafia, 'LEFT');
+    expect(s.window).toBeUndefined();
+    expect(s.cards[mafia].side).toBe('LEFT');
+  });
+  it('Supreme Court cancels a Government Group\'s ability used in the main phase', () => {
+    let s = scenario();
+    const court = under(s, 'p2', 'supreme-court');
+    const nasa = under(s, 'p1', 'nasa');
+    const fbi = under(s, 'p1', 'fbi', 'LEFT');
+    s.cards[fbi].tokens = 0;
+    s = use(s, 'p1', nasa, 'transferToken', { target: fbi });
+    expect(s.window?.event?.type).toBe('action');
+    s = use(s, 'p2', court, 'cancelAction', { target: nasa });
+    s = settle(s);
+    expect(s.cards[fbi].tokens).toBe(0);
+    expect(s.cards[nasa].tokens).toBe(0);
+  });
+  it('Supreme Court opens no window for a non-Government Group\'s move', () => {
+    let s = scenario();
+    under(s, 'p2', 'supreme-court');
+    const mafia = under(s, 'p1', 'the-mafia');
+    s = move(s, mafia, 'LEFT');
+    expect(s.window).toBeUndefined();
+    expect(s.cards[mafia].side).toBe('LEFT');
+  });
+  it('Savings and Loans cancel a Corporate Group\'s move but ignore a Criminal one', () => {
+    let s = scenario();
+    const sl = under(s, 'p2', 'savings-and-loans');
+    const liquor = under(s, 'p1', 'liquor-companies');
+    const mafia = under(s, 'p1', 'the-mafia', 'TOP');
+    const quiet = move(s, mafia, 'LEFT');
+    expect(quiet.window).toBeUndefined();
+    s = move(s, liquor, 'RIGHT');
+    expect(() => use(s, 'p2', sl, 'cancelAction', { target: mafia })).toThrow();
+    s = use(s, 'p2', sl, 'cancelAction', { target: liquor });
+    s = settle(s);
+    expect(s.cards[liquor].side).toBe('BOTTOM');
+  });
+  it('a cancel can itself be cancelled, and then the action happens', () => {
+    let s = scenario();
+    const court = under(s, 'p2', 'supreme-court');
+    const npc = under(s, 'p1', 'nuclear-power-companies', 'TOP');
+    const cia = under(s, 'p1', 'c-i-a');
+    s = move(s, cia, 'LEFT');
+    s = use(s, 'p2', court, 'cancelAction', { target: cia });
+    s = use(s, 'p1', npc, 'cancelAction', { target: court });
+    s = settle(s);
+    expect(s.cards[cia].side).toBe('LEFT');
+    expect(s.cards[court].tokens).toBe(0);
+    expect(s.cards[npc].tokens).toBe(0);
+  });
+});
+
+describe('MI-5 negating an attempt to expose your Plots', () => {
+  it('negates a Group ability that would expose your Plots', () => {
+    let s = scenario();
+    const mi5 = under(s, 'p2', 'mi-5');
+    const cows = under(s, 'p1', 'cattle-mutilators');
+    const secret = give(s, 'p2', 'reload', { hand: true });
+    s = use(s, 'p1', cows, 'expose', { target: ill(s, 'p2') });
+    expect(s.window?.event?.type).toBe('action');
+    s = use(s, 'p2', mi5, 'negateExpose');
+    s = settle(s);
+    expect(s.cards[secret].exposed).toBeFalsy();
+    expect(s.cards[cows].tokens).toBe(0);
+    expect(s.cards[mi5].tokens).toBe(0);
+  });
+  it('without its token it cannot answer, and the Plots are exposed', () => {
+    let s = scenario();
+    const mi5 = under(s, 'p2', 'mi-5');
+    s.cards[mi5].tokens = 0;
+    const cows = under(s, 'p1', 'cattle-mutilators');
+    const secret = give(s, 'p2', 'reload', { hand: true });
+    s = use(s, 'p1', cows, 'expose', { target: ill(s, 'p2') });
+    expect(s.window).toBeUndefined();
+    expect(s.cards[secret].exposed).toBe(true);
+  });
+  it('negates a Plot that would expose your Plots while it waits to resolve', () => {
+    let s = scenario();
+    const mi5 = under(s, 'p2', 'mi-5');
+    const payer = under(s, 'p1', 'the-mafia');
+    const secret = give(s, 'p2', 'reload', { hand: true });
+    const janitor = give(s, 'p1', 'george-the-janitor', { hand: true });
+    s = act(s, 'p1', { type: 'playPlot', play: { card: janitor, target: ill(s, 'p2'), payWith: [payer] } });
+    expect(s.window?.kind).toBe('plot');
+    s = use(s, 'p2', mi5, 'negateExpose');
+    s = settle(s);
+    expect(s.prompt).toBeUndefined();
+    expect(s.cards[secret].exposed).toBeFalsy();
+    expect(s.cards[janitor].zone).toBe('discard');
+    expect(s.cards[payer].tokens).toBe(0);
+  });
+  it('cannot answer an action that exposes nothing', () => {
+    let s = scenario();
+    const mi5 = under(s, 'p2', 'mi-5');
+    under(s, 'p2', 'supreme-court', 'RIGHT');
+    const nasa = under(s, 'p1', 'nasa');
+    const fbi = under(s, 'p1', 'fbi', 'LEFT');
+    s.cards[fbi].tokens = 0;
+    s = use(s, 'p1', nasa, 'transferToken', { target: fbi });
+    expect(s.window?.event?.type).toBe('action'); // opened for the Supreme Court
+    expect(() => use(s, 'p2', mi5, 'negateExpose')).toThrow(/reveal your hidden Plots/);
+  });
+});
