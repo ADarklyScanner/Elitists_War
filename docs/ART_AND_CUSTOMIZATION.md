@@ -1,11 +1,16 @@
 # Card art and customization — owner decisions (not built yet)
 
 ## Art tone (rating 16+)
-The game is political satire and the art may be edgy and irreverent toward every side. Limits:
+The game is irreverent political satire and deliberately not politically correct. The rule is:
+**show the group as it is; never show it harming anyone.**
+- OK: controversial groups shown as themselves: Klan robes and hoods, cults, extremists, hate groups at their
+  own gatherings, spies, criminals, dictators' trappings. Showing them is not endorsing them; in play they are
+  simply Groups a player controls.
+- NOT OK: anyone being targeted, attacked or victimised; any real minority shown as a target; gore; sexual content.
 - No real person's face or likeness: real people appear only through props, silhouettes from behind, empty podiums.
 - No real logos, seals or trademarks; use unbranded stand-ins.
-- No slurs, no gore, no sexual content, nothing that glorifies a hate group or real violence.
-- Hate groups and hoaxes are shown so the joke is on them (e.g. Elders of Zion: the forger's workshop, mocking the forgery; KKK: menace shown indirectly, no robes or symbols).
+- Legal: leave out Nazi symbols (swastikas, SS runes) — they are restricted in some countries (e.g. Germany,
+  Austria); uniforms and settings are fine.
 - Photographic, real-world look wherever possible; no text in images.
 
 ## Paid card changes (future; disabled)
