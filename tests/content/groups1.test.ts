@@ -1395,12 +1395,6 @@ describe('audit fixes', () => {
 });
 
 describe('audit fixes (D)', () => {
-  /** Run `fn` with a card's data patched to its printed value (the cards.json fix is pending), then restore it. */
-  function withData<T>(id: string, patch: Partial<(typeof CARDS)[string]>, fn: () => T): T {
-    const saved = { ...CARDS[id] };
-    Object.assign(CARDS[id], patch);
-    try { return fn(); } finally { Object.assign(CARDS[id], saved); }
-  }
   const attack = (s: GameState, type: 'control' | 'destroy', attacker: string, target: string) =>
     act(s, 'p1', { type: 'attack', attackType: type, attacker, target });
 
@@ -1507,20 +1501,19 @@ describe('audit fixes (D)', () => {
     expect(mod(attack(s, 'destroy', mafia, comp), 'Attack', 'video-games')).toBe(0);
   });
 
-  it('The Men in Black: +4 and permanent removal also when they aid the attack (data: Secret, fix pending)', () => {
-    withData('the-men-in-black', { attributes: ['Secret'] }, () => {
-      let s = scenario();
-      const mafia = under(s, 'p1', 'the-mafia');
-      const mib = under(s, 'p1', 'the-men-in-black', 'RIGHT');
-      const tgt = under(s, 'p2', 'loan-sharks');
-      s = attack(s, 'destroy', mafia, tgt);
-      s = act(s, 'p1', { type: 'aid', group: mib });
-      expect(attackStrength(s, s.attack!).lines).toContain(`Attack +4: ${CARDS['the-men-in-black'].name} ability`);
-      s.attack!.attackBonus.push({ player: 'p1', amount: 40, label: 'test' });
-      s = resolve(s, [2, 2]);
-      expect(s.cards[tgt].zone).toBe('destroyed');
-      expect(s.cards[tgt].data?.removedFromGame).toBe(true);
-    });
+  it('The Men in Black (Secret): +4 and permanent removal also when they aid the attack', () => {
+    expect(CARDS['the-men-in-black'].attributes).toContain('Secret');
+    let s = scenario();
+    const mafia = under(s, 'p1', 'the-mafia');
+    const mib = under(s, 'p1', 'the-men-in-black', 'RIGHT');
+    const tgt = under(s, 'p2', 'loan-sharks');
+    s = attack(s, 'destroy', mafia, tgt);
+    s = act(s, 'p1', { type: 'aid', group: mib });
+    expect(attackStrength(s, s.attack!).lines).toContain(`Attack +4: ${CARDS['the-men-in-black'].name} ability`);
+    s.attack!.attackBonus.push({ player: 'p1', amount: 40, label: 'test' });
+    s = resolve(s, [2, 2]);
+    expect(s.cards[tgt].zone).toBe('destroyed');
+    expect(s.cards[tgt].data?.removedFromGame).toBe(true);
   });
   it('The Men in Black: no aid bonus to take over a Group', () => {
     let s = scenario();
@@ -1531,14 +1524,13 @@ describe('audit fixes (D)', () => {
     expect(attackStrength(s, s.attack!).lines.some((l) => l.includes(`${CARDS['the-men-in-black'].name} ability`))).toBe(false);
   });
 
-  it('Tobacco Companies: their +8 replaces the Corporate-Government penalty (data: Corporate, fix pending)', () => {
-    withData('tobacco-companies', { alignments: ['Straight', 'Corporate'] }, () => {
-      const s = scenario();
-      const tob = under(s, 'p1', 'tobacco-companies');
-      const t = attack(s, 'control', tob, under(s, 'p2', 'c-i-a'));
-      expect(mod(t, 'Attack', 'tobacco-companies')).toBe(8);
-      expect(attackStrength(t, t.attack!).lines.some((l) => l.endsWith(': alignments'))).toBe(false);
-    });
+  it('Tobacco Companies (Straight, Corporate): their +8 replaces the Corporate-Government penalty', () => {
+    expect(CARDS['tobacco-companies'].alignments).toEqual(['Straight', 'Corporate']);
+    const s = scenario();
+    const tob = under(s, 'p1', 'tobacco-companies');
+    const t = attack(s, 'control', tob, under(s, 'p2', 'c-i-a'));
+    expect(mod(t, 'Attack', 'tobacco-companies')).toBe(8);
+    expect(attackStrength(t, t.attack!).lines.some((l) => l.endsWith(': alignments'))).toBe(false);
   });
 
   it('Trekkies: Media Groups get +4 to take them over from their owner\'s hand too', () => {

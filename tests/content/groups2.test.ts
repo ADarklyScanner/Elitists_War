@@ -1039,12 +1039,6 @@ describe('Las Vegas', () => {
 });
 
 describe('audit fixes (D)', () => {
-  /** Run `fn` with a card's data patched to its printed value (the cards.json fix is pending), then restore it. */
-  function withData<T>(id: string, patch: Partial<(typeof CARDS)[string]>, fn: () => T): T {
-    const saved = { ...CARDS[id] };
-    Object.assign(CARDS[id], patch);
-    try { return fn(); } finally { Object.assign(CARDS[id], saved); }
-  }
   const attack = (s: GameState, pl: string, type: 'control' | 'destroy', attacker: string, target: string) =>
     act(s, pl, { type: 'attack', attackType: type, attacker, target });
   const bonus = (s: GameState, id: string) => line(s, s.attack!, 'Attack', CARDS[id].name);
@@ -1124,16 +1118,15 @@ describe('audit fixes (D)', () => {
     expect(line(t, t.attack!, 'Defense', 'Moonbase')).toBe(0);
   });
 
-  it('The Great Pyramid: as a Place, Disasters can strike it except Tornadoes and Hurricanes (data: Place, fix pending)', () => {
-    withData('the-great-pyramid', { subtype: 'Place' }, () => {
-      const s0 = scenario();
-      const gp = put(s0, 'p2', 'the-great-pyramid');
-      expect(() => disaster(s0, 'tornado', gp)).toThrow(/immune/);
-      expect(() => disaster(s0, 'hurricane', gp)).toThrow(/immune/);
-      const t = disaster(s0, 'earthquake', gp);
-      expect(t.attack?.target).toBe(gp);
-      expect(line(t, t.attack!, 'Defense', 'The Great Pyramid')).toBe(0);
-    });
+  it('The Great Pyramid: as a Place, Disasters can strike it except Tornadoes and Hurricanes', () => {
+    expect(CARDS['the-great-pyramid'].subtype).toBe('Place');
+    const s0 = scenario();
+    const gp = put(s0, 'p2', 'the-great-pyramid');
+    expect(() => disaster(s0, 'tornado', gp)).toThrow(/immune/);
+    expect(() => disaster(s0, 'hurricane', gp)).toThrow(/immune/);
+    const t = disaster(s0, 'earthquake', gp);
+    expect(t.attack?.target).toBe(gp);
+    expect(line(t, t.attack!, 'Defense', 'The Great Pyramid')).toBe(0);
   });
 
   it('France: the free defense needs no token, works once per attack and cannot be added to a normal opposition', () => {

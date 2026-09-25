@@ -21,15 +21,9 @@ import { resourceKinds } from './plots3';
 
 // ---------------------------------------------------------------- helpers
 
-/** Printed Gadget/Artifact footers the card data does not record yet (data fix pending). */
-const PRINTED_KINDS: Record<string, string[]> = {
-  'flying-saucer': ['Gadget', 'Artifact'],
-  'eliza': ['Gadget'],
-  'weather-satellite': ['Gadget'],
-};
-/** Is this Resource an Artifact or a Gadget (read from the data, plus the printed footers above)? */
+/** Is this Resource an Artifact or a Gadget (as recorded in its uniqueness footer or notes)? */
 const artifactOrGadget = (s: GameState, iid: string) =>
-  def(s, iid).type === 'Resource' && [...resourceKinds(s, iid), ...(PRINTED_KINDS[s.cards[iid].cardId] ?? [])].some((k) => k === 'Artifact' || k === 'Gadget');
+  def(s, iid).type === 'Resource' && resourceKinds(s, iid).some((k) => k === 'Artifact' || k === 'Gadget');
 
 const ctrl = (s: GameState, self: string) => controllerOf2(s, self);
 /** In play and face up (a Resource face down under Warehouse 23 does nothing). */

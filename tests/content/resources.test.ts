@@ -1076,7 +1076,7 @@ describe('Xanadu', () => {
 
 describe('audit fixes (D)', () => {
   it('Warehouse 23 fetches every printed Gadget or Artifact, wherever the data records its type', () => {
-    // Flying Saucer, Eliza and Weather Satellite: the data does not say Gadget/Artifact yet (fix pending);
+    // Flying Saucer, Eliza and Weather Satellite: the type is in the uniqueness footer;
     // Cyborg Soldiers, Earthquake Projector and The Frog God: the type is in the notes.
     for (const id of ['flying-saucer', 'eliza', 'weather-satellite', 'cyborg-soldiers', 'earthquake-projector', 'the-frog-god']) {
       let s = scenario();
