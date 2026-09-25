@@ -4,9 +4,10 @@ import {
   type Action, type GameState, type PlotPlay, type Side,
   applyAction, attackOptions, attackStrength, cardName, CARDS, createGame, currentOutcome, def, finalRoll,
   goalCount, goalNeeded, hasResponse, ILLUMINATI, isImplemented, GROUP_ABILITIES, openArrows, outSides,
-  plotOptions, plotsInHand, handLimit, power, resistance, globalPower, alignments, randomDeck,
+  plotOptions, plotsInHand, handLimit, power, resistance, globalPower, alignments, attributes, randomDeck,
   responseOptions, structureCards, subtree, takeoverOptions, tokenBarred, waitingFor, PLOTS, NWO_EFFECTS,
-  describePlay, player, leadOptions, type AiLevel, actionCancelled, actionSummary, abilitiesOf, abilityOptions, resourcesOf, canEnterPlay, HOOKS, goalsInHand, goalLimit,
+  describePlay, player, leadOptions, type AiLevel, actionCancelled, actionSummary, abilitiesOf, abilityOptions, resourcesOf, canEnterPlay, HOOKS, goalsInHand, goalLimit, legal, canExpose,
+  specialGoalProgress,
 } from '../engine';
 import { attachRect, rectOf, ensureLayout, type Rect } from '../engine/geometry';
 import { chooseAction, successChance } from '../ai/ai';
@@ -22,7 +23,7 @@ type Sel =
   | { kind: 'group'; iid: string }
   | { kind: 'attack'; attacker: string; type: 'control' | 'destroy' }
   | { kind: 'confirm'; attacker: string; target: string; type: 'control' | 'destroy'; side?: Side; plots: PlotPlay[]; privileged?: boolean }
-  | { kind: 'move'; group: string }
+  | { kind: 'move'; group: string; payWith?: string }
   | { kind: 'plot'; card: string }
   | { kind: 'takeover'; card: string }
   | { kind: 'discard'; cards: string[] }
@@ -33,6 +34,9 @@ type Sel =
 interface Ui {
   slotChoice?: string[];
   picked?: string[];
+  buyPick?: string[];
+  reliefPick?: { place: string; groups: string[] };
+  browse?: { kind: 'discard' | 'destroyed'; player: string };
   game: GameState | null;
   me: string;
   sel: Sel;
@@ -463,13 +467,17 @@ function computeGuide(s: GameState): Guide {
     const targets = new Set(opts.map((o) => o.target));
     const rivalCards = s.players.filter((p) => p.id !== ui.me).flatMap((p) => structureCards(s, p.id));
     mark(rivalCards, (c) => targets.has(c));
+    // Attacking to destroy your own Group is legal (R004): mark your own Groups too.
+    if (sel.type === 'destroy') mark(mine, (c) => targets.has(c));
     if (sel.type === 'control') mark(hand.filter((h) => def(s, h).type === 'Group'), (h) => targets.has(h));
-    g.next = [...targets].some((t) => s.cards[t].zone === 'hand') && ![...targets].some((t) => s.cards[t].zone === 'structure') ? 'hand' : 'rival';
+    g.next = [...targets].some((t) => s.cards[t].zone === 'hand') && ![...targets].some((t) => s.cards[t].zone === 'structure') ? 'hand'
+      : sel.type === 'destroy' && [...targets].every((t) => mine.includes(t)) ? 'board' : 'rival';
     g.text = targets.size ? `Step 3: tap a green target to attack to ${sel.type}.` : 'No legal targets for this attack: Cancel.';
     return g;
   }
   if (sel.kind === 'move') { g.ok.add('slots'); g.next = 'board'; g.text = 'Tap a green + to move the Group there.'; return g; }
-  if (sel.kind === 'link') { mark(mine, (c) => def(s, c).type !== 'Illuminati'); g.next = 'board'; g.text = 'Tap a green Group to link the Resource to it.'; return g; }
+  // A Resource may always be relinked back to your Illuminati, not only to a Group (R042).
+  if (sel.kind === 'link') { mark(mine, (c) => legal(s, ui.me, { type: 'link', resource: sel.resource, to: c })); g.next = 'board'; g.text = 'Tap a green Group (or your Illuminati) to link the Resource to it.'; return g; }
   if (sel.kind === 'group') { g.next = 'console'; g.text = 'Step 2: choose what this Group does (green buttons in the panel).'; return g; }
   if (sel.kind === 'confirm') { g.next = 'console'; g.text = 'Step 4: add any Plots, then Declare attack.'; return g; }
   if (sel.kind === 'plot' || sel.kind === 'resource') { g.next = 'console'; g.text = 'Pick how to play it in the panel, or Close.'; return g; }
@@ -544,6 +552,7 @@ function render() {
       <div class="ticker" aria-live="polite">${recent.map((l) => `<div>${esc(youText(l.text))}</div>`).join('')}</div>
       <div class="zoom"><button data-zoom="in" aria-label="Zoom in">+</button><button data-zoom="out" aria-label="Zoom out">−</button><button data-zoom="fit" title="See the whole table">All</button><button data-zoom="me" title="Jump to your seat">You</button>${!myTurn(s) && s.phase !== 'gameOver' ? `<button data-zoom="turn" title="Jump to the player whose turn it is">${esc(player(s, s.players[s.active].id).name)}'s turn</button>` : ''}</div>
       ${renderInspect(s)}
+      ${renderBrowse(s)}
       <aside class="sheet ${ui.sheetMin ? 'min' : ''} ${gnext('console')}">
         <div class="sheet-top">
           <button class="sheet-handle" data-act="sheet" aria-expanded="${!ui.sheetMin}">
@@ -795,6 +804,8 @@ function renderSide(s: GameState, pl: string, mine: boolean): string {
     cells.push(`<button class="cell slot ${G.ok.has('slots') ? 'g-ok' : ''}" style="${place(sl.r)}" data-slot="${group.map((g) => `${g.onto}:${g.side}`).join('|')}" aria-label="Place here">+</button>`);
   }
   const n = goalCount(s, pl), need = goalNeeded(s, pl);
+  const special = specialGoalProgress(s, pl);
+  const illDef = s.cards[p.illuminati] ? def(s, p.illuminati) : undefined;
   const head = `
       <div class="side-head">
         <span class="who">${mine ? 'You' : esc(p.name)}</span>
@@ -802,6 +813,10 @@ function renderSide(s: GameState, pl: string, mine: boolean): string {
           <span class="goal-bar"><span style="width:${Math.min(100, (n / need) * 100)}%"></span></span>
           <b>${n}</b>/${need} Groups
         </span>
+        ${special ? `<span class="goal" title="Progress toward ${esc(illDef?.name ?? 'the')}'s Special Goal">
+          <span class="goal-bar"><span style="width:${Math.min(100, (special.current / special.target) * 100)}%"></span></span>
+          <b>${special.current}</b>/${special.target} ${esc(special.label)}
+        </span>` : ''}
       </div>`;
   const field = `<div class="board-scroll"><div class="field" style="width:calc(var(--u) * ${maxX - minX});height:calc(var(--u) * ${maxY - minY})">${cells.join('')}</div></div>`;
   // Seat order mirrors a real table: your nameplate at your edge, the Power Structure toward the middle.
@@ -829,13 +844,20 @@ function seatRail(s: GameState, pl: string, mine: boolean): string {
   const spot = (label: string, body: string, cls = '') => `<div class="spot ${cls}"><div class="spot-card">${body}</div><span class="spot-label">${label}</span></div>`;
   const pile = (deck: 'plot' | 'group', n: number) => spot(deck === 'plot' ? 'Plots' : 'Groups', `<span class="cardback ${deck} ${n ? '' : 'empty'}" aria-hidden="true"></span><span class="spot-count">${n}</span>`, 'deck-spot');
   const top = p.discard[p.discard.length - 1];
+  // Every player's discard pile is public and browsable, not only its top card (R012).
   const discard = spot('Discard', top
-    ? `<button class="discard-top" data-inspect="${top}" title="Top of the discard pile (face up): ${esc(cardName(s, top))}"><b>${esc(cardName(s, top))}</b></button><span class="spot-count">${p.discard.length}</span>`
+    ? `<button class="discard-top" data-browse="discard:${pl}" title="Browse the discard pile (${p.discard.length} cards, face up)"><b>${esc(cardName(s, top))}</b></button><span class="spot-count">${p.discard.length}</span>`
     : '<span class="spot-empty">empty</span>', 'discard-spot');
+  const destroyedPile = Object.values(s.cards).filter((c) => c.owner === pl && c.zone === 'destroyed');
+  const destroyedTop = destroyedPile[destroyedPile.length - 1];
+  const destroyed = destroyedPile.length ? spot('Destroyed', `<button class="discard-top" data-browse="destroyed:${pl}" title="Browse the destroyed pile (${destroyedPile.length} cards)"><b>${esc(cardName(s, destroyedTop.iid))}</b></button><span class="spot-count">${destroyedPile.length}</span>`, 'discard-spot') : '';
   const plots = p.hand.filter((i) => def(s, i).type === 'Plot').length, groups = p.hand.length - plots;
   const fan = (deck: 'plot' | 'group', k: number) => Array.from({ length: Math.min(k, 6) }, () => `<span class="cardback ${deck}"></span>`).join('');
+  // A player's exposed Plots are face up and public, even in a rival's hand (R048).
+  const exposed = mine ? [] : exposedPlotsOf(s, pl);
   const hand = mine ? '' : `<div class="spot hand-spot" title="${plots} Plot${plots === 1 ? '' : 's'} and ${groups} Group${groups === 1 ? '' : 's'} in hand">
-      <div class="fan">${fan('plot', plots)}${fan('group', groups)}</div><span class="spot-label">Hand · ${plots} Plots · ${groups} Groups</span></div>`;
+      <div class="fan">${fan('plot', plots)}${fan('group', groups)}</div><span class="spot-label">Hand · ${plots} Plots · ${groups} Groups</span>
+      ${exposed.length ? `<div class="exposed-plots">${exposed.map((iid) => `<button class="exposed-plot" data-inspect="${iid}" title="Exposed Plot (face up)">${esc(cardName(s, iid))}</button>`).join('')}</div>` : ''}</div>`;
   const res = resourcesOf(s, pl);
   const tray = `<div class="spot res-tray"><div class="res-row">${res.map((r) => {
     const c = s.cards[r];
@@ -843,7 +865,7 @@ function seatRail(s: GameState, pl: string, mine: boolean): string {
     return `<button class="res ${sel ? 'selected' : ''} ${gcls(r)}" data-res="${r}"><b>${esc(cardName(s, r))}</b>${c.tokens ? '<span class="token-inline"></span>' : ''}<span class="muted small">${c.hiddenUnder ? `face down under ${esc(cardName(s, c.hiddenUnder))}` : c.linkedTo && s.cards[c.linkedTo] && def(s, c.linkedTo).type !== 'Illuminati' ? `linked to ${esc(cardName(s, c.linkedTo))}` : 'unlinked'}</span></button>`;
   }).join('') || '<span class="spot-empty">none in play</span>'}</div><span class="spot-label">Resources</span></div>`;
   // Your own decks live on the rail at the left of the screen, where you tap to draw.
-  return `<div class="seat-rail">${mine ? '' : pile('plot', p.plotDeck.length) + pile('group', p.groupDeck.length)}${discard}${hand}${tray}</div>`;
+  return `<div class="seat-rail">${mine ? '' : pile('plot', p.plotDeck.length) + pile('group', p.groupDeck.length)}${discard}${destroyed}${hand}${tray}</div>`;
 }
 
 function placementSlots(s: GameState, pl: string): { r: Rect; onto: string; side: Side }[] {
@@ -1185,6 +1207,9 @@ function renderConsole(s: GameState): string {
     ].filter(Boolean).join(' ');
     body = `<h2>${goalExcess ? 'Too many Goal cards' : 'Too many Plots'}</h2><p>${parts} Tap the cards in your hand.</p>
       <div class="btns"><button class="primary" data-act="discard" ${ok && sel.length ? '' : 'disabled'}>Discard ${sel.length} card${sel.length === 1 ? '' : 's'}</button><button data-act="return" ${ok && sel.length ? '' : 'disabled'}>Put back in my Plot deck</button></div>`;
+  } else if (ui.sel.kind === 'discard') {
+    // Voluntary discard/return/expose (R048): legal at any time, not only a forced prompt.
+    body = renderVoluntaryDiscard(s, ui.sel);
   } else if (s.window && waiting.includes(ui.me)) {
     const opts = responseOptions(s, ui.me);
     const ev = s.window.event;
@@ -1213,13 +1238,15 @@ function renderConsole(s: GameState): string {
       : s.window.kind === 'roll' ? '<p>The dice are down. Cards that change rolls can be played now.</p>' : '';
     body = `${s.attack ? attackPanel(s) : ''}${head}
       <div class="opts">${opts.map((o, i) => `<button data-opt="${i}">${esc(o.label)}</button>`).join('')}</div>
-      <div class="btns"><button class="primary" data-act="pass">${s.window.kind === 'attack' && s.attack?.attackerPlayer === ui.me ? '🎲 Roll the dice' : 'Pass'}</button>${s.window.kind === 'attack' && s.attack?.attackerPlayer === ui.me && !s.attack.instant && !s.attack.plays.some((pp) => pp.player === ui.me) ? '<button data-act="callOff">Call off the attack</button>' : ''}</div>`;
+      <div class="btns"><button class="primary" data-act="pass">${s.window.kind === 'attack' && s.attack?.attackerPlayer === ui.me ? '🎲 Roll the dice' : 'Pass'}</button>${s.window.kind === 'attack' && s.attack?.attackerPlayer === ui.me && !s.attack.instant && !s.attack.plays.some((pp) => pp.player === ui.me) ? '<button data-act="callOff">Call off the attack</button>' : ''}</div>
+      ${anyTimeBar(s)}${voluntaryBar(s)}`;
     (window as unknown as { __opts: typeof opts }).__opts = opts;
   } else if (idle(s)) {
     body = renderMainConsole(s);
   } else {
     const names = waiting.map((id) => player(s, id).name).join(', ');
-    body = `${s.attack ? attackPanel(s) : ''}<p class="muted thinking">${online ? (online.busy ? 'Sending…' : `Waiting for ${esc(names)}. You'll see their move here as soon as it's made.`) : ui.thinking ? 'The Computer is thinking…' : 'Waiting…'}</p>`;
+    body = `${s.attack ? attackPanel(s) : ''}<p class="muted thinking">${online ? (online.busy ? 'Sending…' : `Waiting for ${esc(names)}. You'll see their move here as soon as it's made.`) : ui.thinking ? 'The Computer is thinking…' : 'Waiting…'}</p>
+      ${anyTimeBar(s)}${voluntaryBar(s)}`;
   }
   return `<div class="panel now">${err}${body}</div>`;
 }
@@ -1267,12 +1294,10 @@ function renderMainConsole(s: GameState): string {
   }
   if (sel.kind === 'deck') {
     const ill = me.illuminati;
-    const payers = structureCards(s, ui.me).filter((g) => g !== ill && s.cards[g].tokens > 0);
     if (sel.deck === 'plot') {
-      return `<h2>Plot deck</h2><p>${me.plotDeck.length} cards left. Buying a Plot costs your Illuminati's Action token, or the tokens of two other Groups.</p>
-        <div class="btns"><button class="primary" data-act="buy-ill" ${s.cards[ill].tokens && me.plotDeck.length ? '' : 'disabled'}>Buy with the Illuminati's token</button>
-        <button data-act="buy-two" ${payers.length >= 2 && me.plotDeck.length ? '' : 'disabled'}>Buy with 2 Group tokens</button>
-        <button class="linkish" data-act="clear">Cancel</button></div>`;
+      return `<h2>Plot deck</h2><p>${me.plotDeck.length} cards left. Buying a Plot costs your Illuminati's Action token, or the tokens of two other Groups — at any time, not only in your own main phase.</p>
+        ${anyTimeBar(s)}
+        <div class="btns"><button class="linkish" data-act="clear">Close</button></div>`;
     }
     const can = s.cards[ill].tokens && !s.turnFlags.illumGroupDraw && me.groupDeck.length;
     return `<h2>Group deck</h2><p>${me.groupDeck.length} cards left. Once per turn your Illuminati can spend its Action token to draw a Group card.</p>
@@ -1294,7 +1319,12 @@ function renderMainConsole(s: GameState): string {
     return `<h2>Link ${esc(cardName(s, sel.resource))}</h2><p>Tap one of your Groups to link it to. A link can be moved once per turn.</p><div class="btns"><button class="linkish" data-act="clear">Cancel</button></div>`;
   }
   if (sel.kind === 'move') {
-    return `<h2>Move ${esc(cardName(s, sel.group))}</h2><p>Tap a + to move it (and its puppets) there. Costs one Action token.</p>
+    const free = s.turnFlags.freeMoves === ui.me;
+    const g = s.cards[sel.group];
+    const candidates = [sel.group, g.master, player(s, ui.me).illuminati].filter((x): x is string => !!x && s.cards[x]?.tokens > 0);
+    const payWith = sel.payWith ?? candidates[0];
+    return `<h2>Move ${esc(cardName(s, sel.group))}</h2><p>Tap a + to move it (and its puppets) there.${free ? ' This move is free.' : ' Costs one Action token.'}</p>
+      ${!free && candidates.length ? `<div class="label">Pay with</div><div class="opts">${candidates.map((c) => `<button class="${c === payWith ? 'on' : ''}" data-payer="${c}">${c === payWith ? '✓ ' : ''}${esc(cardName(s, c))}</button>`).join('')}</div>` : ''}
       <div class="btns"><button class="linkish" data-act="clear">Cancel</button></div>`;
   }
   if (sel.kind === 'plot') {
@@ -1305,26 +1335,81 @@ function renderMainConsole(s: GameState): string {
       ${PLOTS[d.id] ? (opts.length ? `<div class="opts">${opts.map((o, i) => `<button data-popt="${i}">${esc(o.label)}</button>`).join('')}</div>` : (tutorial() ? `<p class="why">${esc(whyNot(s, sel.card) ?? 'Not playable right now.')}</p>` : '<p class="muted">Not playable right now.</p>')) : '<p class="muted">This card is not in this version of the game yet.</p>'}
       <div class="btns"><button class="linkish" data-act="clear">Close</button></div>`;
   }
-  const ill = me.illuminati;
-  const payers = structureCards(s, ui.me).filter((g) => g !== ill && s.cards[g].tokens > 0).sort((a, b) => power(s, a) - power(s, b));
-  const reliefs = Object.values(s.cards).filter((c) => c.zone === 'structure' && c.devastated).map((c) => {
-    const need = 3 * (def(s, c.iid).power ?? 0);
-    const pool = structureCards(s, ui.me).filter((g) => s.cards[g].tokens > 0).sort((a, b) => power(s, b) - power(s, a));
-    const pay: string[] = []; let tot = 0;
-    for (const g of pool) { if (tot >= need) break; pay.push(g); tot += power(s, g); }
-    return { place: c.iid, need, pay, ok: tot >= need };
-  });
-  (window as unknown as { __relief: typeof reliefs }).__relief = reliefs;
   return `<h2>Your turn</h2>
     <p>Tap one of your Groups with a <span class="token-inline"></span> token to attack or move it. Tap a Plot in your hand to play it.</p>
     <div class="btns">
-      <button data-act="buy-ill" ${s.cards[ill].tokens && me.plotDeck.length ? '' : 'disabled'}>Buy a Plot (Illuminati token)</button>
-      <button data-act="buy-two" ${payers.length >= 2 && me.plotDeck.length ? '' : 'disabled'}>Buy a Plot (2 Group tokens)</button>
-      <button data-act="drawGroup" ${s.cards[ill].tokens && !s.turnFlags.illumGroupDraw && me.groupDeck.length ? '' : 'disabled'}>Draw a Group card (Illuminati token, once per turn)</button>
+      <button data-act="drawGroup" ${s.cards[me.illuminati].tokens && !s.turnFlags.illumGroupDraw && me.groupDeck.length ? '' : 'disabled'}>Draw a Group card (Illuminati token, once per turn)</button>
       <button class="primary" data-act="endTurn">End turn</button>
     </div>
-    ${reliefs.length ? `<div class="label">Relief for Devastated Places (needs 3× printed Power)</div><div class="opts">${reliefs.map((r, i) => `<button data-relief="${i}" ${r.ok ? '' : 'disabled'}>Relieve ${esc(cardName(s, r.place))} (needs ${r.need})${r.ok ? ` with ${r.pay.map((g) => esc(cardName(s, g))).join(', ')}` : ' — not enough Power with tokens'}</button>`).join('')}</div>` : ''}
+    ${anyTimeBar(s)}
+    ${voluntaryBar(s)}
     ${online ? '' : `<label class="toggle"><input type="checkbox" id="autopass" ${ui.autoPass ? 'checked' : ''}> Pass for me when I have no possible response</label>`}`;
+}
+
+/** Buying Plots and sending Relief are legal at any time (your turn, a rival's, or a response window). */
+function anyTimeBar(s: GameState): string {
+  const me = player(s, ui.me);
+  const ill = me.illuminati;
+  const allPayers = structureCards(s, ui.me).filter((g) => g !== ill && s.cards[g].tokens > 0).sort((a, b) => power(s, a) - power(s, b));
+  let buy = '';
+  if (me.plotDeck.length) {
+    if (ui.buyPick) {
+      const picked = ui.buyPick;
+      const ok = picked.length === 2 && new Set(picked).size === 2;
+      buy = `<div class="label">Buy a Plot: choose 2 Groups to pay</div><div class="opts">${allPayers.map((g) => `<button class="${picked.includes(g) ? 'on' : ''}" data-buy-toggle="${g}">${picked.includes(g) ? '✓ ' : ''}${esc(cardName(s, g))}</button>`).join('')}</div>
+        <div class="btns"><button class="primary" data-act="buy-confirm" ${ok ? '' : 'disabled'}>Confirm</button><button class="linkish" data-act="buy-cancel">Cancel</button></div>`;
+    } else {
+      buy = `<div class="btns">
+        <button data-act="buy-ill" ${s.cards[ill].tokens ? '' : 'disabled'}>Buy a Plot (Illuminati token)</button>
+        <button data-act="buy-open" ${allPayers.length >= 2 ? '' : 'disabled'}>Buy a Plot (2 Group tokens)</button>
+      </div>`;
+    }
+  }
+  const reliefs = Object.values(s.cards).filter((c) => c.zone === 'structure' && c.devastated && legal(s, ui.me, { type: 'relief', place: c.iid, payWith: structureCards(s, ui.me).filter((g) => s.cards[g].tokens > 0) }));
+  let relief = '';
+  if (reliefs.length) {
+    const pool = structureCards(s, ui.me).filter((g) => s.cards[g].tokens > 0).sort((a, b) => power(s, b) - power(s, a));
+    relief = `<div class="label">Relief for Devastated Places (needs 3× printed Power)</div><div class="opts">${reliefs.map((c) => {
+      const need = 3 * (def(s, c.iid).power ?? 0);
+      if (ui.reliefPick?.place === c.iid) return '';
+      return `<button data-relief-open="${c.iid}">Relieve ${esc(cardName(s, c.iid))} (needs ${need})</button>`;
+    }).join('')}</div>`;
+    if (ui.reliefPick && reliefs.some((c) => c.iid === ui.reliefPick!.place)) {
+      const place = ui.reliefPick.place;
+      const need = 3 * (def(s, place).power ?? 0);
+      const picked = ui.reliefPick.groups;
+      const tot = picked.reduce((n, g) => n + power(s, g), 0);
+      relief += `<div class="label">Relieve ${esc(cardName(s, place))}: choose which Groups pay (${tot} of ${need} Power)</div>
+        <div class="opts">${pool.map((g) => `<button class="${picked.includes(g) ? 'on' : ''}" data-relief-toggle="${g}">${picked.includes(g) ? '✓ ' : ''}${esc(cardName(s, g))} (${power(s, g)})</button>`).join('')}</div>
+        <div class="btns"><button class="primary" data-act="relief-confirm" ${tot >= need ? '' : 'disabled'}>Confirm</button><button class="linkish" data-act="relief-cancel">Cancel</button></div>`;
+    }
+  }
+  return buy + relief;
+}
+
+/** A button that opens the "tidy your hand" picker: discard, return a Plot to your deck, or expose a
+ * Plot, all legal at any time (R048), not only when forced by a hand limit. */
+function voluntaryBar(s: GameState): string {
+  const me = player(s, ui.me);
+  if (!me.hand.length) return '';
+  return `<div class="btns"><button data-act="tidy">Discard or return cards from my hand</button></div>`;
+}
+
+/** The picker for voluntary discards/returns/exposes: tap cards in the hand strip, then a button here. */
+function renderVoluntaryDiscard(s: GameState, sel: Extract<Sel, { kind: 'discard' }>): string {
+  const cards = sel.cards;
+  const allPlots = cards.length > 0 && cards.every((c) => def(s, c).type === 'Plot');
+  const canExposeAll = allPlots && cards.every((c) => !s.cards[c].exposed && canExpose(s, c));
+  return `<h2>Tidy your hand</h2><p>Tap cards in your hand to select them, then choose what to do. Legal at any time.</p>
+    <div class="btns">
+      <button class="primary" data-act="voluntary-discard" ${cards.length ? '' : 'disabled'}>Discard</button>
+      <button data-act="voluntary-return-top" ${allPlots ? '' : 'disabled'}>Return to deck: top</button>
+      <button data-act="voluntary-return-middle" ${allPlots ? '' : 'disabled'}>Return to deck: middle</button>
+      <button data-act="voluntary-return-bottom" ${allPlots ? '' : 'disabled'}>Return to deck: bottom</button>
+      ${canExposeAll && cards.length === 1 ? '<button data-act="voluntary-expose">Expose</button>' : ''}
+      <button class="linkish" data-act="clear">Cancel</button>
+    </div>
+    ${!cards.length ? '<p class="muted small">Only Plot cards can be returned to your deck or exposed.</p>' : ''}`;
 }
 
 function abilityButtons(s: GameState, card: string): string {
@@ -1340,9 +1425,16 @@ function renderInspect(s: GameState): string {
   const d = def(s, iid);
   const abil = GROUP_ABILITIES[d.id] ?? [];
   const pending = abil.filter((a) => a.kind === 'pending').map((a) => (a as { note: string }).note);
+  // Current (post-modifier) values, not just the card's printed stats (an NWO or ability can change them).
   const stats = d.type === 'Group' || d.type === 'Illuminati'
     ? `<div class="kv"><span>Power</span><b>${power(s, iid)}${d.globalPower ? ` / ${globalPower(s, iid)} Global` : ''}</b>${d.type === 'Group' ? `<span>Resistance</span><b>${resistance(s, iid)}</b>` : ''}</div>
-       <div>${alignments(s, iid).map(chip).join(' ')} ${(d.attributes ?? []).map((a) => `<span class="attr">${a}</span>`).join(' ')}</div>` : '';
+       <div>${alignments(s, iid).map(chip).join(' ')} ${attributes(s, iid).map((a) => `<span class="attr">${a}</span>`).join(' ')}</div>` : '';
+  // Plots and Resources linked to a Group (or its Illuminati) are public: everyone can see what is
+  // attached to it, not just its controller.
+  const linkedPlots = (d.type === 'Group' || d.type === 'Illuminati')
+    ? Object.values(s.cards).filter((c) => c.zone === 'table' && c.linkedTo === iid).map((c) => c.iid) : [];
+  const linkedRes = (d.type === 'Group' || d.type === 'Illuminati')
+    ? Object.values(s.cards).filter((c) => c.zone === 'resources' && c.linkedTo === iid && !c.hiddenUnder).map((c) => c.iid) : [];
   return `<div class="panel inspect popover">
     <button class="close" data-act="closeInspect" aria-label="Close">×</button>
     <div class="label">${esc(d.subtype)}</div><h3>${esc(d.name)}</h3>${stats}
@@ -1352,7 +1444,30 @@ function renderInspect(s: GameState): string {
     ${pending.length ? `<p class="small warn">Not active yet in this version: ${esc(pending.join('; '))}.</p>` : ''}
     ${d.type === 'Plot' && !PLOTS[d.id] ? '<p class="small warn">This Plot is not in this version yet.</p>' : ''}
     ${d.subtype === 'NWO' && NWO_EFFECTS[d.id] ? '<p class="small muted">In effect for everyone while on the table.</p>' : ''}
+    ${linkedPlots.length ? `<div class="label">Plots linked here</div><div class="opts">${linkedPlots.map((p) => `<button data-inspect="${p}">${esc(cardName(s, p))}</button>`).join('')}</div>` : ''}
+    ${linkedRes.length ? `<div class="label">Resources linked here</div><div class="opts">${linkedRes.map((r) => `<button data-inspect="${r}">${esc(cardName(s, r))}</button>`).join('')}</div>` : ''}
   </div>`;
+}
+
+/** A rival's exposed Plots, a player's full discard pile, or a player's destroyed pile: all public
+ * information (R012, R048; exposed Plots per R048's "Hidden and Exposed Plots"), browsable card by
+ * card rather than just the top or a count. */
+function renderBrowse(s: GameState): string {
+  const b = ui.browse;
+  if (!b || !s.cards) return '';
+  const p = player(s, b.player);
+  const cards = b.kind === 'discard' ? p.discard : Object.values(s.cards).filter((c) => c.owner === b.player && c.zone === 'destroyed').map((c) => c.iid);
+  const title = b.kind === 'discard' ? `${b.player === ui.me ? 'Your' : `${esc(p.name)}'s`} discard pile` : `${b.player === ui.me ? 'Your' : `${esc(p.name)}'s`} destroyed pile`;
+  return `<div class="panel inspect popover browse">
+    <button class="close" data-act="closeBrowse" aria-label="Close">×</button>
+    <div class="label">${title} (${cards.length})</div>
+    <div class="opts">${cards.length ? [...cards].reverse().map((iid) => `<button data-inspect="${iid}">${esc(cardName(s, iid))}</button>`).join('') : '<p class="muted small">Empty.</p>'}</div>
+  </div>`;
+}
+
+/** A rival's exposed Plots, held in hand but face up: public information (R048). */
+function exposedPlotsOf(s: GameState, pl: string): string[] {
+  return player(s, pl).hand.filter((h) => def(s, h).type === 'Plot' && s.cards[h].exposed);
 }
 
 function renderLog(s: GameState): string {
@@ -1435,6 +1550,10 @@ function onHandCard(iid: string) {
     if (d.type !== 'Plot') return render();
     const cards = sel.kind === 'discard' ? sel.cards : [];
     ui.sel = { kind: 'discard', cards: cards.includes(iid) ? cards.filter((c) => c !== iid) : [...cards, iid] };
+  } else if (sel.kind === 'discard') {
+    // Voluntary tidy-your-hand mode (R048): any card can be selected to discard or expose; only
+    // Plots can be selected to return to the deck.
+    ui.sel = { kind: 'discard', cards: sel.cards.includes(iid) ? sel.cards.filter((c) => c !== iid) : [...sel.cards, iid] };
   } else if (s.prompt?.player === ui.me && s.prompt.kind === 'takeover' && d.type === 'Resource') {
     if (canEnterPlay(s, iid, ui.me)) { act({ type: 'takeover', card: iid, onto: player(s, ui.me).illuminati, side: 'TOP' }); return; }
   } else if (s.prompt?.player === ui.me && s.prompt.kind === 'takeover' && d.type === 'Group') {
@@ -1455,21 +1574,28 @@ function bind() {
   app.querySelectorAll<HTMLElement>('[data-card]').forEach((b) => b.onclick = () => onTableCard(b.dataset.card!));
   app.querySelectorAll<HTMLElement>('[data-hand]').forEach((b) => b.onclick = () => onHandCard(b.dataset.hand!));
   app.querySelectorAll<HTMLElement>('[data-inspect]').forEach((b) => b.onclick = () => { ui.inspect = b.dataset.inspect; render(); });
+  app.querySelectorAll<HTMLElement>('[data-browse]').forEach((b) => b.onclick = () => {
+    const [kind, pl] = b.dataset.browse!.split(':') as ['discard' | 'destroyed', string];
+    ui.browse = { kind, player: pl };
+    render();
+  });
   app.querySelectorAll<HTMLElement>('[data-slot]').forEach((b) => b.onclick = () => {
     const choices = b.dataset.slot!.split('|');
     if (choices.length > 1) { ui.slotChoice = choices; render(); return; }
     placeAt(choices[0]);
   });
   app.querySelectorAll<HTMLElement>('[data-slotpick]').forEach((b) => b.onclick = () => { const c = b.dataset.slotpick!; ui.slotChoice = undefined; placeAt(c); });
+  app.querySelectorAll<HTMLElement>('[data-payer]').forEach((b) => b.onclick = () => { if (ui.sel.kind === 'move') { ui.sel = { ...ui.sel, payWith: b.dataset.payer }; render(); } });
   function placeAt(choice: string) {
     const [onto, side] = choice.split(':') as [string, Side];
     const sel = ui.sel;
     if (sel.kind === 'takeover') act({ type: 'takeover', card: sel.card, onto, side });
     else if (sel.kind === 'move') {
       const g = s.cards[sel.group];
-      const payWith = [sel.group, g.master!, onto, player(s, ui.me).illuminati].find((x) => s.cards[x]?.tokens > 0);
-      if (!payWith) { ui.error = 'Moving needs a token from the Group, its old or new master, or your Illuminati.'; render(); return; }
-      act({ type: 'move', group: sel.group, onto, side, payWith });
+      const free = s.turnFlags.freeMoves === ui.me;
+      const payWith = sel.payWith ?? [sel.group, g.master!, onto, player(s, ui.me).illuminati].find((x) => s.cards[x]?.tokens > 0);
+      if (!free && !payWith) { ui.error = 'Moving needs a token from the Group, its old or new master, or your Illuminati.'; render(); return; }
+      act({ type: 'move', group: sel.group, onto, side, payWith: free ? undefined : payWith });
     } else if (sel.kind === 'confirm') { ui.sel = { ...sel, side }; render(); }
   }
   app.querySelectorAll<HTMLElement>('[data-opt]').forEach((b) => b.onclick = () => {
@@ -1542,6 +1668,7 @@ function bind() {
       case 'log': ui.showLog = !ui.showLog; render(); break;
       case 'style': ui.showStyle = !ui.showStyle; render(); break;
       case 'closeInspect': ui.inspect = undefined; render(); break;
+      case 'closeBrowse': ui.browse = undefined; render(); break;
       case 'guide':
         ui.help = HELP_MODES[(HELP_MODES.indexOf(ui.help) + 1) % HELP_MODES.length];
         ui.guide = ui.help !== 'off';
@@ -1561,14 +1688,46 @@ function bind() {
       case 'skipDraw': act({ type: 'skipDraw' }); break;
       case 'playResource': if (sel.kind === 'resource') act({ type: 'playResource', card: sel.iid }); break;
       case 'linkStart': if (sel.kind === 'resource') { ui.sel = { kind: 'link', resource: sel.iid }; render(); } break;
-      case 'buy-ill': if (sel.kind === 'deck') ui.sel = { kind: 'none' }; act({ type: 'buyPlot', payWith: [player(s, ui.me).illuminati] }); break;
-      case 'buy-two': {
+      case 'buy-ill': act({ type: 'buyPlot', payWith: [player(s, ui.me).illuminati] }); break;
+      case 'buy-open': {
+        // Choose which 2 Groups pay: default to the weakest two, but the player may change it.
         const ill = player(s, ui.me).illuminati;
         const payers = structureCards(s, ui.me).filter((g) => g !== ill && s.cards[g].tokens > 0).sort((a, c) => power(s, a) - power(s, c));
-        if (sel.kind === 'deck') ui.sel = { kind: 'none' };
-        act({ type: 'buyPlot', payWith: payers.slice(0, 2) });
-        break;
+        ui.buyPick = payers.slice(0, 2);
+        render(); break;
       }
+      case 'buy-toggle': {
+        const g = b.dataset.buyToggle!;
+        const cur = ui.buyPick ?? [];
+        ui.buyPick = cur.includes(g) ? cur.filter((x) => x !== g) : [...cur, g];
+        render(); break;
+      }
+      case 'buy-confirm': if (ui.buyPick?.length === 2) { const pay = ui.buyPick; ui.buyPick = undefined; act({ type: 'buyPlot', payWith: pay }); } break;
+      case 'buy-cancel': ui.buyPick = undefined; render(); break;
+      case 'relief-open': {
+        const place = b.dataset.reliefOpen!;
+        const need = 3 * (def(s, place).power ?? 0);
+        const pool = structureCards(s, ui.me).filter((g) => s.cards[g].tokens > 0).sort((a, c) => power(s, c) - power(s, a));
+        const groups: string[] = []; let tot = 0;
+        for (const g of pool) { if (tot >= need) break; groups.push(g); tot += power(s, g); }
+        ui.reliefPick = { place, groups };
+        render(); break;
+      }
+      case 'relief-toggle': {
+        const g = b.dataset.reliefToggle!;
+        if (!ui.reliefPick) break;
+        const cur = ui.reliefPick.groups;
+        ui.reliefPick = { ...ui.reliefPick, groups: cur.includes(g) ? cur.filter((x) => x !== g) : [...cur, g] };
+        render(); break;
+      }
+      case 'relief-confirm': if (ui.reliefPick) { const r = ui.reliefPick; ui.reliefPick = undefined; act({ type: 'relief', place: r.place, payWith: r.groups }); } break;
+      case 'relief-cancel': ui.reliefPick = undefined; render(); break;
+      case 'tidy': ui.sel = { kind: 'discard', cards: [] }; render(); break;
+      case 'voluntary-discard': if (sel.kind === 'discard' && sel.cards.length) act({ type: 'discard', cards: sel.cards }); break;
+      case 'voluntary-return-top': if (sel.kind === 'discard' && sel.cards.length) act({ type: 'discard', cards: sel.cards, toDeck: true, position: 'top' }); break;
+      case 'voluntary-return-middle': if (sel.kind === 'discard' && sel.cards.length) act({ type: 'discard', cards: sel.cards, toDeck: true, position: 'middle' }); break;
+      case 'voluntary-return-bottom': if (sel.kind === 'discard' && sel.cards.length) act({ type: 'discard', cards: sel.cards, toDeck: true, position: 'bottom' }); break;
+      case 'voluntary-expose': if (sel.kind === 'discard' && sel.cards.length === 1) act({ type: 'exposeCard', card: sel.cards[0] }); break;
       case 'atk-control': if (sel.kind === 'group') { ui.sel = { kind: 'attack', attacker: sel.iid, type: 'control' }; render(); } break;
       case 'atk-destroy': if (sel.kind === 'group') { ui.sel = { kind: 'attack', attacker: sel.iid, type: 'destroy' }; render(); } break;
       case 'move': if (sel.kind === 'group') { ui.sel = { kind: 'move', group: sel.iid }; render(); } break;

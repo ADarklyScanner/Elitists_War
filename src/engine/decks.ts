@@ -69,9 +69,12 @@ export function randomDeck(seed: number, illuminati?: string, opts: { groups?: n
   };
   const ill = illuminati ?? ILLUMINATI[Math.floor(r() * ILLUMINATI.length)].id;
   const theme = THEMES[ill] ?? {};
-  const nGroups = opts.groups ?? 26;
+  // The rulebook's deck-building guidance (p.2) calls a 45-card deck (including the Illuminati)
+  // typical with 12-20 Group cards and 24-32 Plot cards, so Groups+Plots is always 44. Pick a
+  // Group count in that range per deck instead of always building the same ratio.
+  const nGroups = opts.groups ?? 12 + Math.floor(r() * 9);
   const nPlots = opts.plots ?? 44 - nGroups;
-  const nRes = Math.min(PLAYABLE_RESOURCES.length, Math.round(nGroups / 8));
+  const nRes = Math.min(PLAYABLE_RESOURCES.length, Math.round(nGroups / 6));
   const nG = nGroups - nRes;
 
   // A theme alignment (from the Illuminati, or picked) and a second one that does not clash with it.

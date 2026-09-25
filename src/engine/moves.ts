@@ -213,9 +213,25 @@ export function abilityOptions(s: GameState, pl: string, card: string): MoveOpti
     const modes = n.modes ?? [undefined];
     const aligns = n.alignment ? ALIGNMENTS : [undefined];
     for (const target of targets) for (const mode of modes) for (const alignment of aligns) {
-      const params = { target, mode, alignment };
+      // Helper Groups (e.g. Relief): try none, then add your other Groups with a token, strongest
+      // first, one at a time, until the ability's own check accepts the total. The target itself,
+      // your Illuminati and this card are never offered as helpers.
+      let payWith: string[] | undefined;
+      if (n.helpers) {
+        const helperPool = structureCards(s, pl)
+          .filter((g) => g !== card && g !== target && g !== player(s, pl).illuminati && s.cards[g].tokens > 0)
+          .sort((a, b) => power(s, b) - power(s, a));
+        const tried: string[] = [];
+        if (!checkAbility(s, pl, card, ab.id, { target, mode, alignment, payWith: [] })) payWith = [];
+        else for (const g of helperPool) {
+          tried.push(g);
+          if (!checkAbility(s, pl, card, ab.id, { target, mode, alignment, payWith: tried })) { payWith = [...tried]; break; }
+        }
+        if (payWith === undefined) continue;
+      }
+      const params = { target, mode, alignment, ...(n.helpers ? { payWith } : {}) };
       if (checkAbility(s, pl, card, ab.id, params)) continue;
-      const bits = [ab.label, target ? `on ${cardName(s, target)}` : '', mode ?? '', alignment ?? ''].filter(Boolean);
+      const bits = [ab.label, target ? `on ${cardName(s, target)}` : '', mode ?? '', alignment ?? '', payWith?.length ? `with ${payWith.map((g) => cardName(s, g)).join(', ')}` : ''].filter(Boolean);
       out.push({ label: `${cardName(s, card)}: ${bits.join(' · ')}`, action: { type: 'useAbility', card, ability: ab.id, params } });
     }
   }

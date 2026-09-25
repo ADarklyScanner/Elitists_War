@@ -33,7 +33,7 @@ Tests are named as `file › "test name"`. `compliance` is `tests/compliance.tes
 | R009 Cancelling | Tested | Inside an attack, Plots and abilities are recorded in play order and can be cancelled (and the cancel cancelled) until the dice settle. A cancelled attacking action ends the attack: aiding and opposing Groups get their tokens back and other players' Plots go back to hand, exposed. Outside attacks, moves, main-phase abilities, Relief, Resource plays, links and the Illuminati's Group draw are announced (the `action` event) so rivals may respond or cancel; costs stay paid, and a cancelled once-per-turn action may be tried again. The attacker may call off an attack until he commits a Plot. | features › "a cancelled action never happens, but its costs stay paid and a once-per-turn action may be retried", "waits for responses when a card can answer, then carries the action out"; compliance › "the attacker may call off an attack before committing a Plot; helpers get tokens back"; content/groups1 › "Nuclear Power Companies cancel the attacking Group's action" |
 | R010 Timing | Tested | Effects apply in the order played and a later effect can undo an earlier one. Every player gets a chance to answer before a roll or a resolution; an attack's strength is only fixed once everyone has passed. Plays are checked for legality when made. | rules › "+10 Plots add to the attack, and a cancelled cancel restores them (R010)"; features › "opens no window and happens at once when nobody can respond" |
 | R011 Cards over rules | Tested | Card scripts (hooks and ability entries) override the general rules where they disagree. | content/groups0 › "Intellectuals: the Media master cannot be captured" › "forbids an Attack to Control on it, not an Attack to Destroy"; content/groups0 › "Gun Lobby" › "Resistance becomes 10 against Liberal attackers" |
-| R012 Public discards | Tested | Each player's discard pile is visible to everyone. | compliance › "a rival sees the cards in another player's discard pile" |
+| R012 Public discards | Tested | Each player's discard pile, and his destroyed pile, is visible to everyone and browsable card by card, not only its top card. | compliance › "a rival sees the cards in another player's discard pile" |
 | R013 No dropping | Tested | There is no move that removes a Group from a Power Structure at will; only attacks, moves and card effects change it. | compliance › "a Group in play can never be discarded or dropped (R013, R039)" |
 | R014 Secret Groups | Tested | Only Illuminati and Secret Groups may attack, aid against or oppose for a Secret Group, except its own master and puppets, which may defend it and aid it. In any attack by or against a Secret Group, Groups' ability bonuses are ignored; Plots still work, and so do Resources unless linked to a Group that is not Secret. Secret Groups are never exposed (house ruling). | compliance › "only Illuminati or Secret Groups may attack a Secret Group (R014)", "a Resource still works in an attack on a Secret Group, unless it is linked to a non-Secret Group"; content/groups0 › "Junk Mail" › "may attack a Secret Group, with +6 to control it" |
 | R015 NWO order | Tested | NWOs sit in three colour slots and apply one at a time; a new NWO of a colour replaces the old one. | compliance › "NWOs: a new one of the same colour replaces the old one (R045)" |
@@ -58,7 +58,7 @@ Tests are named as `file › "test name"`. `compliance` is `tests/compliance.tes
 | R034 Instant attacks | Tested | Launched by a card, with the card's Power against the target's Power as it was when the card was played (plus position unless it is the owner's own card). Only abilities that name Instant attacks apply; no Group joins unless a card allows it; the target cannot spend tokens; it cannot be called off; two cannot overlap. | compliance › "the target of an Instant attack cannot spend tokens, and a Disaster costs it a token", "an Instant attack cannot be called off (R034)" |
 | R035 Assassinations | Tested | An Instant attack on a Personality; if it succeeds the Personality is marked killed, and only cards that restore killed Personalities bring it back. | compliance › "a successful Assassination kills the Personality (R035)"; content/groups0 › "C.I.A., Clone Arrangers and Joggers" › "C.I.A. turns an attack on a Personality into an Assassination; Clone Arrangers bring it back" |
 | R036 Disasters | Tested | An Instant attack on a Place that takes one of its tokens when played (given back if the Disaster is cancelled). Success Devastates the Place, or destroys it when the card's margin is reached. | compliance › "a cancelled Disaster gives back the token it took (R036, R009)"; rules › "Volcano uses Power 18 (errata) and Devastates or destroys a Place" |
-| R037 Devastation and Relief | Tested | A Devastated Place and everything below it lose their tokens, get none, and do not count for Goals; Devastating it again does nothing; moving a Group under it strips its tokens. Relief by one player's Groups with Power totalling 3× the printed Power clears it, at any moment that player may act. | compliance › "a Devastated Place and its puppets do not count toward the goal (R037)", "Relief needs actions totalling three times the Place's printed Power"; content/groups2 › "Center for Disease Control" › "sends Relief to a Devastated Place with its action" |
+| R037 Devastation and Relief | Tested | A Devastated Place and everything below it lose their tokens, get none, and do not count for Goals; Devastating it again does nothing; moving a Group under it strips its tokens. Relief by one player's Groups with Power totalling 3× the printed Power clears it, at any moment that player may act: in his own main phase, a rival's turn, or any response window he can act in, and he chooses which of his Groups pay. Relief abilities (Red Cross, NATO, United Nations, the Center for Disease Control, the Boy Sprouts) offer the same choice of helper Groups, and the Boy Sprouts' Relief honours the Corruption Plot's "no Relief yet" block like the others. | compliance › "a Devastated Place and its puppets do not count toward the goal (R037)", "Relief needs actions totalling three times the Place's printed Power"; content/groups2 › "Center for Disease Control" › "sends Relief to a Devastated Place with its action"; features › "abilityOptions fills payWith for a Relief ability that needs helper Groups", "Boy Sprouts' Relief still respects the Corruption Plot's 'no Relief yet' block" |
 | R038 Moving Groups | Tested | In his own main phase a player moves a Group, with its puppets in the same layout, to an open arrow in his own structure (house ruling), for a token from the Group, its old or new master, or the Illuminati. Puppets that no longer fit are placed elsewhere under the same master or returned to hand. | compliance › "costs one token from the Group, a master, or the Illuminati", "a Group moves with its puppets, and only within its own Power Structure (R038)"; geometry › "moves keep every puppet centred on its master's arrow" |
 | R039 No dropping | Tested | Same as R013: nothing lets a player remove his own Group. | compliance › "a Group in play can never be discarded or dropped (R013, R039)" |
 | R040 Gifts and trades | Gap | Players cannot give or trade cards, Resources or Groups. | not tested |
@@ -69,7 +69,7 @@ Tests are named as `file › "test name"`. `compliance` is `tests/compliance.tes
 | R045 NWOs | Tested | One NWO per colour, the newest replaces the old; they affect everyone, their changes count for Goals, and they cannot be played during an Instant or Privileged attack. | compliance › "NWOs: a new one of the same colour replaces the old one (R045)", "an NWO cannot be played during a Privileged attack (R032, R045)"; content/plots6 › "New World Orders" › "Military-Industrial Complex: Corporate cards are Government too, but not for Goals" |
 | R046 Group basics | Tested | Illuminati have four arrows and cannot be attacked. Alignment opposites are built in (two Fanatics are opposites, Criminal has none); gaining one alignment removes its opposite. Cards are real 5×7 rectangles that turn to face their master and may never overlap, so a card lying sideways can close a neighbour's arrow. | compliance › "gaining an alignment removes its opposite (R046)"; geometry › "stands cards on top/bottom arrows upright and lays cards on side arrows sideways", "closes an arrow when a card lying there would overlap another card"; data › "every Group has stats and a legal arrow layout" |
 | R047 Calculation order | Tested | Set-to values first, then the single largest multiplier (self-defense one step higher), then additions; Power never below 0. Attack rolls: 2d6, at or under strength wins, 11–12 always fails, strength under 2 fails without a roll. A destroyed Group comes back with printed values. | compliance › "Solidarity does not stack with another multiplier and applies before additions", "a natural 11 or 12 always fails", "strength below 2 fails without a roll" |
-| R048 Discards and card access | Tested | Discards go face up to the owner's pile and every card keeps its owner. Draws come from the top of a deck unless a card says otherwise. Discarding at will is not offered (see gaps). | compliance › "a rival sees the cards in another player's discard pile" |
+| R048 Discards and card access | Tested | Discards go face up to the owner's pile and every card keeps its owner. Draws come from the top of a deck unless a card says otherwise. A player may discard any card from his hand at will, at any time; a Plot may instead be returned to his Plot deck (top, middle or bottom of his choosing) or voluntarily exposed, also at any time, not only when forced by a hand limit. | compliance › "a rival sees the cards in another player's discard pile"; features › "a Group may voluntarily discard any card from its hand at any time (R048)", "a Plot may voluntarily be returned to the deck at a chosen position (R048)", "a Plot may voluntarily be exposed at any time (R048)" |
 | R049 Elimination | Tested | After his third turn, a player whose Illuminati has no puppets is out at once: his hand and decks leave the game, and his Resources leave play (or pass to a same-Illuminati faction that knocked him out). A player of the destroy-count Illuminati who destroys his own last Group for his winning total is not knocked out and wins at the end of the turn. | compliance › "a player with no Groups after his third turn is eliminated at once (R049)", "an eliminated player's Resources leave play (R049)", "the Servants of Cthulhu destroying their own last Group as the 8th win at the end of the turn instead (R049)" |
 | R050 Special card kinds | Tested | Not a rule of its own: Illuminati, NWOs, Goal cards and the Plot families follow their own rows (R016, R028, R044, R045). | see those rows |
 
@@ -118,7 +118,10 @@ Engine choices, made so the game can be played on screens, in pieces and online:
 - **Start-of-turn draws**: people draw each card by hand (and may skip); computer players always draw,
   since a draw never hurts during your own turn.
 - **"Any time" plays** (including NWOs) are allowed in your own main phase, in every response window
-  and at the end of every turn, but not at an arbitrary moment of a rival's main phase.
+  and at the end of every turn, but not at an arbitrary moment of a rival's main phase. Buying a Plot
+  and sending Relief have no such restriction in the engine (the rulebook's own "Any Time" Moves, p.3),
+  and the interface offers them wherever they are legal: your own turn, a rival's, or any response
+  window you can act in — not only your own idle main phase.
 - **Announcing**: actions outside attacks are announced only when nothing else is happening; inside
   another window they happen at once. Linking spends no Group's token, so only Plots can answer it.
   Buying Plots is never announced (R027). A window closes when everyone has passed; online, a player who
@@ -155,8 +158,6 @@ Engine choices, made so the game can be played on screens, in pieces and online:
   and the "one agent per Illuminati" rules do not exist yet.
 - **First-turn protection exception** (R001): a player who attacks someone during his first turn is
   still protected from that player until the turn ends.
-- **Discarding or returning Plots at will** (R027, R048): a player can only discard or return Plots
-  to the deck when over a hand limit.
 - **Warehouse 23 and Unique duplicates** (R041): a Unique Resource hidden face down simply blocks a
   rival's copy; the owner is not asked to reveal it, and the rival never gets to keep his copy in play.
 - **Link restrictions** (R042): a Resource that already helped this turn may still have its link moved
@@ -185,3 +186,37 @@ Engine choices, made so the game can be played on screens, in pieces and online:
   Reagan is immune to Media Groups even while in a hand; Elders of Zion's reorganization ends at the
   player's next step other than a move; Tax Reform no longer taxes automatically or the I.R.S.'s own
   controller.
+- **Deck ratios** (`randomDeck`, p.2's deck-building guidance): the rulebook calls a deck of 12 to 20
+  Group cards and 24 to 32 Plot cards typical, out of the 44 non-Illuminati cards in a 45-card deck. The
+  generator built roughly 26 Groups/Resources and 18 Plots every time, outside that range; it now picks
+  a Group count spread across the book's 12-20, with Plots filling out the rest (always inside 24-32),
+  keeping its theme, attacker and arrows-out guarantees and its Plot category balance (features ›
+  decks.test.ts › "sits inside the rulebook's typical 12-20 Group / 24-32 Plot ranges over many seeds").
+- **Buying Plots and sending Relief** were only offered by the interface during your own idle main
+  phase, although both are legal at any time (see above); they are now offered wherever they are legal,
+  and the player chooses which Groups pay instead of the interface always picking the weakest (or
+  greedy strongest-first) set for him.
+- **`abilityOptions` never filled `payWith`** for a Relief special ability (Red Cross, NATO, United
+  Nations, the Center for Disease Control, the Boy Sprouts), so a helper Group's Power was never offered
+  even when it was needed to reach 3× the Place's printed Power; it now searches for a working set of
+  helper Groups. The Boy Sprouts' own Relief ability separately never checked the Corruption Plot's "no
+  Relief yet" block that the other Relief abilities already honoured; it now does too.
+- **Choosing who pays**: a Group's move, a Plot bought with 2 Group tokens, and a Group-paid Relief all
+  used to pick the payer(s) for you (the weakest available, or a greedy strongest-first set); the
+  interface now preselects a sensible default and lets the player change it. Fixed a bug where a free
+  move (Reorganization Plot, Bermuda Triangle) was refused by the interface whenever none of the four
+  possible payers happened to have a token, even though the move needs no payer at all when it is free.
+- **Reachability and public information**: the interface now highlights your own Groups as legal
+  targets when attacking to destroy one of them is legal (R004), and your Illuminati as a legal link
+  target when relinking a Resource to it is legal (R042) — both were always legal in the engine but
+  never highlighted. A rival's exposed Plots, every player's full discard and destroyed piles (browsable
+  card by card, not just a top card or a count), and progress toward an Illuminati's Special Goal (not
+  only the Basic Goal) are now shown for every player, and a Group's inspect popover lists the Plots and
+  Resources linked to it. Inspecting a card now reads its current (post-modifier) attributes, not only
+  its printed ones — the inspect popover was reading a Group's printed attributes even though its
+  current Power, Resistance and alignments were already correct.
+- **Voluntary discards, returns and exposing** (R048, "Returning Plots to Your Deck" and "Hidden and
+  Exposed Plots", p.4-5): a player can now discard any card from his hand, return a Plot to his own
+  deck at a chosen position (top, middle or bottom), or voluntarily expose a Plot, at any time — not
+  only when a hand or Goal-card limit forces a discard. This closes the "Discarding or returning Plots
+  at will" gap listed in an earlier audit.

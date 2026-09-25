@@ -284,7 +284,7 @@ export type Action =
   | { type: 'takeover'; card: string; onto: string; side: Side }
   | { type: 'skipTakeover' }
   | { type: 'attack'; attackType: AttackType; attacker: string; target: string; side?: Side; plots?: PlotPlay[]; privileged?: boolean }
-  | { type: 'move'; group: string; onto: string; side: Side; payWith: string }
+  | { type: 'move'; group: string; onto: string; side: Side; payWith?: string }
   | { type: 'playPlot'; play: PlotPlay }
   | { type: 'buyPlot'; payWith: string[] }
   | { type: 'drawGroup' }
@@ -299,7 +299,8 @@ export type Action =
   | { type: 'oppose'; group: string; useGlobal?: boolean }
   | { type: 'pass' }
   | { type: 'endTurn' }
-  | { type: 'discard'; cards: string[]; toDeck?: boolean }
+  | { type: 'discard'; cards: string[]; toDeck?: boolean; position?: 'top' | 'middle' | 'bottom' }
+  | { type: 'exposeCard'; card: string }
   | { type: 'chooseLead'; card: string }
   | { type: 'choose'; ids: string[] }
   | { type: 'callOff' }

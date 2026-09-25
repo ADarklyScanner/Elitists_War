@@ -3,10 +3,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   actionSummary, advance, announcedAction, applyAction, askChoice, raiseEvent, registerChoice, registerPlots, respondToAction, revealTo,
-  startCardAttack, waitingFor,
+  startCardAttack, waitingFor, power, structureCards,
   CARDS, PLOTS, type Action, type GameState,
 } from '../src/engine';
-import { plotOptions, targetPool } from '../src/engine/moves';
+import { plotOptions, targetPool, abilityOptions } from '../src/engine/moves';
 import { viewFor } from '../src/server/service';
 import { give, scenario, checkInvariants } from './helpers';
 import { chooseAction } from '../src/ai/ai';
@@ -248,5 +248,90 @@ describe('drawing by hand at the start of a person\'s turn', () => {
   it('computer players still draw automatically', () => {
     const s = toMyTurn();
     expect(s.log.some((l) => l.player === 'p2' && /draws 1 Plot card/.test(l.text))).toBe(true);
+  });
+});
+
+describe('audit fixes', () => {
+  it('abilityOptions fills payWith for a Relief ability that needs helper Groups', () => {
+    const s = scenario();
+    const nato = give(s, 'p1', 'nato', { under: s.players[0].illuminati, side: 'LEFT' });
+    const helper = give(s, 'p1', 'hollywood', { under: s.players[0].illuminati, side: 'TOP' });
+    const place = give(s, 'p1', 'china', { under: s.players[0].illuminati, side: 'BOTTOM' });
+    s.cards[place].devastated = true;
+    // NATO alone (3x its own Power) is not enough for China's need (3x4=12); it needs the helper too.
+    const need = 3 * CARDS['china'].power!;
+    expect(3 * CARDS['nato'].power!).toBeLessThan(need);
+    const opts = abilityOptions(s, 'p1', nato);
+    const relief = opts.find((o) => o.action.type === 'useAbility' && o.action.ability === 'relief');
+    expect(relief).toBeTruthy();
+    const action = relief!.action as Extract<Action, { type: 'useAbility' }>;
+    expect(action.params?.payWith).toContain(helper);
+    const next = act(s, 'p1', action);
+    expect(next.cards[place].devastated).toBe(false);
+  });
+
+  it('Boy Sprouts\' Relief still respects the Corruption Plot\'s "no Relief yet" block', () => {
+    const s = scenario();
+    const sprouts = give(s, 'p1', 'boy-sprouts', { under: s.players[0].illuminati, side: 'LEFT' });
+    const place = give(s, 'p1', 'hollywood', { under: s.players[0].illuminati, side: 'BOTTOM' });
+    s.cards[place].devastated = true;
+    s.cards[place].data = { ...s.cards[place].data, noReliefUntilTurn: s.turn + 5 };
+    expect(() => act(s, 'p1', { type: 'useAbility', card: sprouts, ability: 'relief', params: { target: place, payWith: [] } }))
+      .toThrow(/No Relief can be sent there yet/);
+    expect(abilityOptions(s, 'p1', sprouts).some((o) => o.action.type === 'useAbility' && o.action.ability === 'relief')).toBe(false);
+  });
+
+  it('buying a Plot is legal at any time, including a rival\'s turn and a response window', () => {
+    let s = scenario();
+    s.active = 1; // p2's turn
+    const ill1 = ill(s, 'p1');
+    s.cards[ill1].tokens = 1;
+    const before = s.players[0].plotDeck.length;
+    const next = act(s, 'p1', { type: 'buyPlot', payWith: [ill1] });
+    expect(next.players[0].plotDeck.length).toBe(before - 1);
+  });
+
+  it('a move may pay with no Group at all when it is free (Reorganization Plot, Bermuda Triangle)', () => {
+    const s = scenario();
+    const ill1 = ill(s, 'p1');
+    const g1 = give(s, 'p1', 'hollywood', { under: ill1, side: 'TOP' });
+    s.cards[g1].tokens = 0; // no Group anywhere has a token
+    s.turnFlags.freeMoves = 'p1';
+    const open = structureCards(s, 'p1').filter((c) => c !== g1);
+    void open;
+    // Move g1 back onto its own Illuminati's other arrow: still needs an open arrow, but no payer.
+    expect(() => act(s, 'p1', { type: 'move', group: g1, onto: ill1, side: 'LEFT' })).not.toThrow();
+  });
+
+  it('a Group may voluntarily discard any card from its hand at any time (R048)', () => {
+    const s = scenario();
+    const grp = give(s, 'p1', 'hollywood', { hand: true });
+    expect(hand(s, 'p1')).toContain(grp);
+    const next = act(s, 'p1', { type: 'discard', cards: [grp] });
+    expect(hand(next, 'p1')).not.toContain(grp);
+    expect(next.players[0].discard).toContain(grp);
+  });
+
+  it('a Plot may voluntarily be returned to the deck at a chosen position (R048)', () => {
+    const s = scenario();
+    const plotCard = Object.values(CARDS).find((c) => c.type === 'Plot' && PLOTS[c.id])!.id;
+    const iid = give(s, 'p1', plotCard, { hand: true });
+    s.players[0].plotDeck = ['x1', 'x2', 'x3'];
+    const next = act(s, 'p1', { type: 'discard', cards: [iid], toDeck: true, position: 'top' });
+    expect(next.players[0].plotDeck[0]).toBe(iid);
+    const s2 = scenario();
+    const iid2 = give(s2, 'p1', plotCard, { hand: true });
+    s2.players[0].plotDeck = ['y1', 'y2', 'y3'];
+    const next2 = act(s2, 'p1', { type: 'discard', cards: [iid2], toDeck: true, position: 'bottom' });
+    expect(next2.players[0].plotDeck[next2.players[0].plotDeck.length - 1]).toBe(iid2);
+  });
+
+  it('a Plot may voluntarily be exposed at any time (R048)', () => {
+    const s = scenario();
+    const plotCard = Object.values(CARDS).find((c) => c.type === 'Plot' && PLOTS[c.id])!.id;
+    const iid = give(s, 'p1', plotCard, { hand: true });
+    expect(s.cards[iid].exposed).toBeFalsy();
+    const next = act(s, 'p1', { type: 'exposeCard', card: iid });
+    expect(next.cards[iid].exposed).toBe(true);
   });
 });
