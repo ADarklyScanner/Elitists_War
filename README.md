@@ -38,6 +38,10 @@ Texting is off until the `ew-game` Edge Function has these secrets (Supabase das
 
 US numbers need A2P 10DLC registration, or a verified toll-free number, before carriers deliver texts. Twilio handles STOP replies automatically.
 
+## Later
+
+- Card art and paid card changes: see docs/ART_AND_CUSTOMIZATION.md (decided, not built).
+
 ## Before a public release
 
 - Add a line to the start screen saying this is an unofficial fan-made project, not affiliated with or endorsed by the publisher of the original card game.
