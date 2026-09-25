@@ -892,6 +892,15 @@ function startOnline() {
     return;
   }
   online = { client: g.supabase!.createClient(__SB_URL__, __SB_KEY__), name: 'Player', games: [], busy: false };
+  // A failed Google sign-in comes back with the reason in the address: show it instead of a silent bounce.
+  const back = new URLSearchParams(location.hash.slice(1) + '&' + location.search.slice(1));
+  const why = back.get('error_description') ?? back.get('error');
+  if (why) {
+    online.msg = /exchange external code|invalid_client/i.test(why)
+      ? 'Google sign-in is not set up correctly yet (the server could not confirm your Google login). Please tell the game\'s host.'
+      : `Sign-in did not finish: ${why.replace(/\+/g, ' ')}`;
+    history.replaceState(null, '', location.pathname);
+  }
   online.client.auth.onAuthStateChange((_e: string, session: { user: { id: string; email: string; user_metadata?: { name?: string; full_name?: string } } } | null) => {
     online!.userId = session?.user.id;
     if (session) online!.name = (session.user.user_metadata?.full_name || session.user.user_metadata?.name || session.user.email.split('@')[0]).slice(0, 24);
