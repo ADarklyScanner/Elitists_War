@@ -819,3 +819,32 @@ describe('Liquor Companies', () => {
     expect(drawPlot(s, playerOf(s, 'p1')).length).toBe(1);
   });
 });
+
+describe('International Cocaine Smugglers', () => {
+  const ICS = 'International Cocaine Smugglers';
+  it('+4 to any attempt to control the named Groups', () => {
+    for (const id of ['punk-rockers', 'cycle-gangs', 'urban-gangs', 'hollywood', 'manuel-noriega']) {
+      const s = scenario();
+      const ics = put(s, 'p1', 'international-cocaine-smugglers');
+      expect(line(attack(s, ics, put(s, 'p2', id), 'control'), 'Attack', ICS), id).toBe(4);
+    }
+    const s = scenario();
+    put(s, 'p1', 'international-cocaine-smugglers');
+    const mafia = put(s, 'p1', 'the-mafia');
+    expect(line(attack(s, mafia, put(s, 'p2', 'hollywood'), 'control'), 'Attack', ICS)).toBe(4);
+  });
+  it('also to control a puppet of one of them', () => {
+    const s = scenario();
+    const ics = put(s, 'p1', 'international-cocaine-smugglers');
+    const hollywood = put(s, 'p2', 'hollywood');
+    expect(line(attack(s, ics, put(s, 'p2', 'loan-sharks', hollywood), 'control'), 'Attack', ICS)).toBe(4);
+  });
+  it('nothing against other Groups, or to destroy', () => {
+    const s = scenario();
+    const ics = put(s, 'p1', 'international-cocaine-smugglers');
+    expect(line(attack(s, ics, put(s, 'p2', 'loan-sharks'), 'control'), 'Attack', ICS)).toBe(0);
+    const s2 = scenario();
+    const ics2 = put(s2, 'p1', 'international-cocaine-smugglers');
+    expect(line(attack(s2, ics2, put(s2, 'p2', 'punk-rockers'), 'destroy'), 'Attack', ICS)).toBe(0);
+  });
+});

@@ -117,9 +117,10 @@ registerAbilities({
     { kind: 'attackBonus', on: 'both', target: { attributes: ['Computer'] }, value: 2, scope: 'any' },
   ],
   'intellectuals': [],
-  'international-cocaine-smugglers': [
-    { kind: 'pending', note: '+4 to control certain drug, crime and media Groups and some Personalities: the card data does not name which ones, so the bonus is not applied' },
-  ],
+  // International Cocaine Smugglers' +4 (it also covers the puppets of the named Groups) is scripted below.
+  // The printed invitation to extend it to Personalities by agreement between players is not encoded:
+  // this version has no player-to-player agreements.
+  'international-cocaine-smugglers': [],
   'international-communist-conspiracy': [
     { kind: 'attackBonus', on: 'control', target: { attributes: ['Communist'] }, value: 3, scope: 'direct' },
     { kind: 'attackBonus', on: 'control', target: { alignments: ['Fanatic'], attributes: ['Communist'] }, value: 4, scope: 'direct', replacesAlignmentPenalty: true },
@@ -203,6 +204,9 @@ const discordianTarget = (s: GameState, target: string) => {
 };
 
 const isGadget = (s: GameState, iid: string) => def(s, iid).type === 'Resource' && /\bGadget\b/.test(`${def(s, iid).notes ?? ''} ${def(s, iid).text}`);
+
+/** The Groups (and, through them, their puppets) International Cocaine Smugglers gets +4 to control. */
+const COCAINE_CLIENTS = ['punk-rockers', 'cycle-gangs', 'urban-gangs', 'hollywood', 'manuel-noriega'];
 
 registerHooks({
   'a-m-a': {
@@ -604,6 +608,16 @@ registerHooks({
       const m = s.cards[self].master;
       return type === 'control' && target === m && is(s, m, { attributes: ['Media'] })
         ? `The Intellectuals protect ${cardName(s, m!)}: it cannot be taken over.` : null;
+    },
+  },
+
+  'international-cocaine-smugglers': {
+    // +4 to any takeover attempt you lead against one of these Groups or one of their puppets.
+    attackMod(s, self, ctx, side) {
+      if (side !== 'attack' || ctx.type !== 'control' || ctx.instant || !ctx.attacker || ctx.attackerPlayer !== ctl(s, self)) return 0;
+      const t = s.cards[ctx.target];
+      const master = t.master && inPlay(s, t.master) ? s.cards[t.master].cardId : undefined;
+      return COCAINE_CLIENTS.includes(t.cardId) || (!!master && COCAINE_CLIENTS.includes(master)) ? 4 : 0;
     },
   },
 
