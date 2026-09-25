@@ -716,7 +716,7 @@ registerHooks({
 function reliefAbility(times: number, word: string): ActivatedAbility {
   return {
     id: 'relief', label: `Send Relief to a Devastated Place (its Power counts ${word})`, timing: ['main', 'attack'], usesToken: true, ai: 'never',
-    needs: { target: 'place' },
+    needs: { target: 'place', helpers: true },
     check(s, pl, self, p) {
       const place = p.target;
       if (!place || !inPlay(s, place) || def(s, place).subtype !== 'Place' || !s.cards[place].devastated) return 'Choose a Devastated Place.';

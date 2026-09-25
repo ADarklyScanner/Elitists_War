@@ -268,10 +268,12 @@ registerHooks({
     // Relief sent with the Boy Sprouts: their Power counts as 12 and their controller draws a Plot.
     actions: [{
       id: 'relief', label: 'Send Relief (Power counts as 12, draw a Plot)', timing: ['main', 'attack'], usesToken: true, ai: 'never',
-      needs: { target: 'place' },
+      needs: { target: 'place', helpers: true },
       check(s, pl, self, p) {
         const place = p.target;
         if (!inPlay(s, place) || def(s, place!).subtype !== 'Place' || !s.cards[place!].devastated) return 'Choose a Devastated Place.';
+        const until = s.cards[place!].data?.noReliefUntilTurn as number | undefined;
+        if (until !== undefined && s.turn <= until) return 'No Relief can be sent there yet.';
         const pay = p.payWith ?? [];
         if (new Set(pay).size !== pay.length || pay.includes(self)) return 'Each other Group can help only once.';
         if (!pay.every((g) => own(s, pl, g) && s.cards[g].tokens > 0)) return 'Each Group helping with Relief must be yours and have an Action token.';

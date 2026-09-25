@@ -532,6 +532,16 @@ export function discardCard(s: GameState, iid: string) {
   if ((wasPlot || wasCard) && s.turn > 0) raiseEvent(s, { type: 'discarded', card: iid, player: c.owner, by, data: { from } });
 }
 
+/** Discard a hand card, or (Plots only) return it to its owner's Plot deck at a chosen position. */
+function putAway(s: GameState, p: PlayerState, c: string, toDeck: boolean | undefined, position: 'top' | 'middle' | 'bottom' | undefined) {
+  if (!toDeck) { discardCard(s, c); return; }
+  p.hand = p.hand.filter((x) => x !== c);
+  s.cards[c].zone = 'plotDeck'; s.cards[c].exposed = false;
+  if (position === 'top') p.plotDeck.unshift(c);
+  else if (position === 'middle') p.plotDeck.splice(Math.floor(p.plotDeck.length / 2), 0, c);
+  else p.plotDeck.push(c); // bottom (also the default)
+}
+
 export function controllerOf(s: GameState, iid: string): string | undefined {
   const c = s.cards[iid];
   return c.zone === 'structure' ? c.controller : undefined;
@@ -915,6 +925,31 @@ export function goalOptions(s: GameState, playerId: string): GoalOption[] {
     if (special) out.push(special);
     return out;
   } finally { goalCheck.active = was; }
+}
+
+/**
+ * Public progress toward an Illuminati's Special Goal (its own win condition, e.g. "Bavarian
+ * Illuminati: 38 of 50 Power"), if it has one. Every player's progress toward a rival's Special
+ * Goal is visible at the table, the same as the Basic Goal, so this is never hidden information.
+ */
+export function specialGoalProgress(s: GameState, playerId: string): { label: string; current: number; target: number } | null {
+  const ill = illuminatiOf(s, playerId);
+  const mine = structureCards(s, playerId).filter((iid) => !tokenBarredForGoals(s, iid));
+  for (const a of abilitiesOf(s, ill)) {
+    if (a.kind !== 'specialGoal') continue;
+    if (a.goal === 'totalPower' || a.goal === 'bermuda') {
+      const total = mine.reduce((n, iid) => n + power(s, iid, { goals: true }), 0);
+      return { label: a.goal === 'bermuda' ? 'Power (every alignment)' : 'Power', current: total, target: a.value };
+    }
+    if (a.goal === 'destroyCount') return { label: 'Groups destroyed', current: player(s, playerId).destroyedCredit.length, target: a.value };
+    if (a.goal === 'peacefulPower') {
+      // Peaceful Groups in play count whoever controls them (Shangri-La).
+      const inPlay = livePlayers(s).flatMap((p) => structureCards(s, p.id)).filter((iid) => !tokenBarredForGoals(s, iid));
+      const peaceful = inPlay.filter((iid) => alignments(s, iid).includes('Peaceful')).reduce((n, iid) => n + power(s, iid, { goals: true }), 0);
+      return { label: 'Peaceful Power in play (any owner)', current: peaceful, target: a.value };
+    }
+  }
+  return null;
 }
 
 function specialGoal(s: GameState, playerId: string): GoalOption | undefined {
@@ -2104,9 +2139,9 @@ export function applyAction(state: GameState, playerId: string, action: Action):
       const ignore = new Set(subtree(s, action.group));
       if (!openArrows(s, action.onto, ignore).includes(action.side)) throw new RuleError('That arrow is not open.');
       const payers = [action.group, g.master, action.onto, p.illuminati];
-      if (!free && (!payers.includes(action.payWith) || s.cards[action.payWith].tokens < 1)) throw new RuleError('Pay with a token from the Group, its old or new master, or your Illuminati.');
-      if (!free) s.cards[action.payWith].tokens--;
-      announce(s, playerId, 'move', action, free ? [] : [action.payWith], action.group);
+      if (!free && (!action.payWith || !payers.includes(action.payWith) || s.cards[action.payWith].tokens < 1)) throw new RuleError('Pay with a token from the Group, its old or new master, or your Illuminati.');
+      if (!free) s.cards[action.payWith!].tokens--;
+      announce(s, playerId, 'move', action, free ? [] : [action.payWith!], action.group);
       break;
     }
 
@@ -2199,24 +2234,33 @@ export function applyAction(state: GameState, playerId: string, action: Action):
       break;
 
     case 'discard': {
-      if (s.prompt?.kind !== 'discardToLimit' || s.prompt.player !== playerId) throw new RuleError('You do not need to discard.');
-      const plots = plotsInHand(s, playerId);
-      if (!action.cards.every((c) => plots.includes(c))) throw new RuleError('Discard Plot cards from your hand.');
-      const outside = s.prompt.data?.resume === 'endTurn' || activePlayer(s).id !== playerId;
-      if (outside && plots.length - action.cards.length > handLimit(s, playerId)) throw new RuleError(`Discard down to ${handLimit(s, playerId)} Plots.`);
-      const goals = goalsInHand(s, playerId);
-      if (goals.length - action.cards.filter((c) => goals.includes(c)).length > goalLimit(s, playerId)) throw new RuleError(`You may hold only ${goalLimit(s, playerId)} Goal card${goalLimit(s, playerId) > 1 ? 's' : ''}.`);
-      for (const c of action.cards) {
-        if (action.toDeck) {
-          // Excess Plots may be put back into your Plot deck instead of discarded (R027).
-          p.hand = p.hand.filter((x) => x !== c);
-          s.cards[c].zone = 'plotDeck'; s.cards[c].exposed = false;
-          p.plotDeck.push(c);
-        } else discardCard(s, c);
+      if (s.prompt?.kind === 'discardToLimit' && s.prompt.player === playerId) {
+        const plots = plotsInHand(s, playerId);
+        if (!action.cards.every((c) => plots.includes(c))) throw new RuleError('Discard Plot cards from your hand.');
+        const outside = s.prompt.data?.resume === 'endTurn' || activePlayer(s).id !== playerId;
+        if (outside && plots.length - action.cards.length > handLimit(s, playerId)) throw new RuleError(`Discard down to ${handLimit(s, playerId)} Plots.`);
+        const goals = goalsInHand(s, playerId);
+        if (goals.length - action.cards.filter((c) => goals.includes(c)).length > goalLimit(s, playerId)) throw new RuleError(`You may hold only ${goalLimit(s, playerId)} Goal card${goalLimit(s, playerId) > 1 ? 's' : ''}.`);
+        for (const c of action.cards) putAway(s, p, c, action.toDeck, action.position);
+        const resume = s.prompt.data?.resume;
+        s.prompt = undefined;
+        if (resume === 'endTurn') endTurnCleanup(s);
+      } else {
+        // R048: you may discard any card from your hand at any time, and (Plots only) return it to
+        // your deck instead — on top, on the bottom, or anywhere in the middle — even outside a limit.
+        if (!action.cards.length || !action.cards.every((c) => p.hand.includes(c))) throw new RuleError('Choose cards in your hand.');
+        if (action.toDeck && !action.cards.every((c) => def(s, c).type === 'Plot')) throw new RuleError('Only Plot cards may be returned to a deck.');
+        for (const c of action.cards) putAway(s, p, c, action.toDeck, action.position);
       }
-      const resume = s.prompt.data?.resume;
-      s.prompt = undefined;
-      if (resume === 'endTurn') endTurnCleanup(s);
+      break;
+    }
+
+    case 'exposeCard': {
+      // R048: you may voluntarily expose one of your own hidden Plots at any time.
+      if (!p.hand.includes(action.card) || def(s, action.card).type !== 'Plot') throw new RuleError('Choose a Plot in your hand.');
+      if (!canExpose(s, action.card)) throw new RuleError(`${cardName(s, action.card)} cannot be exposed.`);
+      s.cards[action.card].exposed = true;
+      log(s, `${p.name} exposes ${cardName(s, action.card)}.`, playerId);
       break;
     }
   }

@@ -353,7 +353,7 @@ export type Action =
   | { type: 'takeover'; card: string; onto: string; side: Side }
   | { type: 'skipTakeover' }
   | { type: 'attack'; attackType: AttackType; attacker: string; target: string; side?: Side; plots?: PlotPlay[]; privileged?: boolean }
-  | { type: 'move'; group: string; onto: string; side: Side; payWith: string }
+  | { type: 'move'; group: string; onto: string; side: Side; payWith?: string }
   | { type: 'playPlot'; play: PlotPlay }
   | { type: 'buyPlot'; payWith: string[] }
   | { type: 'drawGroup' }
@@ -369,7 +369,8 @@ export type Action =
   | { type: 'pass' }
   | { type: 'endTurn' }
   | { type: 'declareVictory'; goal: string }  // knock (in your main phase) or at the end of a turn: claim a Goal
-  | { type: 'discard'; cards: string[]; toDeck?: boolean }
+  | { type: 'discard'; cards: string[]; toDeck?: boolean; position?: 'top' | 'middle' | 'bottom' }
+  | { type: 'exposeCard'; card: string }
   | { type: 'chooseLead'; card: string }
   | { type: 'choose'; ids: string[] }
   | { type: 'callOff' }

@@ -435,6 +435,9 @@ p { margin: 0; }
 .spot-empty { font-size: 10px; color: #9c8a70; font-style: italic; }
 .discard-top { position: absolute; inset: 0; border-radius: 5px; border: 1px solid #c99a4899; background: linear-gradient(160deg, #2a1e26, #1a1218); padding: 3px; display: flex; align-items: flex-start; text-align: left; }
 .discard-top b { font: 700 10px/1.05 var(--body); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; }
+.exposed-plots { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; max-width: calc(var(--u) * 16); }
+.exposed-plot { border: 1px solid #5a3f5e; background: linear-gradient(170deg, #26213a, #1b1828); border-radius: 5px; padding: 3px 6px; font-size: 10.5px; color: var(--ink); }
+.browse .opts { display: flex; flex-direction: column; gap: 4px; }
 .fan { display: flex; height: calc(var(--u) * 7.3); align-items: center; padding-left: 14px; }
 .fan .cardback { width: calc(var(--u) * 5.2); height: calc(var(--u) * 7.3); border-radius: 5px; margin-left: -14px; box-shadow: -2px 0 4px #0009; border: 1px solid #c99a4855; }
 .res-tray .res-row { padding: 0; min-height: calc(var(--u) * 7.3); align-items: center; border: 1px dashed #c99a4866; border-radius: 6px; padding: 4px 8px; }

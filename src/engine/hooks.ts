@@ -35,7 +35,9 @@ export interface ActivatedAbility {
   /** At most once per turn. */
   oncePerTurn?: boolean;
   /** What the UI needs to ask for. */
-  needs?: { target?: 'group' | 'ownGroup' | 'rivalGroup' | 'place' | 'personality' | 'resource' | 'plot' | 'actingGroup' | 'handCard' | 'handGroup' | 'handPlot' | 'destroyed' | 'discardPile' | 'rival' | 'rivalHand' | 'nwo'; modes?: string[]; alignment?: boolean };
+  needs?: { target?: 'group' | 'ownGroup' | 'rivalGroup' | 'place' | 'personality' | 'resource' | 'plot' | 'actingGroup' | 'handCard' | 'handGroup' | 'handPlot' | 'destroyed' | 'discardPile' | 'rival' | 'rivalHand' | 'nwo'; modes?: string[]; alignment?: boolean;
+    /** Offers `payWith`: other Groups of the player's own, with tokens, that can add their Power (e.g. Relief). */
+    helpers?: boolean };
   check: (s: GameState, pl: string, self: string, p: AbilityParams, ctx?: AttackCtx) => string | null;
   /** Do it. During an attack, return a live effect or push onto ctx.attackBonus / ctx.defenseBonus. */
   apply: (s: GameState, pl: string, self: string, p: AbilityParams, ctx?: AttackCtx) => PlotEffect | void;

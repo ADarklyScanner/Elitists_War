@@ -562,7 +562,7 @@ ${app('Relief must be paid by one player\'s Groups; several players cannot yet c
 <li><b>Reload</b> cards (per later corrections) need an Illuminati action and refresh at most 5 Power's worth of Groups, or any single Group. None may refresh a Group captured this turn.</li>
 <li><b>Cancels</b> such as Hoax and Secrets Man Was Not Meant To Know stop another Plot as it is played (${see('timing', 'Timing and cancelling')}).</li>
 </ul>
-${app('rivals always see how many hidden Plots you hold, never which. The hand limit is checked the moment a player outside their own turn goes over it, even in the middle of someone else\'s action, and the extra Plots can go to the discard pile or back into the deck. You cannot discard or return Plots at will, only when you are over the limit. Buying Plots is never announced. The card set in this app contains no Zap, Paralyze or Attribute Freeze cards.')}
+${app('rivals always see how many hidden Plots you hold, never which. The hand limit is checked the moment a player outside their own turn goes over it, even in the middle of someone else\'s action, and the extra Plots can go to the discard pile or back into the deck. At any other time you can also discard cards, return Plots to the top, middle or bottom of your deck, or expose a Plot, with the <i>Discard or return cards from my hand</i> button. Buying Plots is never announced. The card set in this app contains no Zap, Paralyze or Attribute Freeze cards.')}
 `,
   },
   {
@@ -907,7 +907,7 @@ ${app('the app does the bookkeeping and gives each player a response window befo
 <li>For duels, lean aggressive. For bigger tables, carry more defence and grow steadily; racing ahead makes everyone gang up on you.</li>
 </ul>
 <p>No deck is perfect. A good player who knows your deck can beat it, so vary your cards and your plans between games. Lead with the same Group every time and rivals will pack copies of it to steal it from you.</p>
-${app('you cannot build your own deck yet. Each player gets a generated deck of 45 cards: the Illuminati, a Group deck of 26 cards (about 3 of them Resources) and 18 Plots. The Groups are chosen to suit the Illuminati: one or two alignments that do not clash, its favourite attribute, Groups with room to grow, and some strong attackers.')}
+${app('you cannot build your own deck yet. Each player gets a generated deck of 45 cards: the Illuminati, a Group deck of 12 to 20 cards (a few of them Resources) and 24 to 32 Plots, which is the typical shape the rules recommend. The Groups are chosen to suit the Illuminati: one or two alignments that do not clash, its favourite attribute, Groups with room to grow, and some strong attackers.')}
 `,
   },
   {
