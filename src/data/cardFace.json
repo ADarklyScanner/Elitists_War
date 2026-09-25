@@ -495,7 +495,7 @@
 "flavor": "They expect favours from the family business. Now and then, on a technicality, they get one."
 },
 "ninjas": {
-"rules": "Your Assassinations get +4; your other non-Instant attacks to destroy get +2. Any attempt to destroy the Ninjas gets -10. When an attack on them fails, they gain 1 Action token.",
+"rules": "Your Assassinations get +4; your other non-Instant Attacks to Destroy get +2. Any attempt to destroy the Ninjas gets -10. When an attack on them fails, they gain 1 Action token.",
 "goal": "",
 "flavor": "Nobody saw us come in. Nobody will see us leave. That creak was the house settling."
 },
@@ -630,7 +630,7 @@
 "flavor": "Half awake, heavily armed and firmly committed to a revolution scheduled right after the nap."
 },
 "s-m-o-f": {
-"rules": "+2 to control Weird Groups, or +6 when it attacks Science Fiction Fans, Trekkies, Wargamers, Comic Books or Trading Card Games. Once on your turn, free: remove a rival Weird Group's Action token.",
+"rules": "+2 on any attack to control a Weird Group, or +6 when it attacks Science Fiction Fans, Trekkies, Wargamers, Comic Books or Trading Card Games. Once on your turn, free: remove a rival Weird Group's Action token.",
 "goal": "",
 "flavor": "There is no cabal running fandom. Please stop asking. The cabal finds it tiresome."
 },
@@ -1020,7 +1020,7 @@
 "flavor": "Call it a friendly negotiation in which one side happens to hold all the cards."
 },
 "and-stay-dead": {
-"rules": "Play right after any player destroys or discards a Group. Pay with one of your Magic Groups' action. That Group is gone for good: no card or ability can return it to play.",
+"rules": "Play right after any player destroys or discards a Group. Pay with the action of one of your Magic Groups. That Group is gone for good: no card or ability can return it to play.",
 "goal": "",
 "flavor": "The stake, the salt, the silver and the paperwork are all in order this time."
 },
@@ -1085,7 +1085,7 @@
 "flavor": "He took a bullet once. Now he bills for it by the hour."
 },
 "botched-contact": {
-"rules": "Play right after a rival makes his automatic takeover with a Group. It returns to his hand, and he must pick another card for this turn's automatic takeover. Costs the action of one of your Groups.",
+"rules": "Play right after a rival makes their automatic takeover with a Group. It returns to their hand, and they must pick another card for this turn's automatic takeover. Costs the action of one of your Groups.",
 "goal": "",
 "flavor": "The handshake was off by one finger. Negotiations are postponed indefinitely."
 },
@@ -1205,7 +1205,7 @@
 "flavor": "Every donation buys a family a brighter tomorrow and a senator a nicer boat."
 },
 "double-cross": {
-"rules": "Counter. Play when a rival plays a Plot to look at your hidden Plots. His Plot is lost, along with any actions spent on it, and he sees and takes nothing.",
+"rules": "Counter. Play when a rival plays a Plot to look at your hidden Plots. Their Plot is lost, along with any actions spent on it, and they see and take nothing.",
 "goal": "",
 "flavor": "The file they stole was blank, and the paper was laced with something that itches."
 },
@@ -1235,7 +1235,7 @@
 "flavor": "The accounts balanced perfectly. The balance was in a different country."
 },
 "emergency-powers": {
-"rules": "Spend the action of a Government Group you control: its Power becomes 6. Link this to it. You may have only 1 Emergency Powers in play.",
+"rules": "Spend the action of a Government Group you control: its Power becomes 6. Link this to it. You may have only 1 Emergency Powers card in play.",
 "goal": "",
 "flavor": "The emergency ended decades ago. Nobody has found the paperwork to end the powers."
 },
@@ -1265,7 +1265,7 @@
 "flavor": "You did not see this card. You will not remember this roll. Everything is fine."
 },
 "foiled": {
-"rules": "Spend the action of one of your Media Groups. A rival discards one of his exposed Goal cards.",
+"rules": "Spend the action of one of your Media Groups. A rival discards one of their exposed Goal cards.",
 "goal": "",
 "flavor": "Their master plan made the evening news, right after a skateboarding dog."
 },
@@ -1295,7 +1295,7 @@
 "flavor": "Turf is expensive. Luckily, so is everything else they sell."
 },
 "george-the-janitor": {
-"rules": "Spend one of your Groups' action and choose a rival. He picks one of his hidden Plots. Without seeing it, you decide: he exposes that card, or he exposes all his other hidden Plots.",
+"rules": "Spend the action of one of your Groups and choose a rival. They pick one of their hidden Plots. Without seeing it, you decide: they expose that card, or they expose all their other hidden Plots.",
 "goal": "",
 "flavor": "Nobody notices the janitor. The janitor notices everything, especially the shredder bin."
 },
@@ -1315,7 +1315,7 @@
 "flavor": "It began with ordinary folks, then acquired a slick website and a catering budget."
 },
 "gremlins": {
-"rules": "Choose one. A Computer Group loses its Action token, or, if it is acting in an attack, its action is cancelled. Or choose a Gadget Resource a rival controls; it returns to his hand.",
+"rules": "Choose one. A Computer Group loses its Action token, or, if it is acting in an attack, its action is cancelled. Or choose a Gadget Resource a rival controls; it returns to their hand.",
 "goal": "",
 "flavor": "Technicians blame sunspots. Sunspots blame technicians. Something in the vents is giggling."
 },
@@ -1360,7 +1360,7 @@
 "flavor": "The storm was given a friendly name, which it did not live up to."
 },
 "i-lied": {
-"rules": "Not during an attack. Play as a deal you are in is agreed: with your acceptance, or secretly attached to your offer. You keep your side; the other player still delivers his. If this is countered, you deliver after all.",
+"rules": "Not during an attack. Play as a deal you are in is agreed: with your acceptance, or secretly attached to your offer. You keep your side; the other player still delivers theirs. If this is countered, you deliver after all.",
 "goal": "",
 "flavor": "A handshake is binding, unless you crossed your fingers behind your back."
 },
@@ -1415,7 +1415,7 @@
 "flavor": "The flowchart now needs its own flowchart, and a small staff to maintain it."
 },
 "let-s-you-and-him-fight": {
-"rules": "Spend your Illuminati's action and choose a rival. Take 2 Group cards at random from his hand; Resources count as Groups. Pick one for him to discard; the other goes back. If he holds only 1, he discards it.",
+"rules": "Spend your Illuminati's action and choose a rival. Take 2 Group cards at random from their hand; Resources count as Groups. Pick one for them to discard; the other goes back. If they hold only 1, they discard it.",
 "goal": "",
 "flavor": "A little misunderstanding, a little push, and suddenly nobody remembers who started it."
 },
@@ -1505,7 +1505,7 @@
 "flavor": "The toast landed butter side down, the dice landed high, and the backup plan was shredded."
 },
 "mutual-betrayal": {
-"rules": "Spend one of your Groups' action and choose a rival. Look at all his hidden Plots. You may expose any number of them, but you must expose one of your own Plots for each.",
+"rules": "Spend the action of one of your Groups and choose a rival. Look at all their hidden Plots. You may expose any number of them, but you must expose one of your own Plots for each.",
 "goal": "",
 "flavor": "We trusted each other completely, which is why we both hired detectives."
 },
