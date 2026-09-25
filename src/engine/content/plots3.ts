@@ -10,8 +10,8 @@ import { type Match, matches } from '../abilities';
 import { alignments, power, resistance } from '../stats';
 import { openArrows, structureCards } from '../geometry';
 import {
-  activePlayer, currentOutcome, discardCard, giveToken, goalsInHand, isCancelled, isPrivileged, isSecret, isUnique,
-  controllerOf2, livePlayers, log, placeGroup, player, playResourceCard, protectedPlayer,
+  activePlayer, currentOutcome, discardCard, goalsInHand, isCancelled, isPrivileged, isSecret, isUnique,
+  controllerOf2, livePlayers, log, placeGroup, player, playResourceCard, protectedPlayer, tokenBarred,
 } from '../game';
 
 // ---------------------------------------------------------------- helpers
@@ -112,7 +112,7 @@ function undestroy(s: GameState, original: string) {
   for (const p of s.players) p.destroyedCredit = p.destroyedCredit.filter((x) => x !== original);
 }
 const destroyedCopy = (s: GameState, iid: string, killedOnly: boolean) =>
-  Object.values(s.cards).find((c) => c.iid !== iid && c.cardId === s.cards[iid].cardId && c.zone === 'destroyed' && (!killedOnly || c.killed))?.iid;
+  Object.values(s.cards).find((c) => c.iid !== iid && c.cardId === s.cards[iid].cardId && c.zone === 'destroyed' && !c.data?.neverReturns && (!killedOnly || c.killed))?.iid;
 
 // ---------------------------------------------------------------- card-specific pieces
 
@@ -258,7 +258,8 @@ registerPlots({
       // The second Disaster only adds its Power: find it by trying it on a copy of the game.
       const probe = structuredClone(s);
       PLOTS[probe.cards[second].cardId].apply(probe, pl, { card: second, target: play.target });
-      const extra = probe.attack?.instantPower ?? 0;
+      // Instant Disasters set instantPower; Disasters that are normal card attacks (Epidemic) set cardPower.
+      const extra = probe.attack?.instantPower ?? probe.attack?.cardPower ?? 0;
       toTable(s, pl, main);
       toTable(s, pl, second);
       PLOTS[s.cards[main].cardId].apply(s, pl, { card: main, target: play.target });
@@ -563,12 +564,12 @@ registerPlots({
     ...effectNow((s, pl, play) => {
       let n = 0;
       const mine = structureCards(s, pl).filter((g) => isGroup(s, g) && alignments(s, g).includes('Fanatic'));
-      for (const g of [...mine, ...(play.targets ?? [])]) {
+      // Each Group gets one more token even if it already has one, unless it may not get tokens.
+      for (const g of new Set([...mine, ...(play.targets ?? [])])) {
         const c = s.cards[g];
-        if (c.zone !== 'structure' || c.capturedTurn === s.turn) continue;
-        const before = c.tokens;
-        giveToken(s, g);
-        if (c.tokens > before) n++;
+        if (c.zone !== 'structure' || c.capturedTurn === s.turn || tokenBarred(s, g)) continue;
+        c.tokens++;
+        n++;
       }
       log(s, `Full Moon: ${n} Fanatic Group${n === 1 ? ' gets' : 's get'} an Action token.`, pl);
     }),

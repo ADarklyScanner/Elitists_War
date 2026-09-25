@@ -534,3 +534,31 @@ describe('Resource categories', () => {
     expect(resourceKinds(s, resourceOf(s, 'p1', 'xanadu'))).toEqual([]);
   });
 });
+
+describe('Full Moon (audit fix)', () => {
+  it('adds a token even to Fanatic Groups that already have one, but not to Groups barred from tokens', () => {
+    const s0 = scenario();
+    const mine = give(s0, 'p1', 'moonies', { under: ill(s0, 0), side: 'BOTTOM' });
+    const theirs = give(s0, 'p2', 'libertarians', { under: ill(s0, 1), side: 'BOTTOM' });
+    s0.cards[mine].tokens = 1;
+    s0.cards[theirs].tokens = 1;
+    s0.cards[mine].mods.push({ source: 'test', kind: 'noTokens', until: 'permanent' });
+    const fm = give(s0, 'p1', 'full-moon', { hand: true });
+    const s = playResolve(s0, 'p1', { card: fm, targets: [theirs] });
+    expect(s.cards[theirs].tokens).toBe(2);
+    expect(s.cards[mine].tokens).toBe(1);
+  });
+});
+
+describe('Combined Disasters (audit fix)', () => {
+  it('adds the Power of an Epidemic used as the second Disaster', () => {
+    const s0 = scenario();
+    const place = give(s0, 'p2', 'hollywood', { under: ill(s0, 1), side: 'BOTTOM' });
+    const t = give(s0, 'p1', 'tornado', { hand: true });
+    const e = give(s0, 'p1', 'epidemic', { hand: true });
+    const c = give(s0, 'p1', 'combined-disasters', { hand: true });
+    const s = play(s0, 'p1', { card: c, target: place, targets: [t, e] });
+    expect(s.attack?.instantCard).toBe(t);
+    expect(s.attack?.attackBonus.some((b) => b.amount === 14)).toBe(true);
+  });
+});

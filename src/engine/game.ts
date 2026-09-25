@@ -637,7 +637,8 @@ function afterDraws(s: GameState, drawn: string[]) {
 
 function takeoverStep(s: GameState) {
   const p = activePlayer(s);
-  if (!s.turnFlags.noTakeover && !s.turnFlags.restricted && !s.turnFlags.extraTurn && takeoverOptions(s, p.id).length) {
+  // A seized turn (Seize the Time) keeps the automatic takeover: that card only forbids draws (and, by errata, Plots).
+  if (!s.turnFlags.noTakeover && !s.turnFlags.restricted && takeoverOptions(s, p.id).length) {
     // A card's question asked during the draws (Crystal Skull) is answered first.
     const pr: Prompt = { player: p.id, kind: 'takeover' };
     if (s.prompt) (s.promptQueue ??= []).push(pr); else s.prompt = pr;
@@ -1059,6 +1060,8 @@ export function startAttack(s: GameState, playerId: string, a: Extract<Action, {
 // ---- live Plot effects: a Plot counts unless a later, itself uncancelled Plot cancels it (R010).
 export function isCancelled(plays: PlayedPlot[], iid: string): boolean {
   const i = plays.findIndex((p) => p.iid === iid);
+  const part = plays[i]?.partOf;
+  if (part && part !== iid && isCancelled(plays, part)) return true;
   return plays.some((q, j) => j > i && q.effect.t === 'cancelPlot' && q.effect.target === iid && !isCancelled(plays, q.iid));
 }
 export function liveEffects(ctx: AttackCtx) {
@@ -1107,6 +1110,11 @@ function contributionPower(s: GameState, c: Contribution & { useGlobal?: boolean
 export interface StrengthBreakdown { attack: number; defense: number; strength: number; lines: string[] }
 
 export function attackStrength(s: GameState, ctx: AttackCtx): StrengthBreakdown {
+  // A card may fix the strength of the attack: nothing played afterwards changes it.
+  const lock = ctx.strengthLock;
+  if (lock && !isCancelled(ctx.plays, lock.by)) {
+    return { attack: lock.attack, defense: lock.defense, strength: lock.attack - lock.defense, lines: [`Strength fixed by ${cardName(s, lock.by)}: attack ${lock.attack}, defense ${lock.defense}`] };
+  }
   const lines: string[] = [];
   let atk = 0, dfn = 0;
   const add = (side: 'a' | 'd', v: number, why: string) => {

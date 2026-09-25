@@ -108,6 +108,7 @@ registerPlots({
       const p = e?.card;
       if (e?.type !== 'destroyed' || !p || e.player !== pl || def(s, p).subtype !== 'Personality') return 'Play this right after one of your Personalities is killed.';
       if (s.cards[p].zone !== 'destroyed') return 'That Personality is no longer in the destroyed pile.';
+      if (s.cards[p].data?.neverReturns) return 'That Personality is gone for good and cannot come back.';
       if (!jarSpot(s, pl, e)) return 'There is no open control arrow in your Power Structure to keep it on.';
       return null;
     },

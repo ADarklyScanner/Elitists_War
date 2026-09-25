@@ -3,13 +3,13 @@
 import type { Alignment, AttackCtx, GameState, PlotEffect, PlotPlay } from '../types';
 import type { PlotHandler } from '../plotTypes';
 import { registerPlots } from '../plotTypes';
-import { registerHooks } from '../hooks';
+import { registerChoice, registerHooks } from '../hooks';
 import { def, OPPOSITE } from '../cards';
 import { type Match, matches } from '../abilities';
 import { alignments, globalPower, power } from '../stats';
 import { roll2d6 } from '../rng';
 import {
-  activePlayer, attackCancelled, attackStrength, canEnterPlay, controllerOf2, currentOutcome, destroyGroup,
+  activePlayer, askChoice, attackCancelled, attackStrength, canEnterPlay, controllerOf2, currentOutcome, destroyGroup,
   discardCard, drawGroup, finalRoll, isPrivileged, livePlayers, log, player, playResourceCard, protectedPlayer,
   startInstantAttack, tokenBarred,
   disasterTarget,
@@ -226,8 +226,8 @@ registerPlots({
     },
   },
 
-  // Power becomes 6 (no one-per-player limit on this card).
-  'self-esteem': raiseTo(6, { alignments: ['Liberal'] }, false),
+  // Power becomes 6; one in play per player.
+  'self-esteem': raiseTo(6, { alignments: ['Liberal'] }, true),
   // Power increased to 4; one in play per player.
   'the-weird-turn-pro': raiseTo(4, { alignments: ['Weird'] }, true),
 
@@ -271,19 +271,49 @@ registerPlots({
     },
   },
 
-  // Discard every New World Order in play.
+  // Discard every New World Order in play. Other players' Media Groups may help pay: each of those
+  // players is asked, and the NWOs go only if all of them agree.
   'sweeping-reforms': {
     timing: ['anytime'],
     needs: { pay: 'tokens' },
-    check(s, pl, play) {
-      const err = spend(s, pl, play.payWith);
+    check(s, pl, play, ctx) {
+      const payers = play.payWith ?? [];
+      if (new Set(payers).size !== payers.length) return 'A Group can only pay once.';
+      const mine = payers.filter((g) => s.cards[g]?.controller === pl);
+      const theirs = payers.filter((g) => !mine.includes(g));
+      const err = spend(s, pl, mine);
       if (err) return err;
-      if (!play.payWith?.length || !play.payWith.every((g) => matches(s, g, { attributes: ['Media'] }))) return 'Pay with the actions of Media Groups.';
-      if (totalPower(s, play.payWith) < 6) return 'The paying Media Groups need at least 6 Power in total.';
+      for (const g of theirs) {
+        if (!inPlay(s, g) || s.cards[g].tokens < 1 || tokenBarred(s, g)) return 'Every paying Group must have an Action token.';
+        if (protectedPlayer(s, pl, s.cards[g].controller)) return 'That player has not finished a first turn yet.';
+      }
+      if (theirs.length && ctx) return 'Other players\' Media Groups can only help outside an attack.';
+      if (!payers.length || !payers.every((g) => matches(s, g, { attributes: ['Media'] }))) return 'Pay with the actions of Media Groups.';
+      if (totalPower(s, payers) < 6) return 'The paying Media Groups need at least 6 Power in total.';
       return null;
     },
-    apply(s, _pl, play, ctx) { pay(s, play.payWith); if (ctx) reform(s); },
-    resolve: (s) => reform(s),
+    apply(s, pl, play, ctx) {
+      pay(s, (play.payWith ?? []).filter((g) => s.cards[g].controller === pl));
+      if (ctx) reform(s);
+    },
+    resolve(s, pl, play) {
+      const byOwner = new Map<string, string[]>();
+      for (const g of play.payWith ?? []) {
+        const owner = s.cards[g].controller;
+        if (owner && owner !== pl) byOwner.set(owner, [...(byOwner.get(owner) ?? []), g]);
+      }
+      if (!byOwner.size) { reform(s); return; }
+      // Ask each other paying player; the NWOs go once all of them have agreed.
+      s.cards[play.card].data = { ...s.cards[play.card].data, waiting: [...byOwner.keys()], agreed: [] };
+      for (const [owner, groups] of byOwner) {
+        askChoice(s, owner, {
+          key: 'sweeping-reforms-help',
+          question: `${player(s, pl).name} wants ${groups.map((g) => def(s, g).name).join(' and ')} to spend ${groups.length === 1 ? 'its action' : 'their actions'} on Sweeping Reforms. Do you agree?`,
+          options: [{ id: 'yes', label: 'Agree' }, { id: 'no', label: 'Refuse' }],
+          min: 1, max: 1, source: play.card, data: { groups, asker: pl },
+        });
+      }
+    },
   },
 
   // Linked: +4 on direct Attacks to Control made by that Personality.
@@ -291,7 +321,11 @@ registerPlots({
     timing: ['anytime'],
     linked: true,
     needs: { target: 'personality' },
-    check: (s, pl, play) => (own(s, pl, play.target) && def(s, play.target!).subtype === 'Personality' ? null : 'Choose one of your Personalities.'),
+    check(s, pl, play) {
+      if (!own(s, pl, play.target) || def(s, play.target!).subtype !== 'Personality') return 'Choose one of your Personalities.';
+      if (Object.values(s.cards).some((c) => c.cardId === 'sweepstakes-prize' && c.zone === 'table' && c.controller === pl && c.linkedTo)) return 'You already have a Sweepstakes Prize in play; each player may have only one.';
+      return null;
+    },
     ...effectNow((s, _pl, play) => { if (inPlay(s, play.target)) s.cards[play.card].linkedTo = play.target; }),
   },
 
@@ -299,7 +333,11 @@ registerPlots({
   'talisman-of-ahrimanes': {
     timing: ['attack', 'roll'],
     linked: true,
-    check: (_s, _pl, _play, ctx) => (ctx && ctx.assassination ? null : 'Play this only after an Assassination.'),
+    check(s, _pl, play, ctx) {
+      if (!ctx || !ctx.assassination) return 'Play this only after an Assassination.';
+      if (Object.values(s.cards).some((c) => c.iid !== play.card && c.cardId === 'talisman-of-ahrimanes' && c.zone === 'table' && c.linkedTo)) return 'A Talisman of Ahrimanes is already in play; only one may be in play at a time.';
+      return null;
+    },
     apply(s, _pl, play, ctx): PlotEffect {
       s.cards[play.card].linkedTo = ctx!.target;
       return { t: 'fail' };
@@ -632,4 +670,29 @@ registerHooks({
       discardCard(s, self);
     },
   },
+});
+
+// A player asked to let his Media Groups pay for another player's Sweeping Reforms.
+registerChoice('sweeping-reforms-help', {
+  resolve(s, pl, picked, data) {
+    const c = s.cards[data.source as string];
+    const waiting = (c?.data?.waiting as string[] | undefined) ?? [];
+    if (!c || !waiting.includes(pl)) return; // already settled (someone refused)
+    const groups = data.groups as string[];
+    const ready = groups.every((g) => s.cards[g]?.zone === 'structure' && s.cards[g].controller === pl && s.cards[g].tokens > 0 && !tokenBarred(s, g));
+    if (picked[0] !== 'yes' || !ready) {
+      c.data = { ...c.data, waiting: [] };
+      log(s, `${player(s, pl).name} does not help: Sweeping Reforms has no effect.`, pl);
+      return;
+    }
+    const agreed = [...((c.data?.agreed as string[] | undefined) ?? []), ...groups];
+    const left = waiting.filter((x) => x !== pl);
+    c.data = { ...c.data, waiting: left, agreed };
+    log(s, `${player(s, pl).name} agrees to help with Sweeping Reforms.`, pl);
+    if (left.length) return;
+    for (const g of agreed) if (s.cards[g]?.zone === 'structure' && s.cards[g].tokens > 0) s.cards[g].tokens--;
+    reform(s);
+  },
+  // The computer helps only when none of the New World Orders in play is its own.
+  ai: (s, pl) => [Object.values(s.nwo).some((n) => !!n && s.cards[n]?.controller === pl) ? 'no' : 'yes'],
 });

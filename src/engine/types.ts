@@ -46,6 +46,7 @@ export interface Modifier {
   side?: Side; // addArrow: a new outgoing arrow on this (printed, unrotated) side
   align?: Alignment;
   defenseOnly?: boolean;   // +10 Plots used defensively, Good Polls
+  lower?: boolean;         // setPower / setResistance that reduces the value to `value` instead of raising it (Angst)
   until: 'permanent' | 'endOfTurn' | 'startOfOwnerTurn' | 'attack'; // 'attack' = current attack only
   countsForGoals?: boolean;
 }
@@ -129,6 +130,7 @@ export interface PlayedPlot {
   play: PlotPlay;
   effect: PlotEffect;
   ability?: string;        // set when this entry is an activated ability of a card, not a Plot
+  partOf?: string;         // an extra effect of another entry (that Plot's iid): cancelled along with it
 }
 
 export interface AttackCtx {
@@ -159,6 +161,7 @@ export interface AttackCtx {
   result?: 'success' | 'failure';
   usedAgents?: boolean;
   barred?: string[];       // players a card has barred from interfering in this attack (Multinational Oil Companies)
+  strengthLock?: { attack: number; defense: number; by: string }; // strength fixed by a card (Mothers' March) unless that card is cancelled
 }
 
 /** An open response window: everyone may act; closes when all players have passed in a row. */

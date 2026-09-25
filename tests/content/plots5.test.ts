@@ -477,3 +477,71 @@ describe('Withering Curse', () => {
     expect(s.attack!.aid.map((a) => a.iid)).toEqual([witch]);
   });
 });
+
+describe('audit fixes: one-per-player limits', () => {
+  it('Self-Esteem: no player may have two in play', () => {
+    const s0 = scenario();
+    const g = give(s0, 'p1', 'girlie-magazines', { under: ill(s0, 'p1'), side: 'BOTTOM' });
+    const h = give(s0, 'p1', 'underground-newspapers', { under: ill(s0, 'p1'), side: 'TOP' });
+    const a = give(s0, 'p1', 'self-esteem', { hand: true });
+    const b = give(s0, 'p1', 'self-esteem', { hand: true });
+    const s = playAndResolve(s0, 'p1', { card: a, target: g });
+    expect(() => act(s, 'p1', { type: 'playPlot', play: { card: b, target: h } })).toThrow(/only have one/);
+  });
+  it('Sweepstakes Prize: no player may have two in play', () => {
+    const s0 = scenario();
+    const p = give(s0, 'p1', 'bill-clinton', { under: ill(s0, 'p1'), side: 'BOTTOM' });
+    const q = give(s0, 'p1', 'dan-quayle', { under: ill(s0, 'p1'), side: 'TOP' });
+    const a = give(s0, 'p1', 'sweepstakes-prize', { hand: true });
+    const b = give(s0, 'p1', 'sweepstakes-prize', { hand: true });
+    const s = playAndResolve(s0, 'p1', { card: a, target: p });
+    expect(() => act(s, 'p1', { type: 'playPlot', play: { card: b, target: q } })).toThrow(/only one/);
+    // Another player may still have one of their own.
+    const r = give(s, 'p2', 'ronald-reagan', { under: ill(s, 'p2'), side: 'BOTTOM' });
+    const c = give(s, 'p2', 'sweepstakes-prize', { hand: true });
+    s.active = 1;
+    expect(() => act(s, 'p2', { type: 'playPlot', play: { card: c, target: r } })).not.toThrow();
+  });
+  it('Talisman of Ahrimanes: only one in play at a time', () => {
+    const s0 = scenario();
+    const first = give(s0, 'p2', 'bill-clinton', { under: ill(s0, 'p2'), side: 'BOTTOM' });
+    const old = give(s0, 'p2', 'talisman-of-ahrimanes', { hand: true });
+    s0.players[1].hand = s0.players[1].hand.filter((x) => x !== old);
+    Object.assign(s0.cards[old], { zone: 'table', controller: 'p2', linkedTo: first });
+    const tgt = give(s0, 'p2', 'dan-quayle', { under: ill(s0, 'p2'), side: 'TOP' });
+    const sniper = give(s0, 'p1', 'sniper', { hand: true });
+    const tal = give(s0, 'p2', 'talisman-of-ahrimanes', { hand: true });
+    const s = act(s0, 'p1', { type: 'playPlot', play: { card: sniper, target: tgt } });
+    expect(() => act(s, 'p2', { type: 'playPlot', play: { card: tal } })).toThrow(/only one/);
+  });
+});
+
+describe('Sweeping Reforms (audit fix): Media Groups of several players', () => {
+  function setup() {
+    const s0 = scenario();
+    const a = give(s0, 'p2', 'law-and-order', { hand: true });
+    s0.players[1].hand = [];
+    Object.assign(s0.cards[a], { zone: 'table', controller: 'p2', linkedTo: 'nwo' });
+    s0.nwo = { yellow: a };
+    const mine = give(s0, 'p1', 'cable-tv', { under: ill(s0, 'p1'), side: 'BOTTOM' });
+    const theirs = give(s0, 'p2', 'big-media', { under: ill(s0, 'p2'), side: 'BOTTOM' });
+    const card = give(s0, 'p1', 'sweeping-reforms', { hand: true });
+    return { s0, a, mine, theirs, card };
+  }
+  it('another player\'s Media Group may pay if that player agrees', () => {
+    const { s0, a, mine, theirs, card } = setup();
+    let s = playAndResolve(s0, 'p1', { card, payWith: [mine, theirs] });
+    expect(s.prompt?.player).toBe('p2');
+    s = act(s, 'p2', { type: 'choose', ids: ['yes'] });
+    expect(s.cards[a].zone).toBe('discard');
+    expect(s.cards[theirs].tokens).toBe(0);
+    expect(s.cards[mine].tokens).toBe(0);
+  });
+  it('if that player refuses, nothing happens and his Group keeps its token', () => {
+    const { s0, a, mine, theirs, card } = setup();
+    let s = playAndResolve(s0, 'p1', { card, payWith: [mine, theirs] });
+    s = act(s, 'p2', { type: 'choose', ids: ['no'] });
+    expect(s.cards[a].zone).toBe('table');
+    expect(s.cards[theirs].tokens).toBe(1);
+  });
+});

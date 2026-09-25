@@ -65,7 +65,8 @@ export interface ValueOpts {
 function combine(base: number, mods: Modifier[], kinds: { set: Modifier['kind']; mul: Modifier['kind']; add: Modifier['kind'] },
   extra: { muls?: number[]; adds?: number[] }, opts: ValueOpts): number {
   let v = base;
-  for (const m of mods) if (m.kind === kinds.set && m.value !== undefined) v = Math.max(v, m.value); // "raised to" cards
+  // "Raised to" cards, and "reduced to" cards (`lower`), in the order they were played.
+  for (const m of mods) if (m.kind === kinds.set && m.value !== undefined) v = m.lower ? Math.min(v, m.value) : Math.max(v, m.value);
   let mul = Math.max(1, ...mods.filter((m) => m.kind === kinds.mul).map((m) => m.value ?? 1), ...(extra.muls ?? []));
   if (opts.selfDefense) mul = mul > 1 ? mul + 1 : 2;
   v *= mul;

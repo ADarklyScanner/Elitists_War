@@ -252,9 +252,15 @@ describe('Plots', () => {
     const victim = give(s0, 'p2', 'reload', { hand: true });
     give(s0, 'p2', 'tornado', { hand: true });
     expect(() => act(s0, 'p1', { type: 'playPlot', play: { card, target: victim, payWith: [small] } })).toThrow(/Power 4/);
+    const other = s0.players[1].hand.find((x) => x !== victim)!;
     let s = act(s0, 'p1', { type: 'playPlot', play: { card, target: victim, payWith: [big] } });
     s = passAll(s);
-    expect(s.cards[victim].zone).toBe('discard');
+    // The player sees the rival's hidden Plots, then names the one to discard.
+    expect(s.prompt?.choice?.key).toBe('agent-in-place');
+    expect(P(s, 'p1').known).toEqual(expect.arrayContaining([victim, other]));
+    s = act(s, 'p1', { type: 'choose', ids: [other] });
+    expect(s.cards[other].zone).toBe('discard');
+    expect(s.cards[victim].zone).toBe('hand');
     expect(s.cards[big].tokens).toBe(0);
   });
   it('Air Magic triples a Place\'s Power against a Disaster, but not an Earthquake', () => {
@@ -429,5 +435,21 @@ describe('Plots', () => {
     const bg = give(s0, 'p2', 'bodyguard', { hand: true });
     const s = act(s0, 'p1', { type: 'playPlot', play: { card: t, target: place } });
     expect(() => act(s, 'p2', { type: 'playPlot', play: { card: bg } })).toThrow(/Assassination/);
+  });
+});
+
+describe('Angst (audit fix)', () => {
+  it('sets Power to 1 before bonuses, so bonuses still count and expire cleanly', () => {
+    const s0 = scenario();
+    const psy = under(s0, 'p1', 'psychiatrists');
+    const mafia = under(s0, 'p2', 'the-mafia');
+    // A temporary +10 that is already on the target when Angst takes effect.
+    s0.cards[mafia].mods.push({ source: 'test', kind: 'power', value: 10, until: 'endOfTurn' });
+    const card = give(s0, 'p1', 'angst', { hand: true });
+    let s = act(s0, 'p1', { type: 'playPlot', play: { card, target: mafia, payWith: [psy] } });
+    s = passAll(s);
+    expect(power(s, mafia)).toBe(11);
+    s.cards[mafia].mods = s.cards[mafia].mods.filter((m) => m.source !== 'test');
+    expect(power(s, mafia)).toBe(1);
   });
 });
