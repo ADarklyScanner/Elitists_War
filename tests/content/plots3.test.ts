@@ -3,7 +3,7 @@ import {
   alignments, applyAction, attackStrength, canEnterPlay, CARDS, destroyGroup, power, resistance, waitingFor,
   type Action, type GameState, type PlotPlay,
 } from '../../src/engine';
-import { resourceKinds } from '../../src/engine/content/plots3';
+import { COMPUTER_PLOTS, resourceKinds } from '../../src/engine/content/plots3';
 import { give, scenario } from '../helpers';
 
 const act = (s: GameState, pl: string, a: Action) => applyAction(s, pl, a);
@@ -180,6 +180,12 @@ describe('Commitment', () => {
 });
 
 describe('Computer Security', () => {
+  it('its list of Plots that deal with Computers matches every Plot in the card data that names them', () => {
+    const named = Object.values(CARDS)
+      .filter((c) => c.type === 'Plot' && [c.text, c.cost, c.target, c.playRequirement].some((f) => /\bComputers?\b/.test(f ?? '')))
+      .map((c) => c.id).sort();
+    expect([...COMPUTER_PLOTS].sort()).toEqual(named);
+  });
   it('negates a Computer Plot, paid by a Computer Group', () => {
     const s0 = scenario();
     const eff = give(s0, 'p1', 'eff', { under: ill(s0, 0), side: 'BOTTOM' });

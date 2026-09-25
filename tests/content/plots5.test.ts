@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  applyAction, attackStrength, power, alignments, waitingFor, type Action, type GameState, type PlotPlay, type Side,
+  applyAction, attackStrength, discardCard, power, alignments, waitingFor, type Action, type GameState, type PlotPlay, type Side,
 } from '../../src/engine';
 import { give, scenario } from '../helpers';
 
@@ -138,6 +138,21 @@ describe('Self Esteem and The Weird Turn Pro', () => {
     const s = playAndResolve(s0, 'p1', { card: a, target: g });
     expect(power(s, g)).toBe(4);
     expect(() => act(s, 'p1', { type: 'playPlot', play: { card: b, target: h } })).toThrow(/only have one/);
+  });
+  it('only ever raises Power: a stronger Group keeps its Power', () => {
+    const s0 = scenario();
+    const g = give(s0, 'p1', 'california', { under: ill(s0, 'p1'), side: 'BOTTOM' }); // Weird, Power 5
+    const before = power(s0, g);
+    expect(before).toBe(5);
+    const card = give(s0, 'p1', 'the-weird-turn-pro', { hand: true });
+    const s = playAndResolve(s0, 'p1', { card, target: g });
+    expect(power(s, g)).toBe(before);
+  });
+  it('uses the target\'s own action, so the Group must be yours', () => {
+    const s0 = scenario();
+    const theirs = give(s0, 'p2', 'girlie-magazines', { under: ill(s0, 'p2'), side: 'BOTTOM' });
+    const card = give(s0, 'p1', 'self-esteem', { hand: true });
+    expect(() => act(s0, 'p1', { type: 'playPlot', play: { card, target: theirs } })).toThrow(/you control/);
   });
 });
 
@@ -450,16 +465,26 @@ describe('Voodoo Economics', () => {
 });
 
 describe('Vultures', () => {
-  it('takes a Group a rival failed to take over from hand', () => {
+  it('takes a Group a rival failed to take over from hand, once he has discarded it', () => {
     const s0 = scenario();
     const g = give(s0, 'p2', 'loan-sharks', { hand: true });
     const card = give(s0, 'p1', 'vultures', { hand: true });
-    expect(() => act(s0, 'p1', { type: 'playPlot', play: { card, target: g } })).toThrow(/failed/);
     s0.cards[g].failedTakeoverTurn = s0.turn;
+    // Still in his hand: he may retry until the end of his turn.
+    expect(() => act(s0, 'p1', { type: 'playPlot', play: { card, target: g } })).toThrow(/discarded/);
+    discardCard(s0, g);
     const s = playAndResolve(s0, 'p1', { card, target: g });
     expect(s.players[0].hand).toContain(g);
-    expect(s.players[1].hand).not.toContain(g);
+    expect(s.players[1].discard).not.toContain(g);
+    expect(s.cards[g].zone).toBe('hand');
     expect(s.cards[g].failedTakeoverTurn).toBeUndefined();
+  });
+  it('not a Group that was simply discarded', () => {
+    const s0 = scenario();
+    const g = give(s0, 'p2', 'loan-sharks', { hand: true });
+    const card = give(s0, 'p1', 'vultures', { hand: true });
+    discardCard(s0, g);
+    expect(() => act(s0, 'p1', { type: 'playPlot', play: { card, target: g } })).toThrow(/failed/);
   });
 });
 

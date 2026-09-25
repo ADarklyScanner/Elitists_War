@@ -483,6 +483,21 @@ export function disasterTarget(s: GameState, iid: string | undefined): boolean {
 function removeFromHand(s: GameState, iid: string) {
   for (const p of s.players) p.hand = p.hand.filter((x) => x !== iid);
 }
+/** Take a card out of every hand and discard pile (a discarded Group attacked by Opportunity Knocks). */
+function removeFromPiles(s: GameState, iid: string) {
+  removeFromHand(s, iid);
+  for (const p of s.players) p.discard = p.discard.filter((x) => x !== iid);
+}
+
+/** A Group a rival failed to take over from his hand and discarded this turn (Opportunity Knocks, Vultures). */
+export function failedDiscard(s: GameState, pl: string, play: PlotPlay): string | undefined {
+  const ok = (c: string) => {
+    const card = s.cards[c];
+    return !!card && card.zone === 'discard' && card.failedTakeoverTurn === s.turn && card.owner !== pl && def(s, c).type === 'Group';
+  };
+  if (play.target) return ok(play.target) ? play.target : undefined;
+  return Object.keys(s.cards).find(ok);
+}
 
 /** Is this Resource in play protected from being discarded or targeted by rivals (Count Dracula)? */
 export function resourceProtected(s: GameState, iid: string | undefined): boolean {
@@ -544,7 +559,7 @@ export function canEnterPlay(s: GameState, iid: string, playerId?: string): bool
 export function placeGroup(s: GameState, iid: string, controller: string, master: string, side: Side) {
   const c = s.cards[iid];
   const d = def(s, iid);
-  removeFromHand(s, iid);
+  removeFromPiles(s, iid);
   const r = attachRect(s, master, side);
   Object.assign(c, {
     zone: 'structure', controller, master, side, x: r.x, y: r.y,
@@ -731,15 +746,23 @@ function syncHiddenResources(s: GameState) {
   }
 }
 
-function endTurnCleanup(s: GameState) {
+/**
+ * Groups the active player failed to take over from his hand this turn are discarded when he ends
+ * the turn (R003: he may retry until then). This happens before the end-of-turn window, so rivals
+ * may answer the discard there (Opportunity Knocks, Vultures). The mark stays on the discarded card.
+ */
+function discardFailedTakeovers(s: GameState) {
   const p = activePlayer(s);
-  // Groups that failed a takeover from hand this turn are discarded (R003).
   for (const iid of [...p.hand]) {
     if (s.cards[iid].failedTakeoverTurn === s.turn) {
       discardCard(s, iid);
       log(s, `${cardName(s, iid)} was not taken over and is discarded.`, p.id);
     }
   }
+}
+
+function endTurnCleanup(s: GameState) {
+  discardFailedTakeovers(s);
   // The turn is over, so the 5-Plot limit now applies to the active player too (R027).
   const over = livePlayers(s).find((x) => overLimit(s, x.id));
   if (over) { s.prompt = { player: over.id, kind: 'discardToLimit', data: { resume: 'endTurn' } }; return; }
@@ -1009,9 +1032,10 @@ export function validateAttack(s: GameState, playerId: string, a: Extract<Action
   if (a.attacker === a.target) return 'A Group cannot attack itself.';
   const td = def(s, a.target);
   if (td.type !== 'Group') return 'Only Groups can be attacked.';
-  const fromHand = tgt.zone === 'hand';
+  // opts.anyHand: a card lets you attack a Group another player failed to take over from his hand and
+  // discarded, to control or destroy it (Opportunity Knocks).
+  const fromHand = tgt.zone === 'hand' || (!!opts.anyHand && tgt.zone === 'discard');
   if (fromHand) {
-    // opts.anyHand: a card lets you attack a Group in another player's hand, to control or destroy it (Opportunity Knocks).
     if (a.attackType !== 'control' && !opts.anyHand) return 'Groups in your hand can only be attacked to control.';
     if (!opts.anyHand && !player(s, playerId).hand.includes(a.target)) return 'You can only attack Groups from your own hand.';
     if (!canEnterPlay(s, a.target)) return 'That Group is already in play or was destroyed.';
@@ -1044,7 +1068,7 @@ export function startAttack(s: GameState, playerId: string, a: Extract<Action, {
   const err = validateAttack(s, playerId, a, opts);
   if (err) throw new RuleError(err);
   const tgt = s.cards[a.target];
-  const fromHand = tgt.zone === 'hand';
+  const fromHand = tgt.zone === 'hand' || (!!opts.anyHand && tgt.zone === 'discard');
   s.cards[a.attacker].tokens--;
   const ctx: AttackCtx = {
     id: ++s.attackCounter, type: a.attackType, instant: false, attacker: a.attacker, attackerPlayer: playerId,
@@ -1054,7 +1078,7 @@ export function startAttack(s: GameState, playerId: string, a: Extract<Action, {
   };
   if (a.privileged) s.turnFlags.bavarianPrivilege = true;
   s.attack = ctx;
-  log(s, `${cardName(s, a.attacker)} attacks to ${a.attackType} ${cardName(s, a.target)}${fromHand ? ' (from hand)' : ''}${ctx.privileged ? ' — Privileged' : ''}.`, playerId);
+  log(s, `${cardName(s, a.attacker)} attacks to ${a.attackType} ${cardName(s, a.target)}${fromHand ? (tgt.zone === 'discard' ? ' (from the discard pile)' : ' (from hand)') : ''}${ctx.privileged ? ' — Privileged' : ''}.`, playerId);
   for (const play of a.plots ?? []) playPlot(s, playerId, play, true);
   openWindow(s, 'attack');
 }
@@ -1433,7 +1457,7 @@ export function destroyGroup(s: GameState, iid: string, by: string) {
   const prev = c.controller ?? c.owner;
   // Where the Group and its puppets were, for cards that bring it back (Head in a Jar).
   const layout = c.zone === 'structure' ? subtree(s, iid).map((g) => ({ iid: g, master: s.cards[g].master, x: s.cards[g].x, y: s.cards[g].y, side: sideOf(s, g) })) : [];
-  removeFromHand(s, iid); // a Group attacked in someone's hand (Opportunity Knocks)
+  removeFromPiles(s, iid); // a discarded Group attacked by Opportunity Knocks
   // "Draw a Plot whenever you destroy …" abilities (checked before the card loses its changes).
   let draws = 0;
   for (const g of structureCards(s, by)) {
@@ -1522,7 +1546,101 @@ export function checkPlot(s: GameState, playerId: string, play: PlotPlay, declar
   if (ctx && ctx.plays.some((p) => p.player === playerId && s.cards[p.iid]?.cardId === d.id && !isCancelled(ctx.plays, p.iid))) return `You already used ${d.name} in this attack.`;
   if (ctx?.barred?.includes(playerId)) return 'A card bars you from interfering in this attack.';
   if (ctx && isPrivileged(ctx) && !participants(s).includes(playerId) && !t.includes('roll') && d.id !== 'interference' && d.id !== 'deep-agent') return 'Only the two players involved may act in a Privileged attack.';
+  if (play.march) return checkWithMarch(s, playerId, play, ctx);
   return h.check(s, playerId, play, ctx);
+}
+
+// ---------------------------------------------------------------- March on Washington
+//
+// Played along with another Plot that requires actions, March on Washington stands in for one of
+// them: one action of Power 6 or less, of any alignment or attribute, but never an Illuminati action.
+// The engine models the stand-in as a temporary extra paying "Group" (`play.march` names the March
+// card, which is added to `payWith` while the Plot is checked and paid for). It costs the top card of
+// your Plot deck and may be used once per turn.
+
+export const MARCH_ON_WASHINGTON = 'march-on-washington';
+const STAND_IN = 'march-stand-in';
+/** Plots whose paying Group is also the Group they change: a stand-in has nothing to change. */
+const NO_STAND_IN = new Set(['purge']);
+
+function standInDef() {
+  if (!CARDS[STAND_IN]) {
+    const attrs = [...new Set(Object.values(CARDS).filter((c) => c.type === 'Group').flatMap((c) => c.attributes ?? []))];
+    CARDS[STAND_IN] = {
+      id: STAND_IN, name: 'March on Washington', type: 'Group', subtype: 'Organization', rarity: null,
+      text: 'Stands in for one action of Power 6 or less.', power: 6, globalPower: 0, resistance: 0,
+      alignments: ['Government', 'Corporate', 'Liberal', 'Conservative', 'Peaceful', 'Violent', 'Straight', 'Weird', 'Criminal', 'Fanatic'],
+      attributes: attrs, arrowsOut: [],
+    };
+  }
+}
+
+function marchError(s: GameState, playerId: string, play: PlotPlay): string | null {
+  const p = player(s, playerId);
+  const m = play.march!;
+  if (m === play.card || !p.hand.includes(m) || s.cards[m]?.cardId !== MARCH_ON_WASHINGTON) return 'Choose a March on Washington card from your hand.';
+  const id = s.cards[play.card].cardId;
+  if (id === MARCH_ON_WASHINGTON || NO_STAND_IN.has(id) || PLOTS[id]?.needs?.pay !== 'tokens') return 'March on Washington only stands in for an action that pays for a Plot.';
+  if (s.cards[p.illuminati].data?.marchTurn === s.turn) return 'You may use March on Washington only once per turn.';
+  if (!p.plotDeck.length) return 'March on Washington also costs the top card of your Plot deck, and it is empty.';
+  return null;
+}
+
+/** Run `fn` with the March card turned into a paying stand-in; report whether its action was spent. */
+function withStandIn<T>(s: GameState, playerId: string, play: PlotPlay, fn: (p: PlotPlay) => T): { value: T; used: boolean } {
+  standInDef();
+  const m = play.march!;
+  const saved = s.cards[m];
+  const hand = player(s, playerId).hand;
+  const at = hand.indexOf(m);
+  if (at >= 0) hand.splice(at, 1);
+  s.cards[m] = { ...saved, cardId: STAND_IN, zone: 'structure', controller: playerId, master: undefined, linkedTo: undefined, tokens: 1, mods: [], data: undefined };
+  let used = false;
+  try {
+    const value = fn({ ...play, payWith: [...(play.payWith ?? []), m] });
+    used = s.cards[m].tokens < 1;
+    return { value, used };
+  } finally {
+    s.cards[m] = saved;
+    if (at >= 0) hand.splice(at, 0, m);
+  }
+}
+
+/** The ctx a Plot's `apply` receives in `playPlot`. */
+function applyCtx(s: GameState, h: import('./plotTypes').PlotHandler): AttackCtx | undefined {
+  return s.window?.kind !== 'plot' && s.attack && !h.timing.includes('instant') ? s.attack : undefined;
+}
+
+function checkWithMarch(s: GameState, playerId: string, play: PlotPlay, ctx?: AttackCtx): string | null {
+  const err = marchError(s, playerId, play);
+  if (err) return err;
+  const h = PLOTS[s.cards[play.card].cardId];
+  const probe: GameState = structuredClone(s);
+  const checked = withStandIn(probe, playerId, play, (p2) => h.check(probe, playerId, p2, ctx ? probe.attack : undefined));
+  if (checked.value) return checked.value;
+  // The stand-in must really replace one of the actions the Plot requires.
+  let used = false;
+  try {
+    removeFromHand(probe, play.card);
+    probe.cards[play.card].zone = 'table';
+    used = withStandIn(probe, playerId, play, (p2) => h.apply(probe, playerId, p2, applyCtx(probe, h))).used;
+  } catch { used = false; }
+  return used ? null : 'March on Washington must stand in for one of the actions this Plot requires.';
+}
+
+/** Pay a Plot's costs, with March on Washington standing in for one action when `play.march` is set. */
+function applyPlot(s: GameState, playerId: string, play: PlotPlay, ctx?: AttackCtx): PlotEffect | void {
+  const h = PLOTS[s.cards[play.card].cardId];
+  if (!play.march) return h.apply(s, playerId, play, ctx);
+  const { value } = withStandIn(s, playerId, play, (p2) => h.apply(s, playerId, p2, ctx));
+  const p = player(s, playerId);
+  const ill = s.cards[p.illuminati];
+  ill.data = { ...ill.data, marchTurn: s.turn };
+  const top = p.plotDeck.shift();
+  if (top) { s.cards[top].zone = 'hand'; p.hand.push(top); discardCard(s, top); }
+  discardCard(s, play.march);
+  log(s, `March on Washington stands in for one of the actions ${cardName(s, play.card)} needs; the top card of the Plot deck is discarded.`, playerId);
+  return value;
 }
 
 /** Play a Plot from hand. Attack plots are recorded on the attack; others open a counter window first. */
@@ -1540,23 +1658,23 @@ export function playPlot(s: GameState, playerId: string, play: PlotPlay, declari
   if (s.window?.kind === 'plot') {
     // A counter to the Plot waiting to resolve.
     s.window.plays!.push(pp);
-    pp.effect = h.apply(s, playerId, play) ?? pp.effect;
+    pp.effect = applyPlot(s, playerId, play) ?? pp.effect;
     s.window.passed = [playerId];
     return;
   }
   if (ctx && !h.timing.includes('instant')) {
     ctx.plays.push(pp);
-    pp.effect = h.apply(s, playerId, play, ctx) ?? pp.effect;
+    pp.effect = applyPlot(s, playerId, play, ctx) ?? pp.effect;
     if (s.window) s.window.passed = [];
     return;
   }
   if (h.timing.includes('instant')) {
-    h.apply(s, playerId, play); // starts an Instant attack (sets s.attack and opens a window)
+    applyPlot(s, playerId, play); // starts an Instant attack (sets s.attack and opens a window)
     s.attack?.plays.push(pp);
     return;
   }
   // Non-attack Plot: pay its costs now, give others a chance to counter it, then resolve.
-  h.apply(s, playerId, play);
+  applyPlot(s, playerId, play);
   const fromEvent = s.window?.kind === 'event' ? s.window.event : undefined;
   s.window = { kind: 'plot', passed: [playerId], plot: pp, plays: [pp], deadline: Date.now() + s.settings.responseHours * 3600_000, event: fromEvent };
 }
@@ -1587,7 +1705,8 @@ function resolvePendingPlot(s: GameState) {
     s.window = { kind: 'event', event: w.event, passed: [], deadline: Date.now() + s.settings.responseHours * 3600_000 };
     return;
   }
-  if (s.phase === 'endOfTurn') openWindow(s, 'endOfTurn');
+  // Back to the end-of-turn window, unless the Plot started an attack (which reopens it when over).
+  if (s.phase === 'endOfTurn' && !s.attack && !s.window) openWindow(s, 'endOfTurn');
 }
 
 // ---------------------------------------------------------------- aid / oppose
@@ -1915,6 +2034,7 @@ export function applyAction(state: GameState, playerId: string, action: Action):
       if (s.phase !== 'main' || activePlayer(s).id !== playerId || s.window || s.attack || s.prompt) throw new RuleError('You cannot end your turn right now.');
       s.phase = 'endOfTurn';
       log(s, `${p.name} ends the turn.`, playerId);
+      discardFailedTakeovers(s);
       openWindow(s, 'endOfTurn');
       s.window!.passed = [playerId];
       break;

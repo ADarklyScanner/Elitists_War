@@ -12,7 +12,7 @@ import {
   activePlayer, askChoice, attackCancelled, attackStrength, canEnterPlay, controllerOf2, currentOutcome, destroyGroup,
   discardCard, drawGroup, finalRoll, isPrivileged, livePlayers, log, player, playResourceCard, protectedPlayer,
   startInstantAttack, tokenBarred,
-  disasterTarget,
+  disasterTarget, failedDiscard,
 } from '../game';
 
 // ---------------------------------------------------------------- helpers (copied from plots.ts)
@@ -385,7 +385,7 @@ registerPlots({
     check: (s, _pl, _play, ctx) => (ctx && ctx.type === 'destroy' && s.cards[ctx.target].cardId === 'lawyers' ? null : 'Only with an Attack to Destroy the Lawyers.'),
     apply(s, pl, play, ctx) {
       ctx!.attackBonus.push({ player: pl, plot: play.card, amount: 20, label: 'Kill All The Lawyers' });
-      log(s, '"The first thing we do, let\'s kill all the lawyers."', pl);
+      log(s, 'The Lawyers face +20 to this Attack to Destroy.', pl);
     },
   },
 
@@ -519,19 +519,19 @@ registerPlots({
     },
   },
 
-  // A rival's Group that failed a takeover from hand goes to your hand instead of his discard pile.
+  // A Group a rival played from his hand, failed to take over and discarded goes into your hand.
   'vultures': {
     timing: ['anytime'],
-    check: (s, pl, play) => (vultureTarget(s, pl, play) ? null : 'Choose a Group a rival failed to take over from hand this turn.'),
-    apply() {},
+    needs: { target: 'discardPile' },
+    check: (s, pl, play) => (failedDiscard(s, pl, play) ? null : 'Choose a Group a rival failed to take over from his hand and discarded.'),
+    apply(s, pl, play) { s.cards[play.card].data = { ...s.cards[play.card].data, vultureTarget: failedDiscard(s, pl, play) }; },
     resolve(s, pl, play) {
-      const g = vultureTarget(s, pl, play);
-      if (!g) return;
-      for (const p of s.players) p.hand = p.hand.filter((x) => x !== g);
-      s.cards[g].failedTakeoverTurn = undefined;
-      s.cards[g].exposed = false;
+      const g = s.cards[play.card].data?.vultureTarget as string | undefined;
+      if (!g || s.cards[g].zone !== 'discard') return;
+      for (const p of s.players) p.discard = p.discard.filter((x) => x !== g);
+      Object.assign(s.cards[g], { zone: 'hand', controller: undefined, failedTakeoverTurn: undefined, exposed: false });
       player(s, pl).hand.push(g);
-      log(s, `${player(s, pl).name} takes ${def(s, g).name}.`, pl);
+      log(s, `${player(s, pl).name} takes ${def(s, g).name} from the discard pile.`, pl);
     },
   },
 
@@ -617,16 +617,6 @@ function weak(s: GameState, pl: string, play: PlotPlay) {
   discardCard(s, r);
 }
 
-function vultureTarget(s: GameState, pl: string, play: PlotPlay): string | undefined {
-  const ok = (c: string) => {
-    const card = s.cards[c];
-    if (!card || card.zone !== 'hand' || card.failedTakeoverTurn !== s.turn || def(s, c).type !== 'Group') return false;
-    const holder = s.players.find((p) => p.hand.includes(c));
-    return !!holder && holder.id !== pl;
-  };
-  if (play.target) return ok(play.target) ? play.target : undefined;
-  return Object.keys(s.cards).find(ok);
-}
 
 // ---------------------------------------------------------------- linked Plots
 
