@@ -44,6 +44,7 @@ interface Ui {
   sheetMin?: boolean;
   handMin?: boolean;
   showLog?: boolean;
+  showStyle?: boolean;
   lastKey?: string;
   /** The latest attack roll, shown as tumbling dice. */
   dice?: { a: number; b: number; need: number; start: number };
@@ -175,6 +176,28 @@ const LEVELS: [AiLevel, string, string][] = [
   ['normal', 'Normal', 'Plays solidly: weighs its attacks and cards, and defends what matters.'],
   ['hard', 'Hard', 'Counts all the help it can bring to each attack, plays every takeover out, and fights hardest when a win is close.'],
 ];
+
+/** Card backs and table felts anyone can pick; purely how the table looks. */
+const BACKS = [['gilded', 'Gilded Eye'], ['classic', 'Classic'], ['argyle', 'Argyle'], ['sunburst', 'Sunburst']] as const;
+const FELTS = [['purple', 'Purple'], ['green', 'Green'], ['blue', 'Blue'], ['crimson', 'Crimson'], ['charcoal', 'Charcoal']] as const;
+function loadStyle(key: 'backs' | 'felt', list: readonly (readonly [string, string])[]): string {
+  try { const v = localStorage.getItem(`elitists-war.${key}`); if (v && list.some((x) => x[0] === v)) return v; } catch { /* storage unavailable */ }
+  return list[0][0];
+}
+function saveStyle(key: 'backs' | 'felt', v: string) {
+  try { localStorage.setItem(`elitists-war.${key}`, v); } catch { /* storage unavailable */ }
+}
+
+function styleHtml(): string {
+  const backs = loadStyle('backs', BACKS), felt = loadStyle('felt', FELTS);
+  return `<h2>Table style</h2>
+  <p class="muted small">Only changes how your table looks. Other players choose their own.</p>
+  <h3>Card backs</h3>
+  <div class="style-grid">${BACKS.map(([id, name]) => `<button class="style-pick backs-${id} ${backs === id ? 'on' : ''}" data-style-backs="${id}" aria-pressed="${backs === id}">
+    <span class="pair"><span class="cardback plot"></span><span class="cardback group"></span></span><b>${name}</b></button>`).join('')}</div>
+  <h3>Felt</h3>
+  <div class="style-grid felts">${FELTS.map(([id, name]) => `<button class="style-pick felt-${id} ${felt === id ? 'on' : ''}" data-style-felt="${id}" aria-pressed="${felt === id}"><span class="swatch"></span><b>${name}</b></button>`).join('')}</div>`;
+}
 
 function newGame(illuminati: string, quick: boolean) {
   const seed = Math.floor(Math.random() * 1e9);
@@ -330,7 +353,7 @@ function render() {
   const me = player(s, ui.me);
   const recent = s.log.filter((l) => (!l.to || l.to === ui.me) && (!l.info || tutorial())).slice(-2).reverse();
   app.innerHTML = `
-  <div class="shell ${ui.guide ? 'guide' : ''} ${tutorial() ? 'tutorial' : ''}">
+  <div class="shell ${ui.guide ? 'guide' : ''} ${tutorial() ? 'tutorial' : ''} backs-${loadStyle('backs', BACKS)} felt-${loadStyle('felt', FELTS)}">
     <header class="hud">
       <button class="linkish" data-act="home" aria-label="Back to games">‹</button>
       <div class="players">${s.players.map((p) => playerChip(s, p.id)).join('')}</div>
@@ -338,6 +361,7 @@ function render() {
       ${phaseTracker(s)}
       <button class="hud-btn" data-rules="goal">Rules</button>
       <button class="hud-btn" data-act="log">Log</button>
+      <button class="hud-btn" data-act="style" title="Card backs and felt colour" aria-label="Table style">🎨</button>
       <button class="guide-toggle ${ui.guide ? 'on' : ''} ${ui.help}" data-act="guide" title="${esc(HELP_TITLE[ui.help])}" aria-label="Help level: ${HELP_LABEL[ui.help]} (tap to change)">${HELP_LABEL[ui.help]}</button>
     </header>
     <main class="tablearea">
@@ -348,7 +372,7 @@ function render() {
       </div></div>
       ${renderDecks(s)}
       <div class="ticker" aria-live="polite">${recent.map((l) => `<div>${esc(youText(l.text))}</div>`).join('')}</div>
-      <div class="zoom"><button data-zoom="in" aria-label="Zoom in">+</button><button data-zoom="out" aria-label="Zoom out">−</button><button data-zoom="fit">Fit</button></div>
+      <div class="zoom"><button data-zoom="in" aria-label="Zoom in">+</button><button data-zoom="out" aria-label="Zoom out">−</button><button data-zoom="fit" title="See the whole table">All</button><button data-zoom="me" title="Jump to your seat">You</button>${!myTurn(s) && s.phase !== 'gameOver' ? `<button data-zoom="turn" title="Jump to the player whose turn it is">${esc(player(s, s.players[s.active].id).name)}'s turn</button>` : ''}</div>
       ${renderInspect(s)}
       <aside class="sheet ${ui.sheetMin ? 'min' : ''} ${gnext('console')}">
         <div class="sheet-top">
@@ -371,6 +395,7 @@ function render() {
     </footer>
     ${diceOverlay()}
     ${ui.showRules ? `<div class="modal-back" data-rules=""></div><div class="modal rules" role="dialog" aria-label="Rules">${rulesHtml(s)}<div class="btns"><button data-rules="">Close</button></div></div>` : ''}
+    ${ui.showStyle ? `<div class="modal-back" data-act="style"></div><div class="modal style" role="dialog" aria-label="Table style">${styleHtml()}<div class="btns"><button data-act="style">Done</button></div></div>` : ''}
     ${ui.showLog ? `<div class="modal-back" data-act="log"></div><div class="modal" role="dialog" aria-label="Game log">${renderLog(s)}<div class="btns"><button data-act="log">Close</button></div></div>` : ''}
   </div>`;
   bind();
@@ -478,16 +503,36 @@ const youText = (t: string) => t.replace(/\bYou's\b/g, 'Your').replace(/(^|\s)Yo
 /** Width of the table's brass rim, in pixels (see .felt in style.css). */
 const RIM = 20;
 
-function fitView(vp: HTMLElement, world: HTMLElement) {
+/** The part of the screen the table can use: not under the decks rail or the action panel. */
+function tableArea(vp: HTMLElement) {
   const wide = vp.clientWidth > 900;
   const sheet = vp.parentElement!.querySelector<HTMLElement>('.sheet');
   const rail = window.innerWidth <= 480 ? 58 : 84; // the decks along the left
-  const aw = vp.clientWidth - (wide ? 372 : 0) - 16 - rail;
-  const ah = vp.clientHeight - (!wide && sheet ? sheet.offsetHeight + 8 : 0) - 16;
+  return { left: 8 + rail, top: 8, w: vp.clientWidth - (wide ? 372 : 0) - 16 - rail, h: vp.clientHeight - (!wide && sheet ? sheet.offsetHeight + 8 : 0) - 16 };
+}
+
+/** Smallest zoom the automatic view will use; below this cards are too small to read, so it shows your seat instead. */
+const READABLE = 0.55;
+
+function fitView(vp: HTMLElement, world: HTMLElement, force = false) {
+  const a = tableArea(vp);
   // The brass rim is drawn outside the felt, so leave room for it on every side.
   const ww = world.offsetWidth + 2 * RIM, wh = world.offsetHeight + 2 * RIM;
-  const z = Math.max(0.15, Math.min(1.5, aw / ww, ah / wh));
-  ui.view = { x: 8 + rail + (aw - ww * z) / 2 + RIM * z, y: 8 + Math.max(0, (ah - wh * z) / 2) + RIM * z, z, auto: true };
+  const z = Math.max(0.15, Math.min(1.5, a.w / ww, a.h / wh));
+  if (z < READABLE && !force) { focusSeat(vp, world, ui.me, true); return; }
+  ui.view = { x: a.left + (a.w - ww * z) / 2 + RIM * z, y: a.top + Math.max(0, (a.h - wh * z) / 2) + RIM * z, z, auto: !force };
+}
+
+/** Centre the view on one player's seat, zoomed so it fills the space (but stays readable). */
+function focusSeat(vp: HTMLElement, world: HTMLElement, pl: string, auto = false) {
+  const el = world.querySelector<HTMLElement>(`[data-seat="${pl}"]`);
+  if (!el) return;
+  // Measure in table coordinates: offsets are unscaled, so walk up to the table.
+  let x = 0, y = 0;
+  for (let n: HTMLElement | null = el; n && n !== world; n = n.offsetParent as HTMLElement | null) { x += n.offsetLeft; y += n.offsetTop; }
+  const a = tableArea(vp);
+  const z = Math.max(READABLE, Math.min(1.2, (a.w / el.offsetWidth) * 0.95, (a.h / el.offsetHeight) * 0.95));
+  ui.view = { x: a.left + a.w / 2 - (x + el.offsetWidth / 2) * z, y: a.top + a.h / 2 - (y + el.offsetHeight / 2) * z, z, auto };
 }
 
 function applyView(world: HTMLElement) {
@@ -548,7 +593,9 @@ function bindTable() {
   };
   app.querySelectorAll<HTMLElement>('[data-zoom]').forEach((b) => b.onclick = () => {
     const z = b.dataset.zoom;
-    if (z === 'fit') fitView(vp, world);
+    if (z === 'fit') fitView(vp, world, true);
+    else if (z === 'me') focusSeat(vp, world, ui.me);
+    else if (z === 'turn' && ui.game) focusSeat(vp, world, ui.game.players[ui.game.active].id);
     else zoomAt(vp.clientWidth / 2, vp.clientHeight / 2, z === 'in' ? 1.25 : 0.8);
     applyView(world);
   });
@@ -588,7 +635,7 @@ function renderSide(s: GameState, pl: string, mine: boolean): string {
   const field = `<div class="board-scroll"><div class="field" style="width:calc(var(--u) * ${maxX - minX});height:calc(var(--u) * ${maxY - minY})">${cells.join('')}</div></div>`;
   // Seat order mirrors a real table: your nameplate at your edge, the Power Structure toward the middle.
   return `
-    <div class="side ${mine ? 'mine' : 'theirs'} ${s.players[s.active].id === pl && s.phase !== 'gameOver' ? 'active' : ''} ${gnext(mine ? 'board' : 'rival')}">
+    <div data-seat="${pl}" class="side ${mine ? 'mine' : 'theirs'} ${s.players[s.active].id === pl && s.phase !== 'gameOver' ? 'active' : ''} ${gnext(mine ? 'board' : 'rival')}">
       ${mine ? `${field}${seatRail(s, pl, mine)}${head}` : `${head}${seatRail(s, pl, mine)}${field}`}
     </div>`;
 }
@@ -1295,6 +1342,8 @@ function bind() {
     if (ui.handMin) { ui.handMin = false; render(); }
     app.querySelector<HTMLElement>(`.hand-sec.${b.dataset.handjump}`)?.scrollIntoView({ inline: 'start', block: 'nearest', behavior: 'smooth' });
   });
+  app.querySelectorAll<HTMLElement>('[data-style-backs]').forEach((b) => b.onclick = () => { saveStyle('backs', b.dataset.styleBacks!); render(); });
+  app.querySelectorAll<HTMLElement>('[data-style-felt]').forEach((b) => b.onclick = () => { saveStyle('felt', b.dataset.styleFelt!); render(); });
   app.querySelectorAll<HTMLElement>('[data-deck]').forEach((b) => b.onclick = () => onDeck(b.dataset.deck as 'plot' | 'group'));
   app.querySelectorAll<HTMLElement>('[data-info]').forEach((b) => b.onclick = (e) => { e.stopPropagation(); ui.info = ui.info === b.dataset.info ? undefined : b.dataset.info; render(); });
   app.querySelectorAll<HTMLElement>('[data-lead]').forEach((b) => b.onclick = () => act({ type: 'chooseLead', card: b.dataset.lead! }));
@@ -1316,6 +1365,7 @@ function bind() {
       case 'dice': if (ui.dice) ui.dice.start = 0; render(); schedule(); break;
       case 'hand': ui.handMin = !ui.handMin; render(); break;
       case 'log': ui.showLog = !ui.showLog; render(); break;
+      case 'style': ui.showStyle = !ui.showStyle; render(); break;
       case 'closeInspect': ui.inspect = undefined; render(); break;
       case 'guide':
         ui.help = HELP_MODES[(HELP_MODES.indexOf(ui.help) + 1) % HELP_MODES.length];

@@ -354,8 +354,36 @@ p { margin: 0; }
 .deck { position: relative; width: 64px; height: 90px; padding: 0; border: 0; background: none; display: block; }
 .deck .back { position: absolute; inset: 0; border-radius: 6px; border: 1px solid #d4a34066;
   box-shadow: 2px 2px 0 #0b1216, 4px 4px 0 #2a3f48, 6px 6px 0 #0b1216, 0 8px 18px #0009; }
-.deck.plot .back, .cardback.plot { background: #1d0f2c url("assets/back-plot.webp") center / cover; }
-.deck.group .back, .cardback.group { background: #0c1a2c url("assets/back-group.webp") center / cover; }
+/* Card backs: pick one under Table style. Plot and Group backs always differ, so the two decks never mix up. */
+.backs-gilded .plot .back, .backs-gilded .cardback.plot, .style-pick.backs-gilded .cardback.plot { background: #1d0f2c url("assets/back-plot.webp") center / cover; }
+.backs-gilded .group .back, .backs-gilded .cardback.group, .style-pick.backs-gilded .cardback.group { background: #0c1a2c url("assets/back-group.webp") center / cover; }
+/* Classic: a violet rosette around a brass seal; a teal lattice of linked nodes. */
+.backs-classic .plot .back, .backs-classic .cardback.plot, .style-pick.backs-classic .cardback.plot { background:
+  radial-gradient(circle at 50% 50%, #d4a340 0 9%, #3a2657 10% 13%, #d4a340cc 14% 15%, transparent 16%),
+  repeating-conic-gradient(from 7deg at 50% 50%, #4a2f70 0 11.25deg, #2c1b45 11.25deg 22.5deg), #2c1b45; }
+.backs-classic .group .back, .backs-classic .cardback.group, .style-pick.backs-classic .cardback.group { background:
+  radial-gradient(circle at 50% 50%, #d4a340 0 8%, transparent 9%),
+  radial-gradient(circle at 50% 50%, transparent 0 22%, #d4a34066 23% 25%, transparent 26%),
+  repeating-linear-gradient(45deg, #1f4d52 0 5px, #16373b 5px 10px),
+  repeating-linear-gradient(-45deg, #1f4d5288 0 5px, transparent 5px 10px), #16373b; }
+/* Argyle: brass diamonds on deep violet or navy, inside a thin gold frame. */
+.backs-argyle .plot .back, .backs-argyle .cardback.plot, .style-pick.backs-argyle .cardback.plot, .backs-argyle .group .back, .backs-argyle .cardback.group, .style-pick.backs-argyle .cardback.group {
+  --bk: #1c0f2b; --bk2: #3b2160;
+  background:
+    linear-gradient(45deg, transparent 47%, #d4a34088 47% 53%, transparent 53%) center / 16px 16px,
+    linear-gradient(-45deg, transparent 47%, #d4a34088 47% 53%, transparent 53%) center / 16px 16px,
+    conic-gradient(from 45deg at 50% 50%, var(--bk2) 25%, var(--bk) 0 50%, var(--bk2) 0 75%, var(--bk) 0) center / 16px 16px, var(--bk);
+  box-shadow: inset 0 0 0 3px var(--bk), inset 0 0 0 4px #d4a340, inset 0 0 0 6px var(--bk); }
+.backs-argyle .group .back, .backs-argyle .cardback.group, .style-pick.backs-argyle .cardback.group { --bk: #0b1a2a; --bk2: #173a5c; }
+/* Sunburst: gold rays from a central disc. */
+.backs-sunburst .plot .back, .backs-sunburst .cardback.plot, .style-pick.backs-sunburst .cardback.plot, .backs-sunburst .group .back, .backs-sunburst .cardback.group, .style-pick.backs-sunburst .cardback.group {
+  --bk: #24113a; --ray: #5b3590;
+  background:
+    radial-gradient(circle at 50% 50%, #f0cf82 0 8%, #b07d2a 9% 11%, transparent 12%),
+    radial-gradient(circle at 50% 50%, transparent 0 60%, var(--bk) 75%),
+    repeating-conic-gradient(from 0deg at 50% 50%, var(--ray) 0 6deg, var(--bk) 6deg 12deg), var(--bk);
+  box-shadow: inset 0 0 0 3px var(--bk), inset 0 0 0 4px #d4a340aa; }
+.backs-sunburst .group .back, .backs-sunburst .cardback.group, .style-pick.backs-sunburst .cardback.group { --bk: #0a1b2c; --ray: #1f5a84; }
 .deck.empty .back { opacity: .3; box-shadow: none; }
 .deck-label { position: absolute; left: 0; right: 0; bottom: -17px; text-align: center; font: 600 10.5px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
 .deck-count { position: absolute; top: -8px; right: -8px; min-width: 22px; height: 22px; border-radius: 11px; background: var(--panel-2); border: 1px solid var(--line); font: 600 11.5px/20px var(--mono); color: var(--ink); text-align: center; padding: 0 4px; }
@@ -390,16 +418,16 @@ p { margin: 0; }
 .world.felt {
   gap: 34px; padding: 44px 56px; border-radius: 150px;
   background:
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='500' height='500'%3E%3Cfilter id='v'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.008 .014' numOctaves='4' seed='11' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .78 0 0 0 0 .5 0 0 0 0 1 1 0 0 0 0'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='table' tableValues='0 0 0 0 0 0 .2 0 0 0 0 0 0'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23v)'/%3E%3C/svg%3E"),
-    radial-gradient(ellipse at 50% 45%, #3b1d57 0%, #2a1340 40%, #170a24 100%);
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='500' height='500'%3E%3Cfilter id='v'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.008 .014' numOctaves='4' seed='11' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .78 0 0 0 0 .5 0 0 0 0 1 1 0 0 0 0'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='table' tableValues='0 0 0 0 0 0 .07 0 0 0 0 0 0'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23v)'/%3E%3C/svg%3E"),
+    radial-gradient(ellipse at 50% 45%, var(--felt-a) 0%, var(--felt-b) 45%, var(--felt-c) 100%);
   box-shadow:
     inset 0 0 0 1px #0008, inset 0 0 70px #000b,
     0 0 0 3px #1a0f07, 0 0 0 5px #e2b35c, 0 0 0 11px #8a5a22, 0 0 0 13px #f0c878, 0 0 0 17px #5a3812, 0 0 0 20px #c08a3c,
     0 26px 70px #000;
 }
 .world.felt .rivals { gap: 30px; }
-.world.felt .side { background: #0d0716b8; border: 1px solid #c99a4866; border-radius: 16px; box-shadow: inset 0 0 0 3px #0d0716, inset 0 0 0 4px #c99a4826; }
-.world.felt .side.active { border-color: #e2b35c; box-shadow: inset 0 0 0 3px #0d0716, inset 0 0 0 4px #e2b35c55, 0 0 26px -4px #e2b35c88; }
+.world.felt .side { background: #00000026; border: 1px solid #f3d89a26; border-radius: 18px; }
+.world.felt .side.active { border-color: #e2b35caa; box-shadow: 0 0 26px -6px #e2b35c88; }
 .world.felt .side-head { justify-content: center; border: 0; padding: 8px 14px; }
 .world.felt .side-head .who { font-family: var(--display); letter-spacing: .14em; text-transform: uppercase; font-size: 14px; color: #f3d89a;
   padding: 2px 16px; border-radius: 999px; background: linear-gradient(#2a1a0c, #140c06); border: 1px solid #c99a48; box-shadow: 0 0 0 2px #140c06, 0 0 0 3px #c99a4855; }
@@ -423,7 +451,7 @@ p { margin: 0; }
 
 /* The centre: the three New World Order places around the emblem. */
 .nwo-center { position: relative; display: grid; justify-items: center; gap: 8px; padding: 14px 24px; }
-.nwo-center .emblem { position: absolute; left: 50%; top: 50%; width: 250px; height: 250px; transform: translate(-50%, -50%); opacity: .8; pointer-events: none; }
+.nwo-center .emblem { position: absolute; left: 50%; top: 50%; width: 230px; height: 230px; transform: translate(-50%, -50%); opacity: .35; pointer-events: none; }
 .nwo-center .emblem svg { width: 100%; height: 100%; filter: drop-shadow(0 0 16px #e2b35c33); }
 .nwo-label { position: relative; font: 700 13px var(--display); letter-spacing: .3em; text-transform: uppercase; color: #f3d89a; text-shadow: 0 1px 3px #000; }
 .nwo-slots { position: relative; display: flex; gap: 120px; }
@@ -444,3 +472,24 @@ p { margin: 0; }
 .ring .side.mine { grid-area: me; }
 .ring .nwo-slots { gap: 70px; }
 @media (max-width: 480px) { .world.felt { padding: 34px 26px; border-radius: 90px; } .nwo-slots { gap: 60px; } }
+
+/* Felt colours (Table style). */
+.shell, .felt-purple { --felt-a: #3b1d57; --felt-b: #2a1340; --felt-c: #170a24; }
+.felt-green { --felt-a: #1f5a3a; --felt-b: #14432a; --felt-c: #0a2416; }
+.felt-blue { --felt-a: #1d3f66; --felt-b: #132c4a; --felt-c: #0a1628; }
+.felt-crimson { --felt-a: #5c1d2a; --felt-b: #43131d; --felt-c: #230a0f; }
+.felt-charcoal { --felt-a: #34363b; --felt-b: #26282c; --felt-c: #141518; }
+
+/* Table style picker */
+.modal.style { width: min(560px, calc(100% - 24px)); }
+.modal.style h3 { color: var(--brass); margin: 12px 0 6px; font-size: 14px; }
+.style-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 8px; }
+.style-pick { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px 6px 8px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+.style-pick.on { border-color: var(--brass); box-shadow: 0 0 0 1px var(--brass) inset; }
+.style-pick .pair { display: flex; gap: 6px; }
+.style-pick .cardback { width: 38px; height: 53px; border-radius: 4px; border: 1px solid #d4a34055; }
+.style-pick .swatch { width: 70px; height: 40px; border-radius: 20px; background: radial-gradient(ellipse at 50% 45%, var(--felt-a), var(--felt-c)); box-shadow: 0 0 0 2px #1a0f07, 0 0 0 4px #c08a3c; }
+.style-pick b { font: 600 12.5px var(--display); letter-spacing: .04em; }
+.zoom button[data-zoom="me"], .zoom button[data-zoom="turn"] { font-size: 12.5px; }
+.zoom button[data-zoom="turn"] { border-color: var(--brass); color: var(--brass); }
+@media (max-width: 480px) { .hud-btn { padding: 4px 8px; } .hud-btn[data-act="style"] { padding: 4px 6px; } .zoom button[data-zoom="turn"] { max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } }
