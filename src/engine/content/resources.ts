@@ -757,13 +757,16 @@ const T: Record<string, CardHooks> = {
     },
   },
 
-  // The +5 applies to its controller's attempts (a passive card has no action to lend to a rival).
+  // "Any attempt" bonuses help only attacks made by one of your own Groups, never a rival's attack
+  // that you aid (rulebook glossary), so the +5 and the one-shot +10 against a Place are for your own
+  // attacks. The one-shot +10 may be added to any Disaster.
   'rogue-boomer': {
     attackMod: (s, self, ctx, side) =>
       side === 'attack' && active(s, self) && ctx.type === 'control' && !ctx.instant && ctx.attackerPlayer === ctrl(s, self) && is(s, ctx.target, { attributes: ['Nation'] }) ? 5 : 0,
     actions: [{
       id: 'strike', label: '+10 to destroy a Place or to a Disaster, then discard', timing: ['attack'], usesToken: false, ai: 'boostAttack',
-      check: (s, _pl, _self, _p, ctx) => needAttack(ctx) ?? (ctx!.type === 'destroy' && (place(s, ctx!.target) || !!ctx!.disaster) ? null : 'Only an attempt to destroy a Place, or a Disaster.'),
+      check: (s, pl, _self, _p, ctx) => needAttack(ctx) ?? (ctx!.type === 'destroy' && (!!ctx!.disaster || (place(s, ctx!.target) && ctx!.attackerPlayer === pl))
+        ? null : 'Only one of your own attempts to destroy a Place, or a Disaster.'),
       apply(s, pl, self, _p, ctx) {
         bonus(s, pl, self, ctx!, 10);
         discardCard(s, self);

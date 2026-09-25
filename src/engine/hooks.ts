@@ -143,6 +143,8 @@ export interface CardHooks {
   onDestroy?: (s: GameState, self: string, victim: string, by: string) => void;
   onCapture?: (s: GameState, self: string, victim: string, by: string, from: string | undefined) => void;
   onAttackEnd?: (s: GameState, self: string, ctx: AttackCtx) => void;
+  /** An attack (of any kind) has just begun: `s.attack` is already set to `ctx`. */
+  onAttackStart?: (s: GameState, self: string, ctx: AttackCtx) => void;
   onEnterPlay?: (s: GameState, self: string) => void;
 
   // ---- choices

@@ -48,7 +48,8 @@ export const NWO_EFFECTS: Record<string, NwoEffect> = {
     power: (s, i) => (has(s, i, 'Corporate') ? -2 : 0) + (attr(s, i, 'Green') ? -1 : 0),
     resistance: (s, i) => (attr(s, i, 'Green') ? -1 : 0),
   },
-  'military-industrial-complex': { color: 'yellow', implemented: false },
+  // Its effect (Corporate cards count as Government, except for Goals) is an alignmentMod hook in plots6.ts.
+  'military-industrial-complex': { color: 'yellow', implemented: true },
   'political-correctness': {
     color: 'red', implemented: true,
     power: (s, i) => (has(s, i, 'Liberal') ? 3 : 0),

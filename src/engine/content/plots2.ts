@@ -121,6 +121,7 @@ registerHooks({
     attackMod: (s, _self, ctx, side) => (side === 'defense' && ctx.type === 'destroy' && isGroup(s, ctx.target) && hasAlign(s, ctx.target, 'Peaceful') ? 2 : 0),
   },
   'tax-reform': {
+    // +10 to every defense of the I.R.S.
     attackMod: (s, _self, ctx, side) => (side === 'defense' && s.cards[ctx.target]?.cardId === 'i-r-s' ? 10 : 0),
   },
   'world-war-three': {
@@ -147,31 +148,7 @@ function wwiiiAttack(s: GameState, ctx: AttackCtx): boolean {
   return !ctx.instant && ctx.type === 'destroy' && !!ctx.attacker && hasAttr(s, ctx.attacker, 'Nation') && hasAttr(s, ctx.target, 'Nation');
 }
 
-// Tax Reform: at the start of its own turn the I.R.S. takes the top Plot of every player's deck.
-{
-  const prev = HOOKS['i-r-s']?.onTurnStart;
-  registerHooks({
-    'i-r-s': {
-      onTurnStart(s, self) {
-        prev?.(s, self);
-        if (!nwoActive(s, 'tax-reform')) return;
-        const taker = player(s, s.cards[self].controller!);
-        let n = 0;
-        for (const p of livePlayers(s)) {
-          // The Lawyers make their controller immune to the I.R.S. tax effect.
-          if (structureCards(s, p.id).some((g) => s.cards[g].cardId === 'lawyers')) continue;
-          const top = p.plotDeck.shift();
-          if (!top) continue;
-          s.cards[top].zone = 'hand';
-          s.cards[top].exposed = false;
-          taker.hand.push(top);
-          n++;
-        }
-        if (n) log(s, `Tax Reform: the I.R.S. collects ${n} Plot card${n === 1 ? '' : 's'}.`, taker.id);
-      },
-    },
-  });
-}
+// Tax Reform's tax on every rival is part of the I.R.S. ability (groups0.ts).
 
 // ---------------------------------------------------------------- Plot hooks
 

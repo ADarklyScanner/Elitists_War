@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   applyAction, attackStrength, canEnterPlay, destroyGroup, globalPower, handLimit, participants, plotsInHand, power, resistance,
-  takeoverOptions, waitingFor, alignments, attributes, type Action, type GameState,
+  takeoverOptions, waitingFor, alignments, attributes, startInstantAttack, type Action, type GameState,
 } from '../../src/engine';
 import { rollDie } from '../../src/engine/rng';
 import { give, scenario } from '../helpers';
@@ -807,6 +807,21 @@ describe('Rogue Boomer', () => {
     s = use(s, 'p1', r, 'strike');
     expect(attackStrength(s, s.attack!).attack).toBe(before + 10);
     expect(s.cards[r].zone).toBe('discard');
+  });
+  it('helps only its holder\'s own attacks on a Nation or a Place, but any Disaster', () => {
+    const s = scenario();
+    const r = give(s, 'p1', 'rogue-boomer', { resource: true });
+    const g = give(s, 'p2', 'c-i-a', { under: ill(s, 1), side: 'BOTTOM' });
+    const fin = give(s, 'p1', 'finland', { under: ill(s, 0), side: 'BOTTOM' });
+    const hawaii = give(s, 'p1', 'hawaii', { under: ill(s, 0), side: 'TOP' });
+    s.active = 1;
+    expect(diff(attack(s, 'p2', g, fin, 'control'), r).attack).toBe(0);
+    expect(() => use(attack(s, 'p2', g, hawaii, 'destroy'), 'p1', r, 'strike')).toThrow(/your own/);
+    const quake = give(s, 'p2', 'earthquake', { hand: true });
+    startInstantAttack(s, 'p2', { plot: quake, target: hawaii, power: 12, disaster: { destroyMargin: null } });
+    const before = attackStrength(s, s.attack!).attack;
+    const after = use(s, 'p1', r, 'strike');
+    expect(attackStrength(after, after.attack!).attack).toBe(before + 10);
   });
 });
 
