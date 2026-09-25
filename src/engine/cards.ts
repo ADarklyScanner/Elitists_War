@@ -29,7 +29,7 @@ export function inst(s: GameState, iid: string): CardInstance {
 }
 
 export function cardName(s: GameState, iid: string): string {
-  return def(s, iid).name;
+  return s.cards[iid] ? def(s, iid).name : "(unknown card)";
 }
 
 export const isGroupLike = (d: CardDef) => d.type === 'Group' || d.type === 'Illuminati';

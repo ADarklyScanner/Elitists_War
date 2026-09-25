@@ -313,7 +313,7 @@ function attackPanel(s: GameState): string {
   const ctx = s.attack!;
   const st = attackStrength(s, ctx);
   const chance = successChance(st.strength);
-  const who = ctx.instant ? cardName(s, ctx.instantCard!) : cardName(s, ctx.attacker!);
+  const who = ctx.attacker ? cardName(s, ctx.attacker) : ctx.instantCard ? cardName(s, ctx.instantCard) : 'A card';
   const rolled = ctx.roll ? finalRoll(ctx) : undefined;
   return `
     <div class="attack">
@@ -377,16 +377,20 @@ function renderConsole(s: GameState): string {
   } else if (s.window && waiting.includes(ui.me)) {
     const opts = responseOptions(s, ui.me);
     const ev = s.window.event;
-    const evText = ev ? ({
-      turnStart: `${esc(player(s, ev.player!).name)}'s turn is starting.`,
-      drawn: `${esc(player(s, ev.player!).name)} has drawn cards.`,
-      takeover: `${esc(player(s, ev.player!).name)} took over ${esc(cardName(s, ev.card!))} automatically.`,
-      destroyed: `${esc(cardName(s, ev.card!))} was destroyed.`,
-      devastated: `${esc(cardName(s, ev.card!))} was Devastated.`,
-      discarded: `${esc(cardName(s, ev.card!))} was discarded.`,
-      plotResolved: `${esc(cardName(s, ev.card!))} took effect.`,
-      relief: `Relief was sent to ${esc(cardName(s, ev.card!))}.`,
-    } as Record<string, string>)[ev.type] : '';
+    const cn = (iid?: string) => esc(iid && s.cards[iid] ? cardName(s, iid) : 'a card');
+    const pn = (id?: string) => esc(id ? player(s, id).name : 'A player');
+    const evTexts: Record<string, () => string> = {
+      turnStart: () => `${pn(ev?.player)}'s turn is starting.`,
+      drawn: () => `${pn(ev?.player)} has drawn cards.`,
+      takeover: () => `${pn(ev?.player)} took over ${cn(ev?.card)} automatically.`,
+      failedTakeover: () => `${pn(ev?.player)} failed to take over ${cn(ev?.card)}.`,
+      destroyed: () => `${cn(ev?.card)} was destroyed.`,
+      devastated: () => `${cn(ev?.card)} was Devastated.`,
+      discarded: () => `${cn(ev?.card)} was discarded.`,
+      plotResolved: () => `${cn(ev?.card)} took effect.`,
+      relief: () => `Relief was sent to ${cn(ev?.card)}.`,
+    };
+    const evText = ev ? (evTexts[ev.type]?.() ?? 'Something happened.') : '';
     const head = s.window.kind === 'event' ? `<p>${evText} You have a card that can respond.</p>`
       : s.window.kind === 'plot' ? `<p><b>${esc(cardName(s, s.window.plot!.iid))}</b> was played. You can counter it.</p>`
       : s.window.kind === 'endOfTurn' ? '<p>The turn is ending. Last chance to play a card.</p>'
@@ -734,6 +738,7 @@ interface Online {
   busy: boolean;
   msg?: string;
   authMode: 'signin' | 'signup';
+  alerts?: { available: boolean; phone: string; optIn: boolean; msg?: string };
 }
 let online: Online | null = null;
 
@@ -770,6 +775,7 @@ async function refreshGame() {
 
 async function loadGames() {
   try { online!.games = (await api({ op: 'list' })).games; } catch (e) { online!.msg = (e as Error).message; }
+  if (!online!.alerts) try { online!.alerts = await api({ op: 'alerts' }); } catch { /* alerts are optional */ }
   render();
 }
 
@@ -850,6 +856,7 @@ function renderOnline() {
     <section><div class="label">Your games</div><div class="saves">${o.games.map((g) => `
       <div class="save"><button data-open="${g.id}"><b>${g.yourMove ? '● Your move — ' : ''}${esc(g.seats.map((x) => x.isAI ? 'Computer' : x.name).join(' vs '))}</b>
       <span class="muted">${g.finished ? 'Finished' : g.started ? `${esc(g.illuminati ?? '')} · ${esc(g.progress)}` : `Waiting for players · invite ${esc(g.invite)}`}</span></button></div>`).join('') || '<p class="muted">No games yet.</p>'}</div></section>
+    ${alertsPanel()}
     <section class="panel"><h2>Join a friend's game</h2>
       <form id="join" class="row"><label>Invite code <input id="j-code" required maxlength="6" autocapitalize="characters"></label><button class="primary" type="submit">Join</button></form></section>
     <section><div class="label">Start a new game — choose your Illuminati</div>
@@ -863,6 +870,15 @@ function renderOnline() {
     </section></div>`;
   bindOnline();
   app.querySelectorAll<HTMLElement>('[data-pick]').forEach((b) => b.onclick = () => { (ui as Ui & { pick?: string }).pick = b.dataset.pick; render(); });
+  const af = app.querySelector<HTMLFormElement>('#alerts');
+  if (af) af.onsubmit = async (e) => {
+    e.preventDefault();
+    const phone = (app.querySelector('#a-phone') as HTMLInputElement).value.trim();
+    const optIn = (app.querySelector('#a-opt') as HTMLInputElement).checked;
+    try { o.alerts = { ...(await api({ op: 'alerts', alerts: { phone, optIn } })), msg: optIn ? 'Text alerts are on.' : 'Text alerts are off.' }; }
+    catch (err) { o.alerts = { ...o.alerts!, msg: (err as Error).message }; }
+    render();
+  };
   app.querySelector<HTMLFormElement>('#join')!.onsubmit = async (e) => {
     e.preventDefault();
     const code = (app.querySelector('#j-code') as HTMLInputElement).value.trim().toUpperCase();
@@ -877,12 +893,25 @@ function renderOnline() {
   };
 }
 
+/** Opt-in text alerts: only for a game starting, your turn, or an Attack to Destroy on you. */
+function alertsPanel(): string {
+  const a = online?.alerts;
+  if (!a) return '';
+  return `<section class="panel"><h2>Text alerts</h2>
+    <form id="alerts" class="row">
+      <label>Mobile number <input id="a-phone" type="tel" autocomplete="tel" placeholder="+1 555 123 4567" value="${esc(a.phone)}"></label>
+      <label class="toggle"><input type="checkbox" id="a-opt" ${a.optIn ? 'checked' : ''}> Text me when a game starts, when my turn begins, or when one of my Groups faces an Attack to Destroy</label>
+      <button type="submit">Save</button></form>
+    <p class="muted small">At most one text every 5 minutes. Message and data rates may apply. Reply STOP to any text to opt out.${a.available ? '' : ' Texting is not switched on for this server yet, so no messages will be sent.'}</p>
+    ${a.msg ? `<p class="small">${esc(a.msg)}</p>` : ''}</section>`;
+}
+
 function bindOnline() {
   const o = online!;
   app.querySelectorAll<HTMLElement>('[data-open]').forEach((b) => b.onclick = () => openGame(b.dataset.open!));
   app.querySelectorAll<HTMLElement>('[data-o]').forEach((b) => b.onclick = async () => {
     const what = b.dataset.o;
-    if (what === 'signout') { await o.client.auth.signOut(); o.games = []; }
+    if (what === 'signout') { await o.client.auth.signOut(); o.games = []; o.alerts = undefined; }
     if (what === 'lobby') { o.gameId = undefined; o.summary = undefined; o.channel?.unsubscribe(); await loadGames(); }
     if (what === 'copy') {
       try { await navigator.clipboard.writeText(o.summary!.invite); b.textContent = 'Copied'; } catch { window.getSelection()?.selectAllChildren(app.querySelector('#code')!); }

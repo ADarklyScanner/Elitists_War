@@ -58,3 +58,26 @@ export class SupabaseStore implements Store {
     return (data ?? []).map(rowToRecord);
   }
 }
+
+/** Opt-in phone numbers for text alerts (table ew_sms_prefs, service role only). */
+export class SupabaseSmsPrefs {
+  constructor(private db: Db & { rpc(fn: string, args: Record<string, unknown>): any }) {} // eslint-disable-line @typescript-eslint/no-explicit-any
+
+  async claim(userId: string, cooldownMinutes: number): Promise<string | null> {
+    const { data, error } = await this.db.rpc('ew_claim_sms', { p_user: userId, p_cooldown_minutes: cooldownMinutes });
+    if (error) throw new Error(error.message);
+    return typeof data === 'string' ? data : null;
+  }
+
+  async get(userId: string): Promise<{ phone: string; optedIn: boolean } | null> {
+    const { data, error } = await this.db.from('ew_sms_prefs').select('phone, opted_in').eq('user_id', userId).maybeSingle();
+    if (error) throw new Error(error.message);
+    return data ? { phone: data.phone, optedIn: data.opted_in } : null;
+  }
+
+  async set(userId: string, phone: string, optedIn: boolean): Promise<void> {
+    const row = { user_id: userId, phone, opted_in: optedIn, updated_at: new Date().toISOString(), ...(optedIn ? { consented_at: new Date().toISOString() } : {}) };
+    const { error } = await this.db.from('ew_sms_prefs').upsert(row);
+    if (error) throw new Error(error.message);
+  }
+}

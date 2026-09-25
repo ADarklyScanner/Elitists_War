@@ -7,7 +7,7 @@ import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 const online = process.argv.includes('--online');
 const cfg = online ? JSON.parse(readFileSync('supabase/config.json', 'utf8')) : { url: '', key: '' };
 const out = await build({
-  entryPoints: ['src/ui/main.ts'], bundle: true, format: 'iife', minify: true, write: false, target: 'es2020',
+  entryPoints: ['src/ui/main.ts'], bundle: true, format: 'iife', minify: !process.env.NOMINIFY, write: false, target: 'es2020',
   define: { __ONLINE__: String(online), __SB_URL__: JSON.stringify(cfg.url), __SB_KEY__: JSON.stringify(cfg.key) },
 });
 const js = out.outputFiles[0].text.replace(/<\/script/g, '<\\/script');

@@ -36,7 +36,9 @@ export interface Store {
   listWithDeadlines(before: number): Promise<GameRecord[]>;
 }
 
-export interface Notifier { yourMove(userId: string, gameId: string, what: string): Promise<void> }
+/** Why a player is being alerted. Only these few moments are worth a message outside the app. */
+export type AlertKind = 'gameStarted' | 'yourTurn' | 'destroyAttack';
+export interface Notifier { alert(userId: string, gameId: string, kind: AlertKind, what: string): Promise<void> }
 
 const DEFAULT_ORDERS: StandingOrders = { passWhenNothing: true, passWhenUninvolved: false };
 
@@ -49,7 +51,7 @@ function inviteCode() {
 
 export async function newTable(store: Store, host: { userId: string; name: string; illuminati: string }, opts: {
   seats: number; computerSeats?: number; settings?: Partial<GameSettings>;
-}): Promise<GameRecord> {
+}, notifier?: Notifier): Promise<GameRecord> {
   const seats: Seat[] = [{ id: 'p1', name: host.name, isAI: false, userId: host.userId, illuminati: host.illuminati }];
   for (let i = 2; i <= opts.seats; i++) {
     const ai = i > opts.seats - (opts.computerSeats ?? 0);
@@ -62,10 +64,11 @@ export async function newTable(store: Store, host: { userId: string; name: strin
   };
   maybeStart(rec);
   await store.put(rec);
+  await notifyStart(rec, host.userId, notifier);
   return rec;
 }
 
-export async function joinTable(store: Store, code: string, who: { userId: string; name: string; illuminati: string }): Promise<GameRecord> {
+export async function joinTable(store: Store, code: string, who: { userId: string; name: string; illuminati: string }, notifier?: Notifier): Promise<GameRecord> {
   const rec = await store.getByInvite(code.toUpperCase());
   if (!rec) throw new RuleError('No game with that invite code.');
   if (rec.seats.some((s) => s.userId === who.userId)) return rec;
@@ -73,9 +76,10 @@ export async function joinTable(store: Store, code: string, who: { userId: strin
   if (!seat) throw new RuleError('That game is full.');
   const before = rec.updatedAt;
   Object.assign(seat, { userId: who.userId, name: who.name, illuminati: who.illuminati });
-  maybeStart(rec);
+  maybeStart(rec); // the last seat was just filled: the game starts now
   rec.updatedAt = Date.now();
   await store.put(rec, before);
+  await notifyStart(rec, who.userId, notifier);
   return rec;
 }
 
@@ -106,13 +110,13 @@ export async function submit(store: Store, gameId: string, userId: string, actio
   const seat = rec.seats.find((s) => s.userId === userId);
   if (!seat) throw new RuleError('You are not playing in this game.');
   const before = rec.updatedAt;
-  const waitingBefore = new Set(waitingFor(rec.state));
+  const snapshot = alertSnapshot(rec.state);
   let s = applyAction(rec.state, seat.id, action);
   s = settle(rec, s);
   rec.state = s;
   rec.updatedAt = Date.now();
   await store.put(rec, before); // a stale write means two moves raced: the client retries
-  await notifyNew(rec, waitingBefore, notifier);
+  await notifyNew(rec, snapshot, notifier, userId);
   return rec;
 }
 
@@ -166,7 +170,7 @@ export async function tick(store: Store, now = Date.now(), turnHours = 72, notif
     let s = rec.state;
     if (!s || s.phase === 'gameOver') continue;
     const before = rec.updatedAt;
-    const waitingBefore = new Set(waitingFor(s));
+    const snapshot = alertSnapshot(s);
     if (s.window?.deadline && s.window.deadline < now) {
       for (const pl of waitingFor(s)) s = applyAction(s, pl, { type: 'pass' });
     } else if (now - rec.updatedAt > turnHours * 3600_000) {
@@ -177,26 +181,52 @@ export async function tick(store: Store, now = Date.now(), turnHours = 72, notif
     rec.state = settle(rec, s);
     rec.updatedAt = now;
     await store.put(rec, before);
-    await notifyNew(rec, waitingBefore, notifier);
+    await notifyNew(rec, snapshot, notifier);
     changed++;
   }
   return changed;
 }
 
-async function notifyNew(rec: GameRecord, before: Set<string>, notifier?: Notifier) {
-  if (!notifier || !rec.state) return;
-  for (const id of waitingFor(rec.state)) {
-    if (before.has(id)) continue;
-    const seat = rec.seats.find((x) => x.id === id);
-    if (seat?.userId) await notifier.yourMove(seat.userId, rec.id, describeWait(rec.state, id));
+/** What mattered for alerts before a move: whose turn it was, and which Attack to Destroy was open. */
+interface AlertSnapshot { turn: number; active: string; destroyAttack?: number }
+
+function alertSnapshot(s: GameState): AlertSnapshot {
+  return { turn: s.turn, active: s.players[s.active]?.id, destroyAttack: destroyAttackOf(s)?.id };
+}
+
+function destroyAttackOf(s: GameState) {
+  return s.attack?.type === 'destroy' && s.attack.targetPlayer ? s.attack : undefined;
+}
+
+/**
+ * Alerts go out only for moments worth leaving the app for: a player's turn beginning, and an
+ * Attack to Destroy aimed at one of their Groups. `actor` (who just moved, and is looking at the
+ * game) is never alerted. Everything else is left to the in-app list.
+ */
+async function notifyNew(rec: GameRecord, before: AlertSnapshot, notifier?: Notifier, actor?: string) {
+  if (!notifier || !rec.state || rec.state.phase === 'gameOver') return;
+  const s = rec.state;
+  const seatOf = (id: string) => rec.seats.find((x) => x.id === id);
+  const send = async (id: string, kind: AlertKind, what: string) => {
+    const seat = seatOf(id);
+    if (!seat?.userId || seat.isAI || seat.userId === actor) return;
+    try { await notifier.alert(seat.userId, rec.id, kind, what); } catch { /* an alert must never break a move */ }
+  };
+  const active = s.players[s.active]?.id;
+  if (active && (s.turn !== before.turn || active !== before.active)) await send(active, 'yourTurn', 'It is your turn');
+  const atk = destroyAttackOf(s);
+  if (atk && atk.id !== before.destroyAttack && waitingFor(s).includes(atk.targetPlayer!)) {
+    await send(atk.targetPlayer!, 'destroyAttack', `${def(s, atk.target).name} is under an Attack to Destroy`);
   }
 }
 
-function describeWait(s: GameState, id: string): string {
-  if (s.prompt?.player === id) return s.prompt.kind === 'takeover' ? 'Your turn: automatic takeover' : 'A decision is waiting for you';
-  if (s.attack) return `${def(s, s.attack.target).name} is under attack — respond`;
-  if (s.window?.kind === 'plot') return 'A Plot was played — respond';
-  return 'Your turn';
+/** The lobby just filled and the game began: tell everyone except the player who completed it. */
+async function notifyStart(rec: GameRecord, actor: string, notifier?: Notifier) {
+  if (!notifier || !rec.state) return;
+  for (const seat of rec.seats) {
+    if (!seat.userId || seat.isAI || seat.userId === actor) continue;
+    try { await notifier.alert(seat.userId, rec.id, 'gameStarted', 'Your game has started'); } catch { /* ignore */ }
+  }
 }
 
 // ------------------------------------------------------------------ what each player may see

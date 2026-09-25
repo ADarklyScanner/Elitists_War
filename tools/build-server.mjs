@@ -17,7 +17,7 @@ const slimPlugin = {
   },
 };
 await build({
-  stdin: { contents: "export { handle } from './src/server/api.ts'; export { SupabaseStore } from './src/server/supabaseStore.ts';", resolveDir: '.', loader: 'ts' },
+  stdin: { contents: "export { handle } from './src/server/api.ts'; export { SupabaseStore, SupabaseSmsPrefs } from './src/server/supabaseStore.ts'; export { SmsNotifier, twilioSender } from './src/server/sms.ts';", resolveDir: '.', loader: 'ts' },
   bundle: true, format: 'esm', platform: 'neutral', target: 'es2022', minify: true, legalComments: 'none',
   plugins: [slimPlugin],
   outfile: 'supabase/functions/ew-game/game.js',
