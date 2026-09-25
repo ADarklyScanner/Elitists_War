@@ -177,26 +177,22 @@ const LEVELS: [AiLevel, string, string][] = [
   ['hard', 'Hard', 'Counts all the help it can bring to each attack, plays every takeover out, and fights hardest when a win is close.'],
 ];
 
-/** Card backs and table felts anyone can pick; purely how the table looks. */
-const BACKS = [['gilded', 'Gilded Eye'], ['classic', 'Classic'], ['argyle', 'Argyle'], ['sunburst', 'Sunburst']] as const;
-const FELTS = [['purple', 'Purple'], ['green', 'Green'], ['blue', 'Blue'], ['crimson', 'Crimson'], ['charcoal', 'Charcoal']] as const;
-function loadStyle(key: 'backs' | 'felt', list: readonly (readonly [string, string])[]): string {
-  try { const v = localStorage.getItem(`elitists-war.${key}`); if (v && list.some((x) => x[0] === v)) return v; } catch { /* storage unavailable */ }
-  return list[0][0];
+/** Deck styles anyone can pick: each is a pair of card backs with a table felt to match. Purely looks. */
+const BACKS = [['gilded', 'Gilded Eye'], ['celestial', 'Celestial'], ['classified', 'Classified'], ['throne', 'Throne Room'], ['surveillance', 'Surveillance']] as const;
+function loadBacks(): string {
+  try { const v = localStorage.getItem('elitists-war.backs'); if (v && BACKS.some((x) => x[0] === v)) return v; } catch { /* storage unavailable */ }
+  return BACKS[0][0];
 }
-function saveStyle(key: 'backs' | 'felt', v: string) {
-  try { localStorage.setItem(`elitists-war.${key}`, v); } catch { /* storage unavailable */ }
+function saveBacks(v: string) {
+  try { localStorage.setItem('elitists-war.backs', v); } catch { /* storage unavailable */ }
 }
 
 function styleHtml(): string {
-  const backs = loadStyle('backs', BACKS), felt = loadStyle('felt', FELTS);
-  return `<h2>Table style</h2>
-  <p class="muted small">Only changes how your table looks. Other players choose their own.</p>
-  <h3>Card backs</h3>
-  <div class="style-grid">${BACKS.map(([id, name]) => `<button class="style-pick backs-${id} ${backs === id ? 'on' : ''}" data-style-backs="${id}" aria-pressed="${backs === id}">
-    <span class="pair"><span class="cardback plot"></span><span class="cardback group"></span></span><b>${name}</b></button>`).join('')}</div>
-  <h3>Felt</h3>
-  <div class="style-grid felts">${FELTS.map(([id, name]) => `<button class="style-pick felt-${id} ${felt === id ? 'on' : ''}" data-style-felt="${id}" aria-pressed="${felt === id}"><span class="swatch"></span><b>${name}</b></button>`).join('')}</div>`;
+  const cur = loadBacks();
+  return `<h2>Deck style</h2>
+  <p class="muted small">Each deck comes with a table to match. Only changes how your game looks; other players choose their own.</p>
+  <div class="style-grid">${BACKS.map(([id, name]) => `<button class="style-pick backs-${id} ${cur === id ? 'on' : ''}" data-style-backs="${id}" aria-pressed="${cur === id}">
+    <span class="pair"><span class="cardback plot"></span><span class="cardback group"></span></span><span class="swatch"></span><b>${name}</b></button>`).join('')}</div>`;
 }
 
 function newGame(illuminati: string, quick: boolean) {
@@ -353,7 +349,7 @@ function render() {
   const me = player(s, ui.me);
   const recent = s.log.filter((l) => (!l.to || l.to === ui.me) && (!l.info || tutorial())).slice(-2).reverse();
   app.innerHTML = `
-  <div class="shell ${ui.guide ? 'guide' : ''} ${tutorial() ? 'tutorial' : ''} backs-${loadStyle('backs', BACKS)} felt-${loadStyle('felt', FELTS)}">
+  <div class="shell ${ui.guide ? 'guide' : ''} ${tutorial() ? 'tutorial' : ''} backs-${loadBacks()}">
     <header class="hud">
       <button class="linkish" data-act="home" aria-label="Back to games">‹</button>
       <div class="players">${s.players.map((p) => playerChip(s, p.id)).join('')}</div>
@@ -361,7 +357,7 @@ function render() {
       ${phaseTracker(s)}
       <button class="hud-btn" data-rules="goal">Rules</button>
       <button class="hud-btn" data-act="log">Log</button>
-      <button class="hud-btn" data-act="style" title="Card backs and felt colour" aria-label="Table style">🎨</button>
+      <button class="hud-btn" data-act="style" title="Deck style" aria-label="Deck style">🎨</button>
       <button class="guide-toggle ${ui.guide ? 'on' : ''} ${ui.help}" data-act="guide" title="${esc(HELP_TITLE[ui.help])}" aria-label="Help level: ${HELP_LABEL[ui.help]} (tap to change)">${HELP_LABEL[ui.help]}</button>
     </header>
     <main class="tablearea">
@@ -395,7 +391,7 @@ function render() {
     </footer>
     ${diceOverlay()}
     ${ui.showRules ? `<div class="modal-back" data-rules=""></div><div class="modal rules" role="dialog" aria-label="Rules">${rulesHtml(s)}<div class="btns"><button data-rules="">Close</button></div></div>` : ''}
-    ${ui.showStyle ? `<div class="modal-back" data-act="style"></div><div class="modal style" role="dialog" aria-label="Table style">${styleHtml()}<div class="btns"><button data-act="style">Done</button></div></div>` : ''}
+    ${ui.showStyle ? `<div class="modal-back" data-act="style"></div><div class="modal style" role="dialog" aria-label="Deck style">${styleHtml()}<div class="btns"><button data-act="style">Done</button></div></div>` : ''}
     ${ui.showLog ? `<div class="modal-back" data-act="log"></div><div class="modal" role="dialog" aria-label="Game log">${renderLog(s)}<div class="btns"><button data-act="log">Close</button></div></div>` : ''}
   </div>`;
   bind();
@@ -1342,8 +1338,7 @@ function bind() {
     if (ui.handMin) { ui.handMin = false; render(); }
     app.querySelector<HTMLElement>(`.hand-sec.${b.dataset.handjump}`)?.scrollIntoView({ inline: 'start', block: 'nearest', behavior: 'smooth' });
   });
-  app.querySelectorAll<HTMLElement>('[data-style-backs]').forEach((b) => b.onclick = () => { saveStyle('backs', b.dataset.styleBacks!); render(); });
-  app.querySelectorAll<HTMLElement>('[data-style-felt]').forEach((b) => b.onclick = () => { saveStyle('felt', b.dataset.styleFelt!); render(); });
+  app.querySelectorAll<HTMLElement>('[data-style-backs]').forEach((b) => b.onclick = () => { saveBacks(b.dataset.styleBacks!); render(); });
   app.querySelectorAll<HTMLElement>('[data-deck]').forEach((b) => b.onclick = () => onDeck(b.dataset.deck as 'plot' | 'group'));
   app.querySelectorAll<HTMLElement>('[data-info]').forEach((b) => b.onclick = (e) => { e.stopPropagation(); ui.info = ui.info === b.dataset.info ? undefined : b.dataset.info; render(); });
   app.querySelectorAll<HTMLElement>('[data-lead]').forEach((b) => b.onclick = () => act({ type: 'chooseLead', card: b.dataset.lead! }));
