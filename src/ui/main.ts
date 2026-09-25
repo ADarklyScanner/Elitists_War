@@ -605,12 +605,14 @@ function render() {
       <div class="players">${s.players.map((p) => playerChip(s, p.id)).join('')}</div>
       <span class="turn-no">${s.phase === 'gameOver' ? 'Game over' : `Turn ${s.turn}`}</span>
       ${phaseTracker(s)}
+      <div class="hud-actions">
       <button class="hud-btn" data-rules="goal">Rules</button>
       <button class="hud-btn" data-act="log">Log</button>
       ${dealsAllowed(s) && s.phase !== 'gameOver' ? `<button class="hud-btn ${offersTo(s, ui.me).length ? 'alert' : ''}" data-act="deals" title="Offer trades and gifts to other players">Deals${offersTo(s, ui.me).length ? ` (${offersTo(s, ui.me).length})` : ''}</button>` : ''}
       <button class="hud-btn" data-act="style" title="Deck style" aria-label="Deck style">🎨</button>
       ${s.phase !== 'gameOver' && !me.eliminated ? '<button class="hud-btn" data-act="resign" title="Leave this game for good: it counts as being eliminated">Leave</button>' : ''}
       <button class="guide-toggle ${ui.guide ? 'on' : ''} ${ui.help}" data-act="guide" title="${esc(HELP_TITLE[ui.help])}" aria-label="Help level: ${HELP_LABEL[ui.help]} (tap to change)">${HELP_LABEL[ui.help]}</button>
+      </div>
     </header>
     <main class="tablearea">
       <div class="viewport" id="vp"><div class="world felt ${rivals.length > 1 ? 'ring' : 'duel'}" id="world">

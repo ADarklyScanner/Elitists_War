@@ -237,6 +237,15 @@ p { margin: 0; }
 .pchip .goal-bar { width: 40px; height: 5px; }
 .pchip .mono { font-family: var(--mono); }
 .turn-no { color: var(--muted); font-size: 12.5px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+/* The menu buttons: on narrow screens they take their own row, and scroll sideways if even that is too narrow. */
+.hud-actions { display: flex; align-items: center; gap: 6px; flex: none; min-width: 0; max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+.hud-actions::-webkit-scrollbar { display: none; }
+.hud-actions > * { flex: none; white-space: nowrap; }
+@media (max-width: 640px) {
+  .hud { flex-wrap: wrap; row-gap: 6px; }
+  .hud .players { flex: 1 1 0; }
+  .hud-actions { order: 10; flex: 1 1 100%; justify-content: flex-end; }
+}
 .hud-btn { padding: 5px 10px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); font-size: 12.5px; }
 
 .tablearea { position: relative; overflow: hidden; min-height: 0; }
