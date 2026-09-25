@@ -920,11 +920,11 @@ function seatRail(s: GameState, pl: string, mine: boolean): string {
   const top = p.discard[p.discard.length - 1];
   // Every player's discard pile is public and browsable, not only its top card (R012).
   const discard = spot('Discard', top
-    ? `<button class="discard-top" data-browse="discard:${pl}" title="Browse the discard pile (${p.discard.length} cards, face up)"><b>${esc(cardName(s, top))}</b></button><span class="spot-count">${p.discard.length}</span>`
+    ? `<button class="discard-top" data-browse="discard:${pl}" title="Browse the discard pile (${plural(p.discard.length, 'card')}, face up)"><b>${esc(cardName(s, top))}</b></button><span class="spot-count">${p.discard.length}</span>`
     : '<span class="spot-empty">empty</span>', 'discard-spot');
   const destroyedPile = Object.values(s.cards).filter((c) => c.owner === pl && c.zone === 'destroyed');
   const destroyedTop = destroyedPile[destroyedPile.length - 1];
-  const destroyed = destroyedPile.length ? spot('Destroyed', `<button class="discard-top" data-browse="destroyed:${pl}" title="Browse the destroyed pile (${destroyedPile.length} cards)"><b>${esc(cardName(s, destroyedTop.iid))}</b></button><span class="spot-count">${destroyedPile.length}</span>`, 'discard-spot') : '';
+  const destroyed = destroyedPile.length ? spot('Destroyed', `<button class="discard-top" data-browse="destroyed:${pl}" title="Browse the destroyed pile (${plural(destroyedPile.length, 'card')})"><b>${esc(cardName(s, destroyedTop.iid))}</b></button><span class="spot-count">${destroyedPile.length}</span>`, 'discard-spot') : '';
   const plots = plotsInHand(s, pl).length, groups = p.hand.length - plots;
   const fan = (deck: 'plot' | 'group', k: number) => Array.from({ length: Math.min(k, 6) }, () => `<span class="cardback ${deck}"></span>`).join('');
   // A player's exposed Plots are face up and public, even in a rival's hand (R048).
@@ -1099,7 +1099,7 @@ function rulesHtml(s: GameState): string {
   <nav class="rule-nav">${[['goal', 'Your goal'], ['card', 'Reading a card'], ['turn', 'A turn'], ['tokens', 'Actions'], ['attack', 'Attacks'], ['roll', 'The roll'], ['help', 'Helping'], ['plots', 'Plots'], ['more', 'More rules'], ...(s.players.some((p) => p.isAI && p.aiStyle) ? [['foes', 'Opponents']] : [])].map(([id, t]) => `<button data-rules="${id}">${t}</button>`).join('')}<button class="rb-open-btn" data-rulebook="">Full rulebook</button><button class="close-rules" data-rules="" aria-label="Close rules">✕</button></nav>
   ${sec('goal', 'Your goal', `<p>You win by <b>declaring victory</b> when you meet a Goal at the end of a turn (yours or anyone's; never in the first round), and then surviving your rivals' attempts to stop you. Nobody wins without declaring. There are three kinds of Goal:</p><ul>
     <li><b>Basic Goal:</b> control ${goalNeeded(s, ui.me)} Groups, counting your Illuminati. You have ${goalCount(s, ui.me)}.</li>
-    <li><b>Your Illuminati's Special Goal</b> (${esc(ill.name)}): ${esc(cardFace(ill.id)?.goal.replace(/^Special Goal:\s*/, '') || ill.text.replace(/^Power [^.]+\.\s*/, ''))}</li>
+    <li><b>Your Illuminati's Special Goal</b> (${esc(ill.name)}): ${esc(goalLine(ill.id) || (cardFace(ill.id) ? 'none of its own: its ability above changes how it wins (see its card).' : ill.text.replace(/^Power [^.]+\.\s*/, '')))}</li>
     <li><b>A Goal card</b> in your hand${goals.length ? ` (you hold: ${esc(goals.join(', '))})` : ''}. You may hold only one Goal card${goalLimit(s, ui.me) > 1 ? ` (your Illuminati allows ${goalLimit(s, ui.me)})` : ''}.</li></ul>
     <p>Groups under a Devastated Place do not count. A player whose Illuminati has no Groups left after their third turn is out, and if all your rivals are out, you win at once.</p>
     <p><b>Declaring:</b> press <i>End turn and declare victory</i> on your turn, or <i>Declare victory</i> while a turn is ending. A Goal card is shown to everyone; nobody can touch it while the claim is decided. Every rival may then use Plots and abilities (including Assassinations and Disasters) to stop you. If your Goal is still met when they all pass, you win; if two players' claims both hold, they share the win. If you are stopped, the turn ends and a Goal card you showed stays exposed.</p>`)}
@@ -1434,12 +1434,12 @@ function renderMainConsole(s: GameState): string {
   if (sel.kind === 'deck') {
     const ill = me.illuminati;
     if (sel.deck === 'plot') {
-      return `<h2>Plot deck</h2><p>${me.plotDeck.length} cards left. Buying a Plot costs your Illuminati's Action token, or the tokens of two other Groups — at any time, not only in your own main phase.</p>
+      return `<h2>Plot deck</h2><p>${plural(me.plotDeck.length, 'card')} left. Buying a Plot costs your Illuminati's Action token, or the tokens of two other Groups — at any time, not only in your own main phase.</p>
         ${anyTimeBar(s)}
         <div class="btns"><button class="linkish" data-act="clear">Close</button></div>`;
     }
     const can = s.cards[ill].tokens && !s.turnFlags.illumGroupDraw && me.groupDeck.length;
-    return `<h2>Group deck</h2><p>${me.groupDeck.length} cards left. Once per turn your Illuminati can spend its Action token to draw a Group card.</p>
+    return `<h2>Group deck</h2><p>${plural(me.groupDeck.length, 'card')} left. Once per turn your Illuminati can spend its Action token to draw a Group card.</p>
       <div class="btns"><button class="primary" data-act="drawGroup" ${can ? '' : 'disabled'}>Draw a Group card</button><button class="linkish" data-act="clear">Cancel</button></div>
       ${!can && tutorial() ? `<p class="why">${esc(s.turnFlags.illumGroupDraw ? 'Your Illuminati has already drawn a Group card this turn.' : !me.groupDeck.length ? 'Your Group deck is empty.' : 'Your Illuminati\'s Action token is already spent this turn.')}</p>` : ''}`;
   }
@@ -1448,10 +1448,10 @@ function renderMainConsole(s: GameState): string {
     const inHand = s.cards[sel.iid].zone === 'hand';
     if (inHand) {
       const can = !s.turnFlags.resourcePlayed && s.cards[me.illuminati].tokens > 0 && canEnterPlay(s, sel.iid, ui.me);
-      return `<h2>${esc(d.name)}</h2><p class="small">${esc(d.text)}</p>
+      return `<h2>${esc(d.name)}</h2>${faceBlock(d.id, d.text)}
         <div class="btns"><button class="primary" data-act="playResource" ${can ? '' : 'disabled'}>Put into play (Illuminati token, once per turn)</button><button class="linkish" data-act="clear">Close</button></div>`;
     }
-    return `<h2>${esc(d.name)}</h2><p class="small">${esc(d.text)}</p>
+    return `<h2>${esc(d.name)}</h2>${faceBlock(d.id, d.text)}
       <div class="btns"><button data-act="linkStart">Link to a Group</button><button class="linkish" data-act="clear">Close</button></div>${abilityButtons(s, sel.iid)}`;
   }
   if (sel.kind === 'link') {
@@ -1470,7 +1470,7 @@ function renderMainConsole(s: GameState): string {
     const d = def(s, sel.card);
     const opts = plotOptions(s, ui.me, sel.card);
     (window as unknown as { __popts: typeof opts }).__popts = opts;
-    return `<h2>${esc(d.name)}</h2><p class="small">${esc(d.text)}</p>
+    return `<h2>${esc(d.name)}</h2>${faceBlock(d.id, d.text)}
       ${PLOTS[d.id] ? (opts.length ? `<div class="opts">${opts.map((o, i) => `<button data-popt="${i}">${esc(o.label)}</button>`).join('')}</div>` : (tutorial() ? `<p class="why">${esc(whyNot(s, sel.card) ?? 'Not playable right now.')}</p>` : '<p class="muted">Not playable right now.</p>')) : '<p class="muted">This card is not in this version of the game yet.</p>'}
       <div class="btns"><button class="linkish" data-act="clear">Close</button></div>`;
   }
@@ -1631,10 +1631,21 @@ function abilityButtons(s: GameState, card: string): string {
 }
 
 /** A card's face: its rules text, an Illuminati's Special Goal, and flavour; the engine's exact wording on request. */
+/** "1 card", "2 cards". */
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
+/** An Illuminati's Special Goal without its "Special Goal:" label ('' when it has none of its own). */
+const goalLine = (cardId: string) => (cardFace(cardId)?.goal ?? '').replace(/^Special Goal:\s*/i, '');
+/** What an Illuminati pick button says: its card-face ability and Special Goal. */
+function illPickText(cardId: string, engineText: string): string {
+  const f = cardFace(cardId);
+  if (!f) return engineText.replace(/^Power [^.]+\.\s*/, '');
+  return goalLine(cardId) ? `${f.rules} Special Goal: ${goalLine(cardId)}` : f.rules;
+}
+
 function faceBlock(cardId: string, engineText: string): string {
   const f = cardFace(cardId);
   if (!f) return `<p class="small">${esc(engineText)}</p>`;
-  return `${f.rules ? `<p class="face-rules">${esc(f.rules)}</p>` : ''}${f.goal ? `<p class="face-goal"><b>Special Goal:</b> ${esc(f.goal)}</p>` : ''}
+  return `${f.rules ? `<p class="face-rules">${esc(f.rules)}</p>` : ''}${f.goal ? `<p class="face-goal"><b>Special Goal:</b> ${esc(goalLine(cardId))}</p>` : ''}
     ${f.flavor ? `<p class="face-flavor">${esc(f.flavor)}</p>` : ''}
     <details class="face-exact"><summary>Exact rules wording</summary><p class="small">${esc(engineText)}</p></details>`;
 }
@@ -1902,7 +1913,7 @@ function renderStart() {
         <div class="ills">${ILLUMINATI.map((c) => `
           <button class="ill-pick ${pick === c.id ? 'on' : ''}" data-pick="${c.id}">
             <b>${esc(c.name)}</b><span class="pw">${c.power}/${c.globalPower}</span>
-            <span class="small">${esc(c.text.replace(/^Power [^.]+\.\s*/, ''))}</span>
+            <span class="small">${esc(illPickText(c.id, c.text))}</span>
           </button>`).join('')}</div>
         <div class="label">Computer players</div>
         ${botsEditor(1, 1)}
@@ -2356,7 +2367,7 @@ function renderOnline() {
     <section class="panel"><h2>Join a friend's game</h2>
       <form id="join" class="row"><label>Invite code <input id="j-code" required maxlength="6" autocapitalize="characters"></label><button class="primary" type="submit">Join</button></form></section>
     <section><div class="label">Start a new game — choose your Illuminati</div>
-      <div class="ills">${ILLUMINATI.map((c) => `<button class="ill-pick ${pick === c.id ? 'on' : ''}" data-pick="${c.id}"><b>${esc(c.name)}</b><span class="pw">${c.power}/${c.globalPower}</span><span class="small">${esc(c.text.replace(/^Power [^.]+\.\s*/, ''))}</span></button>`).join('')}</div>
+      <div class="ills">${ILLUMINATI.map((c) => `<button class="ill-pick ${pick === c.id ? 'on' : ''}" data-pick="${c.id}"><b>${esc(c.name)}</b><span class="pw">${c.power}/${c.globalPower}</span><span class="small">${esc(illPickText(c.id, c.text))}</span></button>`).join('')}</div>
       <form id="new" class="panel"><div class="row">
         <label>Friends to invite <select id="n-friends">${[0, 1, 2, 3, 4, 5, 6, 7].map((n) => `<option ${n === friends ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
       </div>
