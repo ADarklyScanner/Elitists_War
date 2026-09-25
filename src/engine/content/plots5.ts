@@ -129,7 +129,7 @@ function rightAfterTokens(s: GameState, pl: string): string | null {
   let i = s.log.length - 1;
   while (i >= 0 && !(s.log[i].turn === s.turn && s.log[i].text.startsWith('— Turn'))) i--;
   if (i < 0) return null;
-  if (s.log.slice(i + 1).some((e) => !START_OK.test(e.text))) return 'Too late: this must be played right after placing Action tokens, before doing anything else.';
+  if (s.log.slice(i + 1).some((e) => !e.info && !START_OK.test(e.text))) return 'Too late: this must be played right after placing Action tokens, before doing anything else.';
   return null;
 }
 

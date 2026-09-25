@@ -327,3 +327,21 @@ p { margin: 0; }
 .info-btn { display: inline-grid; place-items: center; width: 18px; height: 18px; padding: 0; margin-left: 2px; vertical-align: 1px; border-radius: 50%; border: 1px solid var(--muted); background: none; color: var(--muted); font: italic 700 11px/1 Georgia, serif; }
 .info-btn.on, .info-btn:hover { border-color: var(--brass); color: var(--brass); }
 .info-text { font-size: 12.5px; line-height: 1.45; color: var(--ink); background: #0e171bcc; border-left: 2px solid var(--brass); border-radius: 4px; padding: 7px 9px; }
+
+/* Learning aids */
+.phases { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel-2); font-size: 12px; color: var(--muted); white-space: nowrap; }
+.phases span.on { color: var(--brass); font-weight: 600; }
+.phases i { font-style: normal; opacity: .5; }
+.phases .whose { color: var(--ink); margin-right: 4px; }
+.timing { display: inline-block; font: 600 10px/1.5 var(--display); text-transform: uppercase; letter-spacing: .08em; color: #c6b4e4; border: 1px solid #4b3d5c; border-radius: 4px; padding: 0 5px; width: fit-content; }
+.why { font-size: 12.5px; color: #f0c9a0; border-left: 2px solid #e0a05a; padding: 4px 8px; background: #e0a05a14; border-radius: 3px; }
+.modal.rules { width: min(680px, calc(100% - 24px)); max-height: 86vh; }
+.modal.rules section { padding-top: 6px; }
+.modal.rules h3 { color: var(--brass); margin: 8px 0 4px; }
+.modal.rules p, .modal.rules li { font-size: 13.5px; line-height: 1.5; }
+.modal.rules ul, .modal.rules ol { padding-left: 20px; margin: 4px 0; }
+.rule-nav { display: flex; flex-wrap: wrap; gap: 6px; position: sticky; top: -12px; background: var(--panel); padding: 6px 0; z-index: 1; }
+.rule-nav button { border: 1px solid var(--line); background: var(--panel-2); border-radius: 999px; padding: 3px 10px; font-size: 12.5px; }
+@media (max-width: 700px) { .phases .whose { display: none; } }
+@media (max-width: 480px) { .phases { padding: 3px 7px; } .phases span:not(.on):not(.whose), .phases i { display: none; } }
+.rule-nav .close-rules { margin-left: auto; }

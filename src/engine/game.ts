@@ -371,6 +371,9 @@ function turnDraws(s: GameState) {
     extra += sumHooks(s, (h, self) => (controllerOf2(s, self) === p.id ? h.extraPlotDraws?.(s, self) : 0));
     drawn.push(...drawPlot(s, p, 1 + extra));
     drawn.push(...drawGroup(s, p));
+    const plots = drawn.filter((c) => def(s, c).type === 'Plot').length;
+    s.log.push({ turn: s.turn, player: p.id, info: true, text: `Start of turn: ${p.name} draws ${plots} Plot card${plots === 1 ? '' : 's'} and ${drawn.length - plots} Group card${drawn.length - plots === 1 ? '' : 's'}.` });
+    if (drawn.length) s.log.push({ turn: s.turn, player: p.id, to: p.id, info: true, text: `You drew: ${drawn.map((c) => cardName(s, c)).join(', ')}.` });
   }
   fireHooks(s, (h, self) => { if (controllerOf2(s, self) === p.id) h.onTurnStart?.(s, self); });
   if (s.phase === 'gameOver') return;
@@ -408,6 +411,8 @@ function finishBeginning(s: GameState) {
   }
   // Resources that have their own action get a token too.
   for (const r of resourcesOf(s, p.id)) if (HOOKS[s.cards[r].cardId]?.hasAction && s.cards[r].tokens === 0) s.cards[r].tokens = 1;
+  const twoPlayerRule = s.players.length === 2 && s.turnFlags.takeoverDone && !s.turnFlags.extraTurn;
+  s.log.push({ turn: s.turn, player: p.id, info: true, text: `${p.name}'s Groups get their Action tokens${twoPlayerRule ? ' (two-player rule: no Illuminati token this turn after an automatic takeover)' : ''}. Main phase.` });
   s.phase = 'main';
 }
 

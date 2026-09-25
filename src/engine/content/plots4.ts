@@ -505,7 +505,7 @@ registerPlots({
       if (ctx || s.phase !== 'main' || activePlayer(s).id !== pl) return 'Play this on your own turn, right after your automatic takeover.';
       let i = s.log.length - 1;
       while (i >= 0 && !(s.log[i].turn === s.turn && s.log[i].player === pl && /automatically|into play/.test(s.log[i].text))) i--;
-      if (!s.turnFlags.takeoverDone || i < 0 || s.log.slice(i + 1).some((e) => e.player === pl)) return 'Play this right after your automatic takeover, before doing anything else.';
+      if (!s.turnFlags.takeoverDone || i < 0 || s.log.slice(i + 1).some((e) => e.player === pl && !e.info)) return 'Play this right after your automatic takeover, before doing anything else.';
       return grabOption(s, pl, play) ? null : 'You have no second automatic takeover to make (choose a card in hand and an open arrow).';
     },
     apply() {},

@@ -5,7 +5,7 @@ import {
   applyAction, attackOptions, attackStrength, cardName, CARDS, createGame, currentOutcome, def, finalRoll,
   goalCount, goalNeeded, hasResponse, ILLUMINATI, isImplemented, GROUP_ABILITIES, openArrows, outSides,
   plotOptions, plotsInHand, handLimit, power, resistance, globalPower, alignments, randomDeck,
-  responseOptions, structureCards, subtree, takeoverOptions, waitingFor, PLOTS, NWO_EFFECTS,
+  responseOptions, structureCards, subtree, takeoverOptions, tokenBarred, waitingFor, PLOTS, NWO_EFFECTS,
   describePlay, player, leadOptions, abilitiesOf, abilityOptions, resourcesOf, canEnterPlay, HOOKS, goalsInHand, goalLimit,
 } from '../engine';
 import { attachRect, rectOf, ensureLayout, type Rect } from '../engine/geometry';
@@ -48,6 +48,8 @@ interface Ui {
   logGame?: string;
   /** Which info (i) explanation is open. */
   info?: string;
+  /** Open section of the rules reference ('' = closed). */
+  showRules?: string;
 }
 
 const ui: Ui = { game: null, me: 'p1', sel: { kind: 'none' }, autoPass: true, thinking: false, guide: loadGuidePref() };
@@ -187,7 +189,7 @@ let G: Guide = { ok: new Set(), no: new Set(), text: '' };
 /** Work out, for the current moment, which cards can be used, which cannot, and where to go next. */
 function computeGuide(s: GameState): Guide {
   const g: Guide = { ok: new Set(), no: new Set(), text: '' };
-  if (!ui.guide || s.phase === 'gameOver') return g;
+  if (s.phase === 'gameOver') return g; // computed even with Guide off: the "why not" reasons use it
   const me = player(s, ui.me);
   const mine = structureCards(s, ui.me);
   const res = resourcesOf(s, ui.me);
@@ -284,6 +286,8 @@ function render() {
       <button class="linkish" data-act="home" aria-label="Back to games">‹</button>
       <div class="players">${s.players.map((p) => playerChip(s, p.id)).join('')}</div>
       <span class="turn-no">${s.phase === 'gameOver' ? 'Game over' : `Turn ${s.turn}`}</span>
+      ${phaseTracker(s)}
+      <button class="hud-btn" data-rules="goal">Rules</button>
       <button class="hud-btn" data-act="log">Log</button>
       <button class="guide-toggle ${ui.guide ? 'on' : ''}" data-act="guide" aria-pressed="${ui.guide}" title="Outline what you can do now">Guide ${ui.guide ? 'on' : 'off'}</button>
     </header>
@@ -299,7 +303,7 @@ function render() {
       <aside class="sheet ${ui.sheetMin ? 'min' : ''} ${gnext('console')}">
         <div class="sheet-top">
           <button class="sheet-handle" data-act="sheet" aria-expanded="${!ui.sheetMin}">
-            <span>${G.text ? `<b>Next:</b> ${esc(G.text)}` : waitingFor(s).includes(ui.me) ? '<b>Your move</b>' : esc(sheetTitle(s))}</span><i>${ui.sheetMin ? '▴' : '▾'}</i></button>
+            <span>${G.text && ui.guide ? `<b>Next:</b> ${esc(G.text)}` : waitingFor(s).includes(ui.me) ? '<b>Your move</b>' : esc(sheetTitle(s))}</span><i>${ui.sheetMin ? '▴' : '▾'}</i></button>
           ${ui.sheetMin ? quickButton(s) : ''}
         </div>
         <div class="sheet-body">${renderConsole(s)}${online ? ordersPanel() : ''}</div>
@@ -313,6 +317,7 @@ function render() {
       <div class="hand">${me.hand.map((iid) => handCard(s, iid)).join('') || '<span class="muted">No cards in hand.</span>'}</div>
     </footer>
     ${diceOverlay()}
+    ${ui.showRules ? `<div class="modal-back" data-rules=""></div><div class="modal rules" role="dialog" aria-label="Rules">${rulesHtml(s)}<div class="btns"><button data-rules="">Close</button></div></div>` : ''}
     ${ui.showLog ? `<div class="modal-back" data-act="log"></div><div class="modal" role="dialog" aria-label="Game log">${renderLog(s)}<div class="btns"><button data-act="log">Close</button></div></div>` : ''}
   </div>`;
   bind();
@@ -565,6 +570,7 @@ function handCard(s: GameState, iid: string): string {
     <button class="hcard ${isPlot ? 'plot' : 'group'} ${selected ? 'selected' : ''} ${targetable ? 'targetable' : ''} ${isPlot && !playable ? 'inactive' : ''} ${gcls(iid)}" data-hand="${iid}">
       <span class="kind">${isPlot ? esc(d.subtype === 'Plot' ? 'Plot' : d.subtype) : d.type === 'Resource' ? 'Resource' : esc(d.subtype)}</span>
       <span class="name">${esc(d.name)}</span>
+      ${isPlot && plotTiming(d.id, d.subtype, true) ? `<span class="timing">${esc(plotTiming(d.id, d.subtype, true))}</span>` : ''}
       ${isPlot || d.type === 'Resource' ? `<span class="txt">${esc(d.modifier ?? d.text)}</span>` : `
         <span class="aligns">${(d.alignments ?? []).map(chip).join('')}</span>
         <span class="stats"><span class="pw">${d.power}${d.globalPower ? `<small>/${d.globalPower}</small>` : ''}</span><span class="rs">${d.resistance}</span></span>`}
@@ -575,6 +581,122 @@ function renderNwo(s: GameState): string {
   const list = Object.entries(s.nwo).filter(([, v]) => v);
   if (!list.length) return '';
   return `<div class="nwo-row"><span class="label">New World Order</span>${list.map(([color, iid]) => `<button class="nwo nwo-${color}" data-inspect="${iid}">${esc(cardName(s, iid!))}</button>`).join('')}</div>`;
+}
+
+/** The three parts of a turn, with the current one lit. Tapping it opens the turn rules. */
+function phaseTracker(s: GameState): string {
+  if (s.phase === 'gameOver' || s.phase === 'setup') return '';
+  const cur = s.phase === 'beginning' ? 0 : s.phase === 'main' ? 1 : 2;
+  const whose = s.players[s.active].id === ui.me ? 'Your turn' : `${player(s, s.players[s.active].id).name}'s turn`;
+  return `<button class="phases" data-rules="turn" title="${esc(whose)}: tap for how a turn works"><span class="whose">${esc(whose)}</span>${['Start', 'Main', 'End'].map((n, i) => `<span class="${i === cur ? 'on' : ''}">${n}</span>`).join('<i>›</i>')}</button>`;
+}
+
+/** A plain-words summary of the real rules, so what you learn here works at a real table. */
+function rulesHtml(s: GameState): string {
+  const me = player(s, ui.me);
+  const ill = def(s, me.illuminati);
+  const goals = goalsInHand(s, ui.me).map((g) => cardName(s, g));
+  const two = s.players.length === 2;
+  const sec = (id: string, title: string, body: string) => `<section id="rule-${id}"><h3>${title}</h3>${body}</section>`;
+  return `<h2>How to play</h2>
+  <nav class="rule-nav">${[['goal', 'Your goal'], ['turn', 'A turn'], ['tokens', 'Actions'], ['attack', 'Attacks'], ['roll', 'The roll'], ['help', 'Helping'], ['plots', 'Plots'], ['more', 'More rules']].map(([id, t]) => `<button data-rules="${id}">${t}</button>`).join('')}<button class="close-rules" data-rules="" aria-label="Close rules">✕</button></nav>
+  ${sec('goal', 'Your goal', `<p>You win by meeting a Goal when victory is checked, at the end of any turn (never in the first round). There are three ways:</p><ul>
+    <li><b>Basic Goal:</b> control ${goalNeeded(s, ui.me)} Groups, counting your Illuminati. You have ${goalCount(s, ui.me)}.</li>
+    <li><b>Your Illuminati's Special Goal</b> (${esc(ill.name)}): ${esc(ill.text.replace(/^Power [^.]+\.\s*/, ''))}</li>
+    <li><b>A Goal card</b> in your hand${goals.length ? ` (you hold: ${esc(goals.join(', '))})` : ''}. You may hold only one Goal card${goalLimit(s, ui.me) > 1 ? ` (your Illuminati allows ${goalLimit(s, ui.me)})` : ''}.</li></ul>
+    <p>Groups under a Devastated Place do not count. A player whose Illuminati has no Groups left after their third turn is out.</p>`)}
+  ${sec('turn', 'A turn', `<ol><li><b>Start:</b> draw a Plot card, then a Group card (the rules make both draws optional; this game always takes them). Then you may make <b>one automatic takeover</b>: put a Group (or Resource) from your hand into your Power Structure with no roll, on a free arrow. Then every Group you control gets its Action token.${two ? ' <i>Two-player rule: if you took a Group over this way, your Illuminati gets no token this turn.</i>' : ''}</li>
+    <li><b>Main phase:</b> spend Action tokens: attack, move a Group, buy Plots, bring in a Resource, use card abilities. Anyone may answer with Plots and help at any time.</li>
+    <li><b>End:</b> you say you are done; everyone gets a last chance to play cards, then victory is checked.</li></ol>`)}
+  ${sec('tokens', 'Action tokens', `<p>Each Group has one action per turn, shown by its token. Spending it lets the Group attack, aid, oppose, or pay for a card. Tokens come back at the start of your turn, so a Group that aided in a rival's turn may have none left for yours.</p>
+    <p>Your <b>Illuminati</b>'s token also buys things: 1 Illuminati token (or 2 tokens from other Groups) buys a Plot card at any time; once per turn it can bring a Resource into play or draw a Group card.</p>`)}
+  ${sec('attack', 'Attacks', `<p><b>Attack to Control</b> takes a Group from a rival (or from your own hand). The attacker needs an open outgoing arrow for the captured Group to hang from. Its strength is your Power minus the target's <b>Resistance</b>.</p>
+    <p><b>Attack to Destroy</b> removes a Group from play. Strength is your Power minus the target's <b>Power</b>.</p>
+    <p>Defense bonus by position: <b>+10</b> if the target hangs directly from its Illuminati, <b>+5</b> one step further, none beyond. Alignments matter: for control, <b>+4</b> for each alignment the attacker shares with the target and <b>−4</b> for each opposite pair; for destroy it is reversed. In an Attack to Control the target also gets <b>+4</b> Resistance for each alignment it shares with its master.</p>
+    <p><b>Instant attacks</b> are cards that attack by themselves: Disasters hit Places, Assassinations hit Personalities.</p>
+    <p>Nobody can attack an Illuminati.${two ? ' Two-player rule: nobody may attack the other player until both have finished a full turn.' : ''}</p>`)}
+  ${sec('roll', 'The roll', `<p>${rollHelp(7)}</p><p>Before the attacker rolls, every player may play Plots, aid, or oppose, back and forth, until nobody wants to add anything. Only then are the dice rolled.</p>`)}
+  ${sec('help', 'Helping and defending', `<p>Any Group except the attacker may spend its token to <b>aid</b> (add its Power to the attack) or <b>oppose</b> (add its Power to the defense), from any player, even in someone else's turn.</p>
+    <ul><li>To aid an Attack to Control it must share an alignment with the target; to aid an Attack to Destroy it must have an alignment opposite to the target.</li>
+    <li>To oppose it must share an alignment with the target, or be the target's master or puppet, or be the target itself (the target defending itself counts double).</li>
+    <li>A Group without the right alignment may still help using its <b>Global Power</b> (the second number).</li></ul>
+    <p>A card in your hand that is a copy of the attacked Group is an <b>agent</b>: play it for +10 to the attack or −6 against it.</p>`)}
+  ${sec('plots', 'Plots', `<p>Plots are your secret cards. Each says when it can be played (the tag on the card). Costs on the card are paid when you play it.</p>
+    <ul><li>Outside your own turn you may hold at most <b>${handLimit(s, ui.me)}</b> Plots; in your turn there is no limit.</li>
+    <li><b>New World Orders</b> sit in the middle and change the rules for everyone; only one of each colour at a time.</li>
+    <li>Nobody may use two copies of the same Plot in one attack.</li></ul>`)}
+  ${sec('more', 'More rules', `<ul><li><b>Secret</b> Groups can only be attacked or helped by Illuminati and other Secret Groups.</li>
+    <li>A <b>Privileged</b> attack allows only the attacker and defender to take part.</li>
+    <li><b>Devastated</b> Places lose their tokens and stop counting until someone sends Relief (spending actions worth three times the Place's printed Power).</li>
+    <li>You may <b>move</b> a Group (with its puppets) to another open arrow in your Power Structure in your main phase for one token. Groups cannot be dropped.</li>
+    <li>When a card and a rule disagree, the card wins.</li></ul>`)}`;
+}
+
+/** When a Plot may be played, in the words of the rules. */
+function plotTiming(id: string, subtype: string, short = false): string {
+  if (subtype === 'Goal') return short ? '' : 'Goal card: you win if you meet it when victory is checked at the end of a turn (hold at most one).';
+  if (subtype === 'NWO') return short ? '' : 'New World Order: play any time except during an Instant or Privileged attack; it affects everyone until replaced by another of its colour.';
+  const t = PLOTS[id]?.timing ?? [];
+  const words: Record<string, [string, string]> = {
+    anytime: ['Any time', 'any time you could act'],
+    declare: ['When declaring', 'when you declare an attack (announce it with the attack)'],
+    attack: ['During an attack', 'during an attack, before the dice are rolled'],
+    roll: ['After the roll', 'right after attack dice are rolled'],
+    counter: ['Counter', 'right after another Plot is played, to answer it'],
+    instant: ['Instant attack', 'as an Instant Attack (a card that attacks by itself)'],
+    event: ['In response', 'right after the event named on the card'],
+    nwo: ['New World Order', 'as a New World Order'],
+  };
+  const parts = t.map((x) => words[x]).filter(Boolean);
+  if (!parts.length) return short ? '' : '';
+  return short ? parts.map((p) => p[0]).join(' / ') : `Play ${parts.map((p) => p[1]).join(', or ')}.`;
+}
+
+/** Why a card cannot be used right now, in terms of the real rules (undefined when it can). */
+function whyNot(s: GameState, iid: string, can?: { control: boolean; destroy: boolean }): string | undefined {
+  const c = s.cards[iid];
+  if (!c) return undefined;
+  const d = def(s, iid);
+  const me = player(s, ui.me);
+  const mine = c.controller === ui.me && c.zone === 'structure';
+  const myMain = idle(s);
+  if (c.zone === 'structure' && c.controller !== ui.me) {
+    return 'A rival\'s Group. To take it, pick one of your Groups with an Action token and make an Attack to Control (or Destroy) on it.';
+  }
+  if (mine) {
+    if (!myMain) return 'Groups start actions only in your own turn\'s main phase. In other turns they can still aid or oppose attacks when asked.';
+    if (c.tokens === 0) {
+      if (c.capturedTurn === s.turn) return 'Taken over this turn: a Group you gain gets its first Action token at the start of your next turn.';
+      if (tokenBarred(s, iid)) return 'It cannot hold an Action token right now (for example, it is under a Devastated Place or its Power is 0).';
+      return 'No Action token left. Each Group can act once per turn; tokens come back at the start of your turn.';
+    }
+    if (can && !can.control && !can.destroy) {
+      if (s.players.length === 2 && (me.turnsTaken < 1 || s.players.some((p) => p.id !== ui.me && p.turnsTaken < 1))) return 'Two-player rule: nobody may attack the other player until both have finished a full turn. You can still attack a Group card in your hand to control it.';
+      return 'No legal target right now.';
+    }
+    if (can && !can.control && d.type === 'Group' && !openArrows(s, iid).length) return 'No open control arrow, so it cannot make an Attack to Control (a captured Group must have an arrow to hang from). It can still attack to destroy, aid, or oppose.';
+    if (can && !can.control) return 'No legal target for an Attack to Control right now.';
+    if (can && !can.destroy) return 'No legal target for an Attack to Destroy right now.';
+    return undefined;
+  }
+  if (c.zone === 'hand' && me.hand.includes(iid)) {
+    if (d.type === 'Group') return 'Groups in your hand come into play by your one automatic takeover at the start of your turn, or when one of your Groups makes an Attack to Control on the card in your hand.';
+    if (d.type === 'Resource') {
+      if (!myMain) return 'A Resource comes into play in your own main phase (or by your automatic takeover).';
+      if (s.turnFlags.resourcePlayed) return 'Only one Resource per turn can be put into play with your Illuminati\'s action.';
+      if (!s.cards[me.illuminati].tokens) return 'Putting a Resource into play costs your Illuminati\'s Action token, which is already spent.';
+      if (!canEnterPlay(s, iid, ui.me)) return 'A Unique card: only one copy may be in play (or it has been destroyed).';
+      return undefined;
+    }
+    if (d.type === 'Plot') {
+      if (!PLOTS[d.id]) return d.subtype === 'Goal' ? 'Goal cards are not played: you win if you meet the Goal when victory is checked at the end of a turn.' : 'This card is not in this version yet.';
+      if (plotOptions(s, ui.me, iid).length) return undefined;
+      const t = PLOTS[d.id].timing;
+      if (!t.includes('anytime') && !t.includes('nwo')) return `${plotTiming(d.id, d.subtype)} That moment is not now.`;
+      return 'Its conditions are not met right now: read the card for what it needs (a target, a cost, or a situation).';
+    }
+  }
+  return undefined;
 }
 
 /** A small "i" button that opens a longer explanation underneath. */
@@ -713,7 +835,7 @@ function renderMainConsole(s: GameState): string {
         <button class="linkish" data-act="clear">Cancel</button>
       </div>
       ${abilityButtons(s, sel.iid)}
-      ${!canControl && !canDestroy && s.cards[sel.iid].tokens ? `<p class="muted">${s.players.some((p) => p.id !== ui.me && p.turnsTaken < 1) || me.turnsTaken < 1 ? 'No attacks on your rival until you have both finished a turn. You can still attack Groups in your hand to control.' : 'No legal targets right now.'}</p>` : ''}`;
+      ${!canControl || !canDestroy ? `<p class="why">${esc(whyNot(s, sel.iid, { control: canControl, destroy: canDestroy }) ?? '')}</p>` : ''}`;
   }
   if (sel.kind === 'attack') {
     return `<h2>Attack to ${sel.type}</h2><p>Tap a highlighted target${sel.type === 'control' ? ' — a rival Group, or a Group card in your hand' : ''}.</p>
@@ -758,7 +880,7 @@ function renderMainConsole(s: GameState): string {
     const opts = plotOptions(s, ui.me, sel.card);
     (window as unknown as { __popts: typeof opts }).__popts = opts;
     return `<h2>${esc(d.name)}</h2><p class="small">${esc(d.text)}</p>
-      ${PLOTS[d.id] ? (opts.length ? `<div class="opts">${opts.map((o, i) => `<button data-popt="${i}">${esc(o.label)}</button>`).join('')}</div>` : '<p class="muted">Not playable right now. Some Plots can only be played during an attack or right after a roll.</p>') : '<p class="muted">This card is not in this version of the game yet.</p>'}
+      ${PLOTS[d.id] ? (opts.length ? `<div class="opts">${opts.map((o, i) => `<button data-popt="${i}">${esc(o.label)}</button>`).join('')}</div>` : `<p class="why">${esc(whyNot(s, sel.card) ?? 'Not playable right now.')}</p>`) : '<p class="muted">This card is not in this version of the game yet.</p>'}
       <div class="btns"><button class="linkish" data-act="clear">Close</button></div>`;
   }
   const ill = me.illuminati;
@@ -803,6 +925,8 @@ function renderInspect(s: GameState): string {
     <button class="close" data-act="closeInspect" aria-label="Close">×</button>
     <div class="label">${esc(d.subtype)}</div><h3>${esc(d.name)}</h3>${stats}
     <p class="small">${esc(d.text)}</p>
+    ${d.type === 'Plot' ? `<p class="small"><span class="timing">${esc(plotTiming(d.id, d.subtype))}</span></p>` : ''}
+    ${whyNot(s, iid) ? `<p class="why">${esc(whyNot(s, iid)!)}</p>` : ''}
     ${pending.length ? `<p class="small warn">Not active yet in this version: ${esc(pending.join('; '))}.</p>` : ''}
     ${d.type === 'Plot' && !PLOTS[d.id] ? '<p class="small warn">This Plot is not in this version yet.</p>' : ''}
     ${d.subtype === 'NWO' && NWO_EFFECTS[d.id] ? '<p class="small muted">In effect for everyone while on the table.</p>' : ''}
@@ -959,6 +1083,11 @@ function bind() {
     const cur = ui.picked ?? [];
     ui.picked = cur.includes(id) ? cur.filter((x) => x !== id) : cur.length < ch.max ? [...cur, id] : cur;
     render();
+  });
+  app.querySelectorAll<HTMLElement>('[data-rules]').forEach((b) => b.onclick = () => {
+    ui.showRules = b.dataset.rules || undefined;
+    render();
+    if (ui.showRules) app.querySelector(`#rule-${ui.showRules}`)?.scrollIntoView({ block: 'start' });
   });
   app.querySelectorAll<HTMLElement>('[data-info]').forEach((b) => b.onclick = (e) => { e.stopPropagation(); ui.info = ui.info === b.dataset.info ? undefined : b.dataset.info; render(); });
   app.querySelectorAll<HTMLElement>('[data-lead]').forEach((b) => b.onclick = () => act({ type: 'chooseLead', card: b.dataset.lead! }));

@@ -198,7 +198,7 @@ export interface GameEvent {
 
 export type Phase = 'setup' | 'beginning' | 'main' | 'endOfTurn' | 'gameOver';
 
-export interface LogEntry { turn: number; player?: string; text: string; to?: string /* private: only this player sees it */; }
+export interface LogEntry { turn: number; player?: string; text: string; to?: string /* private: only this player sees it */; info?: boolean /* narration of an automatic step, not an action */ }
 
 export interface GameSettings {
   basicGoal: number;       // groups to control (incl. Illuminati)
