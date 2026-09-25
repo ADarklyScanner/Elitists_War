@@ -166,7 +166,7 @@ describe('Bjorne', () => {
     put(s, 'p1', 'dentists', b);
     expect(HOOKS['bjorne'].extraTokens!(s, b, b)).toBe(0);
   });
-  it('whoever destroys him draws Plots equal to his Power', () => {
+  it('whoever destroys him draws one Plot plus one per point of his Power', () => {
     const s0 = scenario();
     const att = put(s0, 'p1', 'the-mafia');
     boost(s0, att);
@@ -175,7 +175,7 @@ describe('Bjorne', () => {
     let s = act(s0, 'p1', { type: 'attack', attackType: 'destroy', attacker: att, target: b });
     s = resolve(s, [1, 1]);
     expect(s.cards[b].zone).toBe('destroyed');
-    expect(hand(s, 'p1').length).toBe(before + CARDS['bjorne'].power!);
+    expect(hand(s, 'p1').length).toBe(before + 1 + CARDS['bjorne'].power!);
   });
 });
 
@@ -454,13 +454,16 @@ describe('Dinosaur Park', () => {
 });
 
 describe('France and Italy', () => {
-  it('Italy may defend your Weird Groups with its full Power', () => {
+  it('Italy may defend your Weird Groups with its full Power, without a token', () => {
     const s0 = scenario();
     const it2 = put(s0, 'p2', 'italy');
     const weird = put(s0, 'p2', 'gay-activists');
     const att = put(s0, 'p1', 'the-mafia');
-    const s = act(s0, 'p1', { type: 'attack', attackType: 'destroy', attacker: att, target: weird });
-    expect(canOppose(s, 'p2', it2)).toMatchObject({ ok: true, global: false });
+    s0.cards[it2].tokens = 0;
+    let s = act(s0, 'p1', { type: 'attack', attackType: 'destroy', attacker: att, target: weird });
+    s = act(s, 'p2', { type: 'useAbility', card: it2, ability: 'defend', params: {} });
+    expect(line(s, s.attack!, 'Defense', 'Italy defends')).toBe(power(s, it2));
+    expect(s.cards[it2].tokens).toBe(0);
   });
   it('Italy cannot defend a Straight Group', () => {
     const s0 = scenario();
@@ -468,16 +471,19 @@ describe('France and Italy', () => {
     const straight = put(s0, 'p2', 'dentists');
     const att = put(s0, 'p1', 'the-mafia');
     const s = act(s0, 'p1', { type: 'attack', attackType: 'destroy', attacker: att, target: straight });
-    expect(canOppose(s, 'p2', it2).ok).toBe(false);
+    expect(() => act(s, 'p2', { type: 'useAbility', card: it2, ability: 'defend', params: {} })).toThrow(/Weird Group you control/);
   });
   it('France may defend your Liberal Groups, not a rival\'s', () => {
-    const s = scenario();
-    const fr = put(s, 'p2', 'france');
-    const mine = put(s, 'p2', 'feminists');
-    const theirs = put(s, 'p1', 'secular-humanists');
-    const mayJoin = HOOKS['france'].mayJoin!;
-    expect(mayJoin(s, fr, ctxOf(s, { target: mine }), fr, 'oppose')).toBe(true);
-    expect(mayJoin(s, fr, ctxOf(s, { target: theirs }), fr, 'oppose')).toBe(false);
+    const s0 = scenario();
+    const fr = put(s0, 'p2', 'france');
+    const mine = put(s0, 'p2', 'feminists');
+    const att = put(s0, 'p1', 'the-mafia');
+    const theirs = put(s0, 'p1', 'secular-humanists');
+    let s = act(s0, 'p1', { type: 'attack', attackType: 'destroy', attacker: att, target: mine });
+    s = act(s, 'p2', { type: 'useAbility', card: fr, ability: 'defend', params: {} });
+    expect(line(s, s.attack!, 'Defense', 'France defends')).toBe(power(s, fr));
+    const own = act(s0, 'p1', { type: 'attack', attackType: 'destroy', attacker: att, target: theirs });
+    expect(() => act(own, 'p2', { type: 'useAbility', card: fr, ability: 'defend', params: {} })).toThrow(/Liberal Group you control/);
   });
 });
 
@@ -556,7 +562,7 @@ describe('Israel', () => {
 });
 
 describe('Moonbase', () => {
-  it('is immune to Disasters other than Nuclear Accident and Meteor Strike', () => {
+  it('is immune to Disasters other than Earthquake and Meteor Strike', () => {
     const s0 = scenario();
     const mb = put(s0, 'p2', 'moonbase');
     // Immune: the Disaster cannot even be aimed at Moonbase.
@@ -1029,5 +1035,135 @@ describe('Las Vegas', () => {
     const { s, lv } = withRoll(() => true);
     s.players[1].turnsTaken = 0;
     expect(() => use(s, 'p1', lv, 'bet', { target: ill(s, 'p2'), mode: '1' })).toThrow(/first turn/);
+  });
+});
+
+describe('audit fixes (D)', () => {
+  /** Run `fn` with a card's data patched to its printed value (the cards.json fix is pending), then restore it. */
+  function withData<T>(id: string, patch: Partial<(typeof CARDS)[string]>, fn: () => T): T {
+    const saved = { ...CARDS[id] };
+    Object.assign(CARDS[id], patch);
+    try { return fn(); } finally { Object.assign(CARDS[id], saved); }
+  }
+  const attack = (s: GameState, pl: string, type: 'control' | 'destroy', attacker: string, target: string) =>
+    act(s, pl, { type: 'attack', attackType: type, attacker, target });
+  const bonus = (s: GameState, id: string) => line(s, s.attack!, 'Attack', CARDS[id].name);
+
+  /** `card` in p1's structure; the Mafia leads the attack on `target` (a p2 card). */
+  function anyAttempt(card: string, target: string, type: 'control' | 'destroy' = 'control') {
+    const s = scenario();
+    put(s, 'p1', card);
+    const mafia = put(s, 'p1', 'the-mafia');
+    return bonus(attack(s, 'p1', type, mafia, put(s, 'p2', target)), card);
+  }
+
+  it('"any attempt" bonuses help an attack led by another of your Groups', () => {
+    expect(anyAttempt('manuel-noriega', 'international-cocaine-smugglers')).toBe(6);
+    expect(anyAttempt('margaret-thatcher', 'england')).toBe(10);
+    expect(anyAttempt('wargamers', 'hackers')).toBe(2);
+    expect(anyAttempt('wargamers', 'hackers', 'destroy')).toBe(2);
+    expect(anyAttempt('germany', 'fbi')).toBe(2);
+    expect(anyAttempt('israel', 'mossad')).toBe(8);
+    expect(anyAttempt('silicon-valley', 'hackers')).toBe(4);
+    expect(anyAttempt('moonbase', 'nasa')).toBe(4);
+    expect(anyAttempt('moonbase', 'nasa', 'destroy')).toBe(4);
+  });
+  it('...but not a rival\'s attack, and not other targets', () => {
+    const s = scenario();
+    put(s, 'p2', 'margaret-thatcher');
+    const mafia = put(s, 'p1', 'the-mafia');
+    expect(bonus(attack(s, 'p1', 'control', mafia, put(s, 'p2', 'england')), 'margaret-thatcher')).toBe(0);
+    expect(anyAttempt('margaret-thatcher', 'hawaii')).toBe(0);
+    expect(anyAttempt('germany', 'fbi', 'destroy')).toBe(0);
+  });
+  it('Margaret Thatcher: +10 when she leads the takeover of England too (not added twice)', () => {
+    const s = scenario();
+    const mt = put(s, 'p1', 'margaret-thatcher');
+    expect(bonus(attack(s, 'p1', 'control', mt, put(s, 'p2', 'england')), 'margaret-thatcher')).toBe(10);
+  });
+
+  /** Bonus of a "direct" card when it leads, and when another Group of yours leads. */
+  function direct(card: string, target: string) {
+    const s = scenario();
+    const g = put(s, 'p1', card);
+    const mafia = put(s, 'p1', 'the-mafia');
+    const t = put(s, 'p2', target);
+    return [bonus(attack(s, 'p1', 'control', g, t), card), bonus(attack(s, 'p1', 'control', mafia, t), card)];
+  }
+  it('Al Gore: +8 only when he leads a takeover of a Green Group', () => {
+    expect(direct('al-gore', 'underground-newspapers')).toEqual([8, 0]);
+    expect(direct('al-gore', 'dentists')).toEqual([0, 0]);
+  });
+  it('Canada: +10 only when it leads a takeover of a Green Group', () => {
+    expect(direct('canada', 'underground-newspapers')).toEqual([10, 0]);
+    expect(direct('canada', 'dentists')).toEqual([0, 0]);
+  });
+  it('Ollie North: +8 only when he leads a takeover of a Conservative Media Group', () => {
+    expect(direct('ollie-north', 'nancy-reagan')).toEqual([8, 0]);
+    expect(direct('ollie-north', 'cable-tv')).toEqual([0, 0]); // Media but not Conservative
+    expect(direct('ollie-north', 'nuclear-power-companies')).toEqual([0, 0]); // Conservative but not Media
+  });
+
+  it('Vatican City: Peaceful Groups cannot attack any Group in its Power Structure', () => {
+    const s = scenario();
+    put(s, 'p2', 'vatican-city');
+    const t = put(s, 'p2', 'dentists');
+    const peaceful = put(s, 'p1', 'boy-sprouts');
+    const mafia = put(s, 'p1', 'the-mafia');
+    expect(() => attack(s, 'p1', 'destroy', peaceful, t)).toThrow();
+    expect(() => attack(s, 'p1', 'control', peaceful, t)).toThrow();
+    expect(attack(s, 'p1', 'destroy', mafia, t).attack?.target).toBe(t);
+  });
+
+  it('Moonbase: Earthquake and Meteor Strike reach it; Nuclear Accident does not', () => {
+    const s0 = scenario();
+    const mb = put(s0, 'p2', 'moonbase');
+    expect(() => disaster(s0, 'nuclear-accident', mb)).toThrow(/immune/);
+    const t = disaster(s0, 'earthquake', mb);
+    expect(t.attack?.target).toBe(mb);
+    expect(line(t, t.attack!, 'Defense', 'Moonbase')).toBe(0);
+  });
+
+  it('The Great Pyramid: as a Place, Disasters can strike it except Tornadoes and Hurricanes (data: Place, fix pending)', () => {
+    withData('the-great-pyramid', { subtype: 'Place' }, () => {
+      const s0 = scenario();
+      const gp = put(s0, 'p2', 'the-great-pyramid');
+      expect(() => disaster(s0, 'tornado', gp)).toThrow(/immune/);
+      expect(() => disaster(s0, 'hurricane', gp)).toThrow(/immune/);
+      const t = disaster(s0, 'earthquake', gp);
+      expect(t.attack?.target).toBe(gp);
+      expect(line(t, t.attack!, 'Defense', 'The Great Pyramid')).toBe(0);
+    });
+  });
+
+  it('France: the free defense needs no token, works once per attack and cannot be added to a normal opposition', () => {
+    const s0 = scenario();
+    const fr = put(s0, 'p2', 'france');
+    const mine = put(s0, 'p2', 'feminists');
+    const att = put(s0, 'p1', 'the-mafia');
+    s0.cards[fr].tokens = 0;
+    let s = attack(s0, 'p1', 'destroy', att, mine);
+    s = use(s, 'p2', fr, 'defend');
+    expect(s.cards[fr].tokens).toBe(0);
+    expect(() => use(s, 'p2', fr, 'defend')).toThrow(/already defended/);
+    s.cards[fr].tokens = 1;
+    expect(canOppose(s, 'p2', fr).ok).toBe(false);
+    // Opposing first with a token rules out the free defense.
+    const s1 = attack(s0, 'p1', 'destroy', att, mine);
+    s1.cards[fr].tokens = 1;
+    const opp = act(s1, 'p2', { type: 'oppose', group: fr });
+    expect(() => use(opp, 'p2', fr, 'defend')).toThrow(/already part/);
+  });
+
+  it('Texas: its hidden Plot can only be used for something involving Texas', () => {
+    let s = scenario();
+    const tx = put(s, 'p1', 'texas');
+    const hawaii = put(s, 'p2', 'hawaii');
+    const quake = give(s, 'p1', 'earthquake', { hand: true });
+    const other = give(s, 'p1', 'earthquake', { hand: true });
+    s = use(s, 'p1', tx, 'hide', { target: quake });
+    expect(checkPlot(s, 'p1', { card: quake, target: hawaii })).toMatch(/involving Texas/);
+    expect(checkPlot(s, 'p1', { card: quake, target: tx }) ?? '').not.toMatch(/involving Texas/);
+    expect(checkPlot(s, 'p1', { card: other, target: hawaii }) ?? '').not.toMatch(/involving Texas/);
   });
 });

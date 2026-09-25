@@ -17,8 +17,19 @@ import {
   protectedPlayer, tokenBarred,
 } from '../game';
 import { canExpose, exposeCards } from '../game';
+import { resourceKinds } from './plots3';
 
 // ---------------------------------------------------------------- helpers
+
+/** Printed Gadget/Artifact footers the card data does not record yet (data fix pending). */
+const PRINTED_KINDS: Record<string, string[]> = {
+  'flying-saucer': ['Gadget', 'Artifact'],
+  'eliza': ['Gadget'],
+  'weather-satellite': ['Gadget'],
+};
+/** Is this Resource an Artifact or a Gadget (read from the data, plus the printed footers above)? */
+const artifactOrGadget = (s: GameState, iid: string) =>
+  def(s, iid).type === 'Resource' && [...resourceKinds(s, iid), ...(PRINTED_KINDS[s.cards[iid].cardId] ?? [])].some((k) => k === 'Artifact' || k === 'Gadget');
 
 const ctrl = (s: GameState, self: string) => controllerOf2(s, self);
 /** In play and face up (a Resource face down under Warehouse 23 does nothing). */
@@ -80,11 +91,6 @@ const doublerOk = (s: GameState, r: string) => {
   const g = linkedGroup(s, r);
   return !!g && HOOKS[s.cards[r].cardId]!.linkTo!(s, r, g);
 };
-
-function destroyResource(s: GameState, iid: string) {
-  log(s, `${cardName(s, iid)} is destroyed.`);
-  Object.assign(s.cards[iid], { zone: 'destroyed', controller: undefined, linkedTo: undefined, tokens: 0 });
-}
 
 /** Move a Plot from the top of a deck into its owner's discard pile. */
 function discardTopPlot(s: GameState, pl: string) {
@@ -862,8 +868,9 @@ const T: Record<string, CardHooks> = {
       apply(s, pl, self, p) {
         const die = rollDie(s);
         log(s, `Suicide Squad rolls ${die}.`, pl);
-        if (die <= 5) destroyResource(s, p.target!);
-        if (die >= 2) destroyResource(s, self);
+        // Every card it destroys is discarded (so a Unique one may be played again later).
+        if (die <= 5) { log(s, `${cardName(s, p.target!)} is destroyed and discarded.`); discardCard(s, p.target!); }
+        if (die >= 2) { log(s, `${cardName(s, self)} is destroyed and discarded.`); discardCard(s, self); }
       },
     }],
   },
@@ -963,7 +970,7 @@ const T: Record<string, CardHooks> = {
         const p0 = player(s, pl);
         const t = p.target;
         if (!t || !s.cards[t] || s.cards[t].owner !== pl || ![...p0.hand, ...p0.groupDeck, ...p0.plotDeck].includes(t)) return 'Choose a card from your hand or deck.';
-        if (def(s, t).type !== 'Resource' || !/Artifact|Gadget/.test(def(s, t).uniqueness ?? '')) return 'Choose an Artifact or Gadget Resource.';
+        if (!artifactOrGadget(s, t)) return 'Choose an Artifact or Gadget Resource.';
         if (!canEnterPlay(s, t, pl)) return 'That Resource cannot come into play.';
         return null;
       },
