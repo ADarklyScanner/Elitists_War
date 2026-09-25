@@ -46,6 +46,8 @@ interface Ui {
   dice?: { a: number; b: number; need: number; start: number };
   logSeen?: number;
   logGame?: string;
+  /** Which info (i) explanation is open. */
+  info?: string;
 }
 
 const ui: Ui = { game: null, me: 'p1', sel: { kind: 'none' }, autoPass: true, thinking: false, guide: loadGuidePref() };
@@ -218,7 +220,7 @@ function computeGuide(s: GameState): Guide {
     const acting = new Set(opts.flatMap((o) => o.action.type === 'aid' || o.action.type === 'oppose' ? [o.action.group] : o.action.type === 'useAbility' ? [o.action.card] : []));
     mark(mine, (c) => acting.has(c));
     g.next = 'console';
-    g.text = opts.length ? 'Green cards can respond: pick a response , or Pass when you are done.' : 'Nothing you can do here: tap Pass.';
+    g.text = opts.length ? 'Green cards can respond: pick a response in the panel, or Pass when you are done.' : 'Nothing you can do here: tap Pass.';
     return g;
   }
   if (!idle(s)) { g.text = s.prompt || s.window ? 'Waiting for your rival.' : ''; return g; }
@@ -344,7 +346,7 @@ function diceOverlay(): string {
   const ok = sum <= d.need && sum < 11;
   return `<div class="dice-overlay" data-act="dice" style="--t:-${t}ms" role="status" aria-label="Rolled ${d.a} and ${d.b}: ${sum}">
     <div class="dice-pair">${dieFace(d.a)}${dieFace(d.b)}</div>
-    <div class="dice-result ${ok ? 'ok' : 'bad'}"><b>${sum}</b> ${ok ? 'Success' : 'Failure'} <span class="muted">needed ${d.need} or less${sum >= 11 ? ' — 11 or 12 always fails' : ''}</span></div>
+    <div class="dice-result ${ok ? 'ok' : 'bad'}"><b>${sum}</b> ${ok ? 'Success' : 'Failure'} <span class="muted">needed ${d.need} or less${sum >= 11 ? ' · 11 or 12 always fails' : ''}</span></div>
   </div>`;
 }
 
@@ -575,6 +577,23 @@ function renderNwo(s: GameState): string {
   return `<div class="nwo-row"><span class="label">New World Order</span>${list.map(([color, iid]) => `<button class="nwo nwo-${color}" data-inspect="${iid}">${esc(cardName(s, iid!))}</button>`).join('')}</div>`;
 }
 
+/** A small "i" button that opens a longer explanation underneath. */
+function infoButton(key: string): string {
+  const open = ui.info === key;
+  return `<button class="info-btn ${open ? 'on' : ''}" data-info="${key}" aria-expanded="${open}" aria-label="Explain">i</button>`;
+}
+function infoText(key: string, html: string): string {
+  return ui.info === key ? `<div class="info-text" role="note">${html}</div>` : '';
+}
+
+/** What "needs N or less" means, for someone new to the game. */
+function rollHelp(need: number): string {
+  const base = 'Roll two dice. If the total is the number shown or less, the attack succeeds. The number is the attack (Power, plus help) minus the defense (Resistance, plus help).';
+  if (need < 2) return `${base} The lowest possible roll is 2, so right now it cannot succeed: unless someone adds Power, it fails without a roll.`;
+  if (need >= 10) return `${base} A roll of 11 or 12 <b>always fails</b>, however strong the attack. So any need of 10 or more has the same, best odds: 33 of the 36 possible rolls win (92%). The extra strength still matters if the defense adds more later.`;
+  return `${base} A roll of 11 or 12 always fails. The chance shown counts how many of the 36 ways two dice can land are ${need} or less.`;
+}
+
 function attackPanel(s: GameState): string {
   const ctx = s.attack!;
   const st = attackStrength(s, ctx);
@@ -589,8 +608,9 @@ function attackPanel(s: GameState): string {
         <div class="minus">−</div>
         <div><span class="big">${st.defense}</span><span class="muted">defense</span></div>
         <div class="eq">=</div>
-        <div><span class="big accent">${st.strength}</span><span class="muted">needs ≤ ${Math.min(10, st.strength)} on 2d6</span></div>
+        <div><span class="big accent">${st.strength}</span><span class="muted">needs ≤ ${st.strength} on 2d6 ${infoButton('roll')}</span></div>
       </div>
+      ${infoText('roll', rollHelp(st.strength))}
       <div class="odds">${st.strength < 2 ? 'Fails without a roll unless something changes.' : `${Math.round(chance * 100)}% chance to succeed`}${ctx.roll ? ` · rolled <b class="dice">${ctx.roll[0]}·${ctx.roll[1]}</b>${rolled !== ctx.roll[0] + ctx.roll[1] ? ` → ${rolled}` : ''} — ${currentOutcome(s, ctx) === 'success' ? '<b class="ok">success</b>' : '<b class="bad">failure</b>'}` : ''}</div>
       <details class="lines"><summary>How it adds up</summary><ul>${st.lines.map((l) => `<li>${esc(l)}</li>`).join('')}</ul></details>
     </div>`;
@@ -705,7 +725,8 @@ function renderMainConsole(s: GameState): string {
     const decl = { type: 'attack' as const, attackType: sel.type, attacker: sel.attacker, target: sel.target };
     const extra = plotsInHand(s, ui.me).flatMap((c) => plotOptions(s, ui.me, c, decl).map((o) => ({ c, o })));
     return `<h2>${esc(cardName(s, sel.attacker))} → ${esc(cardName(s, sel.target))}</h2>
-      <p>Attack to ${sel.type}: <b>${st.attack}</b> vs <b>${st.defense}</b> → strength <b class="accent">${st.strength}</b>, ${Math.round(successChance(st.strength) * 100)}% before anyone helps or defends.</p>
+      <p>Attack to ${sel.type}: <b>${st.attack}</b> vs <b>${st.defense}</b> → needs <b class="accent">${st.strength}</b> or less on two dice, ${Math.round(successChance(st.strength) * 100)}% before anyone helps or defends. ${infoButton('roll')}</p>
+      ${infoText('roll', rollHelp(st.strength))}
       ${sel.type === 'control' && openArrows(s, sel.attacker).length > 1 ? `<p class="muted">Arrow for the captured Group: <b>${(sel.side ?? openArrows(s, sel.attacker)[0]).toLowerCase()}</b> (tap a + to change).</p>` : ''}
       ${extra.length ? `<div class="label">Add Plots now (they must be played when the attack is declared)</div><div class="opts">${extra.map(({ c, o }, i) => {
         const on = sel.plots.some((p) => p.card === c);
@@ -939,6 +960,7 @@ function bind() {
     ui.picked = cur.includes(id) ? cur.filter((x) => x !== id) : cur.length < ch.max ? [...cur, id] : cur;
     render();
   });
+  app.querySelectorAll<HTMLElement>('[data-info]').forEach((b) => b.onclick = (e) => { e.stopPropagation(); ui.info = ui.info === b.dataset.info ? undefined : b.dataset.info; render(); });
   app.querySelectorAll<HTMLElement>('[data-lead]').forEach((b) => b.onclick = () => act({ type: 'chooseLead', card: b.dataset.lead! }));
   app.querySelectorAll<HTMLElement>('[data-relief]').forEach((b) => b.onclick = () => {
     const r = (window as unknown as { __relief: { place: string; pay: string[] }[] }).__relief[Number(b.dataset.relief)];
