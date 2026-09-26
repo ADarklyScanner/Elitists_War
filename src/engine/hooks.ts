@@ -85,6 +85,10 @@ export interface CardHooks {
   extraPlotDraws?: (s: GameState, self: string) => number;
   /** Counts this many extra Groups toward the controller's Basic Goal. */
   goalBonus?: (s: GameState, self: string) => number;
+  /** Static: this Group itself is left out of every Goal count ("Bobbies"). */
+  noGoalCount?: boolean;
+  /** This many more Groups the controller needs for the Basic Goal ("Bobbies"). */
+  goalPenalty?: (s: GameState, self: string) => number;
 
   // ---- rule changers
   /** Change a Group's alignments while this card is in play (`goals`: evaluating a Goal). */
@@ -135,6 +139,13 @@ export interface CardHooks {
   multipleCopies?: boolean;
   /** Static: destroying this Group gives no destruction credit for Goals (Media Sensation). */
   noDestroyCredit?: boolean;
+  /** Static: a "destroyed" Group goes to the uncontrolled area (or its destroyer's hand) instead of the destroyed pile (Xists). */
+  survivesDestruction?: boolean;
+  /**
+   * Static: entering a Power Structure, this card may go on any physically open side of its new
+   * master, even one with no printed outgoing arrow there (Yetis).
+   */
+  anySideMaster?: boolean;
   /**
    * Called when everyone has passed after an attack's roll, before the result is applied. May push a
    * live effect onto ctx.plays (a re-roll, an automatic failure). Return true to open the roll window

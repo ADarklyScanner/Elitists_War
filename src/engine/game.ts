@@ -8,7 +8,7 @@ import { RuleError } from './types';
 import { CARDS, cardName, def, inst } from './cards';
 import { roll2d6, shuffle } from './rng';
 import {
-  DELTA, OPPOSITE_SIDE, SIDES, attachRect, depth, ensureLayout, LAYOUT_VERSION, occupied, openArrows, sideOf, puppets, rotate, rotationFor, structureCards, subtree,
+  DELTA, OPPOSITE_SIDE, SIDES, attachRect, depth, ensureLayout, LAYOUT_VERSION, occupied, openArrows, openSides, sideOf, puppets, rotate, rotationFor, structureCards, subtree,
 } from './geometry';
 import { abilitiesOf, attackingGroups, matches } from './abilities';
 import { alignmentPairs, alignments, attributes, globalPower, power, resistance } from './stats';
@@ -845,7 +845,9 @@ function finishBeginning(s: GameState) {
       if (hasAbility(s, iid, 'slack')) s.cards[iid].tokens += Math.max(0, n);
       else s.cards[iid].tokens = Math.max(s.cards[iid].tokens, n);
     } else if (s.cards[iid].capturedTurn !== s.turn) {
-      giveToken(s, iid);
+      // A Group marked to miss its next token (Phlegm Elementals: "befouled") skips this refresh once.
+      if (s.cards[iid].data?.skipTokenGain) s.cards[iid].data = { ...s.cards[iid].data, skipTokenGain: undefined };
+      else giveToken(s, iid);
     }
     // Card-granted extra tokens are added at this step (R001 step 4).
     const more = sumHooks(s, (h, self) => h.extraTokens?.(s, self, iid));
@@ -874,7 +876,11 @@ export function takeoverOptions(s: GameState, playerId: string): { card: string;
     if (anyHook(s, (h, self) => !!h.forbidAttack?.(s, self, undefined, card, 'takeover', playerId))) continue;
     if (def(s, card).type === 'Resource' && canEnterPlay(s, card, playerId)) out.push({ card, onto: p.illuminati, side: 'TOP' });
     if (def(s, card).type !== 'Group' || !canEnterPlay(s, card)) continue;
-    for (const spot of spots) out.push({ card, ...spot });
+    // Yetis: any physically open side of any of the player's Groups, not only their printed arrows.
+    const useSpots = HOOKS[s.cards[card].cardId]?.anySideMaster
+      ? structureCards(s, playerId).filter((m) => !para.has(m)).flatMap((m) => openSides(s, m).map((side) => ({ onto: m, side })))
+      : spots;
+    for (const spot of useSpots) out.push({ card, ...spot });
   }
   return out;
 }
@@ -1143,6 +1149,8 @@ export function goalCount(s: GameState, playerId: string, extraDouble?: (iid: st
 function tokenBarredForGoals(s: GameState, iid: string) {
   // A Paralyzed Group does not count toward any Goal (Assassins Paralysis cards).
   if (paralyzedGroups(s).has(iid)) return true;
+  // A Group that is itself excluded from every Goal count ("Bobbies").
+  if (HOOKS[s.cards[iid].cardId]?.noGoalCount) return true;
   let c: CardInstance | undefined = s.cards[iid];
   // A Devastated Place and everything below it do not count toward victory (R037).
   while (c) { if (c.devastated) return true; c = c.master ? s.cards[c.master] : undefined; }
@@ -1153,6 +1161,7 @@ export function goalNeeded(s: GameState, playerId: string): number {
   let n = s.settings.basicGoal;
   const ill = illuminatiOf(s, playerId);
   if (abilitiesOf(s, ill).some((a) => a.kind === 'specialGoal' && a.goal === 'destroyCount')) n -= player(s, playerId).destroyedCredit.length;
+  n += sumHooks(s, (h, self) => (controllerOf2(s, self) === playerId ? h.goalPenalty?.(s, self) : 0));
   return n;
 }
 
@@ -1628,6 +1637,11 @@ function immuneTo(s: GameState, target: string, attackerGroups: string[], ctx?: 
   return false;
 }
 
+/** Sides of `master` where `target` could be placed as a new puppet (Yetis waives the printed-arrow requirement). */
+function placementSides(s: GameState, master: string, target: string, ignore?: Set<string>): Side[] {
+  return HOOKS[s.cards[target].cardId]?.anySideMaster ? openSides(s, master, ignore) : openArrows(s, master, ignore);
+}
+
 export function validateAttack(s: GameState, playerId: string, a: Extract<Action, { type: 'attack' }>, opts: { outOfTurn?: boolean; anyHand?: boolean } = {}): string | null {
   if (!opts.outOfTurn) {
     if (s.phase !== 'main' || activePlayer(s).id !== playerId) return 'You can only attack during the main phase of your own turn.';
@@ -1657,7 +1671,7 @@ export function validateAttack(s: GameState, playerId: string, a: Extract<Action
   } else if (tgt.zone !== 'structure') return 'The target must be in play or in your hand.';
   if (a.attackType === 'control') {
     if (!fromHand && tgt.controller === playerId) return 'You already control that Group.';
-    const open = openArrows(s, a.attacker);
+    const open = placementSides(s, a.attacker, a.target);
     if (!open.length) return `${cardName(s, a.attacker)} has no open control arrow.`;
     if (a.side && !open.includes(a.side)) return 'That control arrow is not open.';
   }
@@ -1689,7 +1703,7 @@ export function startAttack(s: GameState, playerId: string, a: Extract<Action, {
   const ctx: AttackCtx = {
     id: ++s.attackCounter, type: a.attackType, instant: false, attacker: a.attacker, attackerPlayer: playerId,
     target: a.target, targetPlayer: fromHand || fromArea ? undefined : tgt.controller, fromHand, ...(fromArea ? { fromArea } : {}),
-    arrow: a.attackType === 'control' ? a.side ?? openArrows(s, a.attacker)[0] : undefined,
+    arrow: a.attackType === 'control' ? a.side ?? placementSides(s, a.attacker, a.target)[0] : undefined,
     privileged: !!a.privileged, aid: [], oppose: [], attackBonus: [], defenseBonus: [], plays: [],
   };
   if (a.privileged) s.turnFlags.bavarianPrivilege = true;
@@ -2119,7 +2133,7 @@ function devastate(s: GameState, iid: string) {
 function capture(s: GameState, ctx: AttackCtx) {
   const tgt = ctx.target;
   const attacker = ctx.attacker!;
-  let side = ctx.arrow && openArrows(s, attacker).includes(ctx.arrow) ? ctx.arrow : openArrows(s, attacker)[0];
+  let side = ctx.arrow && placementSides(s, attacker, tgt).includes(ctx.arrow) ? ctx.arrow : placementSides(s, attacker, tgt)[0];
   let master = attacker;
   if (!side) {
     // The captured Group must go on the attacking Group's own arrow (R003).
@@ -2324,6 +2338,11 @@ export function destroyGroup(s: GameState, iid: string, by: string) {
   if (!HOOKS[c.cardId]?.noDestroyCredit && !player(s, by).destroyedCredit.includes(iid)) player(s, by).destroyedCredit.push(iid);
   if (draws) drawPlot(s, player(s, by), draws);
   noteLastPuppet(s, prev, by);
+  // A Group that is never really destroyed (Xists) goes to the uncontrolled area, or its destroyer's hand.
+  if (HOOKS[c.cardId]?.survivesDestruction) {
+    if (s.common) putUncontrolled(s, iid, by);
+    else { c.zone = 'hand'; player(s, by).hand.push(iid); }
+  }
 }
 
 /**
