@@ -14,6 +14,10 @@ export interface AbilityParams {
   alignment?: string;
   /** Copy Shops: the copied Plot's own play parameters (its own target, mode, payWith, …). */
   copyPlay?: Omit<PlotPlay, 'card'>;
+  /** Arms Dealers: the rival's exposed Plots taken in exchange for `targets` (one for one). */
+  take?: string[];
+  /** Arms Dealers: Plots received that stay exposed (the rest are hidden again). */
+  keepExposed?: string[];
 }
 
 /** "Spend this card's action to …" and other things a player chooses to do with a card. */
@@ -38,6 +42,11 @@ export interface ActivatedAbility {
   usesToken: boolean;
   /** At most once per turn. */
   oncePerTurn?: boolean;
+  /**
+   * The ways of using it to offer players (the interface and the computer), each with a short label,
+   * when `needs` cannot describe them (several cards to choose, pairs of cards, decks). Each is checked.
+   */
+  options?: (s: GameState, pl: string, self: string) => { params: AbilityParams; label: string }[];
   /** What the UI needs to ask for. */
   needs?: { target?: 'group' | 'ownGroup' | 'rivalGroup' | 'place' | 'personality' | 'resource' | 'plot' | 'actingGroup' | 'handCard' | 'handGroup' | 'handPlot' | 'destroyed' | 'discardPile' | 'rival' | 'rivalHand' | 'nwo'; modes?: string[]; alignment?: boolean;
     /** Offers `payWith`: other Groups of the player's own, with tokens, that can add their Power (e.g. Relief). */
@@ -108,6 +117,38 @@ export interface CardHooks {
   alignmentMod?: (s: GameState, self: string, iid: string, current: Alignment[], goals: boolean) => Alignment[];
   /** Change a Group's attributes while this card is in play. */
   attributeMod?: (s: GameState, self: string, iid: string, current: string[]) => string[];
+  /**
+   * Static: this card's `alignmentMod` / `attributeMod` run after every other card's, so its change has
+   * the last word ("takes precedence over any other card": Orgone Grinder, Alien Abduction).
+   */
+  lastWord?: boolean;
+  /**
+   * Static, read for the card itself wherever it is: the alignments it has before any modifier, in place
+   * of the printed ones (Dittoheads: its master's alignments plus Fanatic; none while in a hand).
+   */
+  baseAlignments?: (s: GameState, iid: string) => Alignment[];
+  /** Multiplies `iid`'s Resistance (the largest multiplier applies, R047): Dittoheads triple their master's. */
+  resistanceMul?: (s: GameState, self: string, iid: string) => number;
+  /** `iid` loses the Action tokens it holds, at once and whenever this stays true (Antitrust Legislation). */
+  losesTokens?: (s: GameState, self: string, iid: string) => boolean;
+  /**
+   * Static, on the card being placed: why `master` may not take it as a puppet (null if it may).
+   * Checked for automatic takeovers, captures and moves (Dittoheads: only a Personality, one each).
+   */
+  masterRule?: (s: GameState, iid: string, master: string) => string | null;
+  /** Static: this card may never be used as an "agents" card (Dittoheads). */
+  neverAgents?: boolean;
+  /** Static: its Fanatic alignment is the same as its master's Fanatic, for all purposes (Dittoheads). */
+  fanaticSameAsMaster?: boolean;
+  /**
+   * `player` may take over `card` automatically only with the permission of this card's controller
+   * (Science Alarmists): the engine asks him to grant or refuse.
+   */
+  takeoverPermission?: (s: GameState, self: string, card: string, player: string) => boolean;
+  /** Static: Plots linked to this Group are kept (set aside) when it is destroyed, for its return (General Disorder). */
+  keepsLinkedPlots?: boolean;
+  /** An "agents" card was just played in an attack (`entry` is its bonus): Convenience Stores. */
+  onAgents?: (s: GameState, self: string, ctx: AttackCtx, entry: import('./types').Contribution, as: 'aid' | 'oppose') => void;
   /** Forbid an attack (return a reason). Also consulted for automatic takeovers (type 'takeover'). */
   forbidAttack?: (s: GameState, self: string, attacker: string | undefined, target: string, type: 'control' | 'destroy' | 'takeover', attackerPlayer: string) => string | null;
   /** Forbid a Group from aiding or opposing this attack. */
@@ -159,6 +200,8 @@ export interface CardHooks {
    * master, even one with no printed outgoing arrow there (Yetis).
    */
   anySideMaster?: boolean;
+  /** Static, with `anySideMaster`: the same holds whenever the card is moved to another master (Dittoheads). */
+  anySideOnMove?: boolean;
   /**
    * Called when everyone has passed after an attack's roll, before the result is applied. May push a
    * live effect onto ctx.plays (a re-roll, an automatic failure). Return true to open the roll window
@@ -200,7 +243,15 @@ export interface CardHooks {
   immuneToLie?: (s: GameState, self: string, victim: string) => boolean;
 
   // ---- triggers
+  /**
+   * Runs at the start of every action, before it is applied, for a card whose rules read the world
+   * outside the game (Australia reads its controller's clock). It records what it read in the state, so
+   * the rest of the game only ever reads the state.
+   */
+  beforeAction?: (s: GameState, self: string) => void;
   onTurnStart?: (s: GameState, self: string) => void;
+  /** The active player's Action tokens have just been placed (R001 step 4). */
+  onTokensPlaced?: (s: GameState, self: string) => void;
   onDestroy?: (s: GameState, self: string, victim: string, by: string) => void;
   onCapture?: (s: GameState, self: string, victim: string, by: string, from: string | undefined) => void;
   onAttackEnd?: (s: GameState, self: string, ctx: AttackCtx) => void;

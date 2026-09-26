@@ -147,16 +147,39 @@ describe('Convenience Stores', () => {
     const s = attack(s0, mafia, cs, 'destroy', 'p2');
     expect(line(s, 'Defense', 'Convenience Stores ability')).toBe(10);
   });
-  it('gives an extra +5 to an agents card played by anyone while it is in play', () => {
+  it("gives its controller's own agents card an extra +5 at once", () => {
     const s0 = scenario();
-    put(s0, 'p2', 'convenience-stores'); // owned by either side; the bonus is universal
+    put(s0, 'p1', 'convenience-stores');
     const mafia1 = put(s0, 'p1', 'the-mafia');
     const mafia2 = put(s0, 'p2', 'the-mafia');
-    give(s0, 'p1', 'the-mafia', { hand: true }); // p1's own duplicate of the target's card
-    const dup = hand(s0, 'p1')[0];
+    const dup = give(s0, 'p1', 'the-mafia', { hand: true });
     let s = attack(s0, mafia1, mafia2, 'control');
     s = act(s, 'p1', { type: 'agent', card: dup, as: 'aid' } as unknown as Action);
+    expect(s.prompt).toBeUndefined();
     expect(line(s, 'Attack', 'Convenience Stores')).toBe(5);
+  });
+  it("lets its controller choose whether a rival's agents card gets the +5 too", () => {
+    const s0 = scenario();
+    put(s0, 'p2', 'convenience-stores');
+    const mafia1 = put(s0, 'p1', 'the-mafia');
+    const mafia2 = put(s0, 'p2', 'the-mafia');
+    const dup = give(s0, 'p1', 'the-mafia', { hand: true });
+    let s = attack(s0, mafia1, mafia2, 'control');
+    s = act(s, 'p1', { type: 'agent', card: dup, as: 'aid' } as unknown as Action);
+    expect(s.prompt?.player).toBe('p2');
+    const refused = act(s, 'p2', { type: 'choose', ids: ['keep'] });
+    expect(line(refused, 'Attack', 'Convenience Stores')).toBe(0);
+    const given = act(s, 'p2', { type: 'choose', ids: ['give'] });
+    expect(line(given, 'Attack', 'Convenience Stores')).toBe(5);
+  });
+  it('can never be used as an agents card itself only by its own rules: Dittoheads can never be one', () => {
+    const s0 = scenario();
+    const pers = put(s0, 'p2', 'general-disorder');
+    const ditto = put(s0, 'p2', 'dittoheads', pers);
+    const mafia = put(s0, 'p1', 'the-mafia');
+    const dup = give(s0, 'p1', 'dittoheads', { hand: true });
+    const s = attack(s0, mafia, ditto, 'destroy');
+    expect(() => act(s, 'p1', { type: 'agent', card: dup, as: 'aid' } as unknown as Action)).toThrow(/agents card/);
   });
 });
 
@@ -348,14 +371,14 @@ describe('Recycling Centers', () => {
 });
 
 describe('Science Alarmists', () => {
-  it('blocks a rival automatic takeover of a Science or Green Group, but not an ordinary attack', () => {
+  it('a rival needs permission to take a Science or Green Group over automatically, but not to attack it', () => {
     const s = scenario();
-    put(s, 'p1', 'science-alarmists');
+    const sa = put(s, 'p1', 'science-alarmists');
     const target = put(s, 'p1', 'epa'); // Green, Science attributes
     const npc = put(s, 'p2', 'the-mafia');
-    const outOfTurn = { outOfTurn: true };
-    expect(HOOKS['science-alarmists'].forbidAttack!(s, Object.keys(s.cards).find((k) => s.cards[k].cardId === 'science-alarmists')!, npc, target, 'takeover', 'p2')).toMatch(/permission/);
-    expect(validateAttack(s, 'p2', { type: 'attack', attackType: 'control', attacker: npc, target }, outOfTurn)).toBeNull();
+    expect(HOOKS['science-alarmists'].takeoverPermission!(s, sa, target, 'p2')).toBe(true);
+    expect(HOOKS['science-alarmists'].takeoverPermission!(s, sa, target, 'p1')).toBe(false);
+    expect(validateAttack(s, 'p2', { type: 'attack', attackType: 'control', attacker: npc, target }, { outOfTurn: true })).toBeNull();
   });
 });
 

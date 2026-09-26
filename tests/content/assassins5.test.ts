@@ -404,12 +404,15 @@ describe('You Are What You Eat', () => {
     s = resolveAttack(s, [2, 2]);
     expect(s.cards[target].zone).toBe('destroyed');
     expect(s.window?.kind).toBe('event');
-    const before = player(s, 'p1').destroyedCredit.length;
+    expect(player(s, 'p1').destroyedCredit).toContain(target);
     s = playAndResolve(s, 'p1', { card });
-    expect(s.cards[attacker].zone).toBe('discard');
+    // The attacker counts as destroyed (destroyed pile) but for no Goal: nobody is credited with it.
+    expect(s.cards[attacker].zone).toBe('destroyed');
+    expect(s.players.some((p) => p.destroyedCredit.includes(attacker))).toBe(false);
     expect(s.cards[target].zone).toBe('structure');
     expect(s.cards[target].controller).toBe('p1');
-    expect(player(s, 'p1').destroyedCredit.length).toBe(before);
+    // The Group taken in is no longer destroyed.
+    expect(player(s, 'p1').destroyedCredit).not.toContain(target);
   });
   it('does not apply when your Illuminati itself made the attack', () => {
     let s = scenario();

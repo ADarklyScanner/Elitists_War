@@ -1,5 +1,6 @@
 // Encoded by the card-content pass. See docs/CARD_SCRIPTING.md.
 // Plot cards R–W (third batch).
+import { noteCostDiscard } from '../game';
 import type { Alignment, AttackCtx, GameState, PlotEffect, PlotPlay } from '../types';
 import type { PlotHandler } from '../plotTypes';
 import { registerPlots } from '../plotTypes';
@@ -358,10 +359,12 @@ registerPlots({
       const p = player(s, pl);
       let groups = 0;
       for (const c of play.payWith ?? []) { if (def(s, c).type === 'Group') groups++; discardCard(s, c); }
-      for (const c of p.groupDeck.splice(0, deckCount(play) ?? 0)) {
+      const fromDeck = p.groupDeck.splice(0, deckCount(play) ?? 0);
+      for (const c of fromDeck) {
         if (def(s, c).type === 'Group') groups++;
         s.cards[c].zone = 'hand'; p.hand.push(c); discardCard(s, c);
       }
+      noteCostDiscard(s, pl, [{ kind: 'group', place: 'hand', cards: play.payWith ?? [] }, { kind: 'group', place: 'deck', cards: fromDeck }]);
       log(s, `${groups} Group${groups === 1 ? '' : 's'} sold out.`, pl);
       s.cards[play.card].data = { groups };
     },

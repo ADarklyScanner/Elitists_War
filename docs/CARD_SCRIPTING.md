@@ -136,6 +136,36 @@ To give a player an extra turn next, set `s.extraTurnFor = playerId`.
 - `replaceableWhenDestroyed` lets another copy of a Unique Resource come into play once this one is destroyed.
 - A question asked during the start-of-turn draws (`askChoice` in `onDraw`) is answered before the
   automatic takeover prompt.
+- `lastWord: true` runs the card's `alignmentMod` / `attributeMod` after every other card's ("takes
+  precedence over any other card": Orgone Grinder, Alien Abduction).
+- `baseAlignments(s, iid)` (static, read wherever the card is) replaces its printed alignments (Dittoheads).
+- `resistanceMul` multiplies a card's Resistance (the largest multiplier applies, R047).
+- `losesTokens` makes a card lose the tokens it holds at once, after every action (Antitrust Legislation);
+  `noTokens` only stops new ones.
+- `masterRule(s, iid, master)` (static, on the card being placed) says why `master` may not take it as a
+  puppet: checked for automatic takeovers, captures and moves. `anySideOnMove` extends `anySideMaster` to moves.
+- `neverAgents` (static): the card is never an agents card. `onAgents` runs when an agents card is played.
+- `fanaticSameAsMaster` (static): its Fanatic alignment is the same as its master's (they share it).
+- `takeoverPermission(s, self, card, player)`: the automatic takeover of `card` needs this card's
+  controller's permission; the engine asks him (`takeoverPermission` choice) and remembers a refusal for the turn.
+- `keepsLinkedPlots` (static): Plots linked to the Group are set aside, not discarded, when it is destroyed
+  (they carry `data.keptFor`); the card's own `delayedRevive` puts them back (General Disorder).
+- `beforeAction(s, self)` runs at the start of every action, for a card whose rules read the outside world;
+  it records what it read in the state (Australia reads `localTime(s, player)`, from `localClock.now()`,
+  which tests replace). Players may carry `utcOffset` (minutes east of UTC), reported by the interface.
+- `onTokensPlaced` runs right after the active player's Action tokens are placed. Before they are, a
+  `tokenPlacement` event is raised (its window opens only if someone holds a Plot answering it).
+- An activated ability may list its own ways of being used with `options(s, pl, self)` (several cards to
+  pick, pairs, decks): `abilityOptions` offers each one that its `check` accepts.
+- Cards discarded from a hand or a deck to pay for a Plot or a special ability are announced with
+  `noteCostDiscard(s, payer, [{ kind, place, cards }])` (Go, Lemmings, Go! answers the `costDiscard` event).
+- `shieldFromGoFish(s, player)` / `goFishShielded(s, player)`: a player who received a Plot from a rival, or
+  was forced to show one, is immune to Go Fish until the end of his next turn. `revealTo` (unless told the
+  showing was voluntary) and `exposeCards` (unless `{ voluntary: true }`) record it themselves.
+- A card whose `data.copyOf` is set is a Copy Shops copy: it leaves the game instead of reaching a discard
+  pile or a hand. A copied Goal is declared with `declareCopiedGoal` (claim id `copy:<card id>`).
+- `startAttack(..., { strip, stripAlignment })` makes the Drug Companies' attack (no arrow, no capture);
+  `{ partitionOf }` lets a duplicate of a Place in play be attacked from hand (Partition).
 
 Modifiers `{kind:'addAttr'|'removeAttr', attr}` and `{kind:'addArrow', side}` change attributes and arrows
 while the card is in play.

@@ -1,4 +1,5 @@
 // SubGenius pack, batch "subgenius3": 24 Plot cards (docs/CARD_SCRIPTING.md, "Expansions").
+import { noteCostDiscard } from '../game';
 import type { Alignment, AttackCtx, GameState, PlotPlay } from '../types';
 import type { PlotHandler } from '../plotTypes';
 import { registerPlots } from '../plotTypes';
@@ -495,6 +496,7 @@ registerPlots({
     apply(s, _pl, play, ctx) {
       s.cards[play.target!].tokens--;
       for (const c of play.discards!) discardCard(s, c);
+      noteCostDiscard(s, _pl, [{ kind: 'plot', place: 'hand', cards: play.discards! }]);
       if (ctx) s.cards[play.card].linkedTo = play.target;
     },
     resolve(s, _pl, play) { s.cards[play.card].linkedTo = play.target; },

@@ -388,14 +388,13 @@ describe('Go, Lemmings, Go!', () => {
 });
 
 describe('Grave Robbers', () => {
-  it('offers to search your Group deck for an Artifact right after you take over a Resource', () => {
+  it('stands in for your Resource play: an Illuminati action brings an Artifact from your Group deck', () => {
     let s = scenario();
-    const art = toDeck(s, 'p1', 'angel-s-feather', 'groupDeck');
-    const res = give(s, 'p1', 'weather-satellite', { resource: true });
+    const art = toDeck(s, 'p1', 'hitler-s-brain', 'groupDeck');
     const card = give(s, 'p1', 'grave-robbers', { hand: true });
-    s = fireEvent(s, { type: 'takeover', player: 'p1', card: res });
-    expect(s.window?.kind).toBe('event');
-    s = playAndResolve(s, 'p1', { card });
+    s = playAndResolve(s, 'p1', { card, mode: 'resource' });
+    expect(s.cards[ill(s, 'p1')].tokens).toBe(0);
+    expect(s.turnFlags.resourcePlayed).toBe(true);
     expect(s.prompt?.kind).toBe('choose');
     s = act(s, 'p1', { type: 'choose', ids: [art] });
     expect(s.cards[art].zone).toBe('resources');
@@ -403,12 +402,15 @@ describe('Grave Robbers', () => {
     checkInvariants(s);
   });
 
-  it('cannot be played right after taking over a Group, or with no Artifact in the deck', () => {
-    let s = scenario();
-    const g = give(s, 'p1', 'punk-rockers', { under: ill(s, 'p1'), side: 'BOTTOM' });
+  it('cannot be played once the Resource play is used, or with no Artifact in the deck', () => {
+    const s = scenario();
     const card = give(s, 'p1', 'grave-robbers', { hand: true });
-    s = fireEvent(s, { type: 'takeover', player: 'p1', card: g });
-    expect(() => play(s, 'p1', { card })).toThrow();
+    expect(() => play(s, 'p1', { card, mode: 'resource' })).toThrow(/no Artifact/);
+    toDeck(s, 'p1', 'angel-s-feather', 'groupDeck'); // Magic: needs Magic actions worth 6 Power, and there are none
+    expect(() => play(s, 'p1', { card, mode: 'resource' })).toThrow(/no Artifact/);
+    toDeck(s, 'p1', 'hitler-s-brain', 'groupDeck');
+    s.turnFlags.resourcePlayed = true;
+    expect(() => play(s, 'p1', { card, mode: 'resource' })).toThrow(/already brought a Resource/);
   });
 });
 

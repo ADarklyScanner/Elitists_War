@@ -13,6 +13,8 @@ import { resolveLineup, type BotSpec } from '../ui/lineup';
 
 export interface Seat {
   id: string; name: string; isAI: boolean; aiLevel?: AiLevel; aiStyle?: string; userId?: string; illuminati?: string;
+  /** The person's time zone, minutes east of UTC, as the interface reported it (Australia reads the local clock). */
+  utcOffset?: number;
   /** A mirror's learned knobs: only ever made here, from a stored profile, never taken from a request. */
   aiStyleData?: Record<string, number | boolean | undefined>;
   /** Illuminati this computer would like (a mirror's player's second favourite). */
@@ -89,10 +91,10 @@ function cleanBot(b?: { name: string; level: AiLevel; style: string }): { name: 
   return st && { name: b.name === `${st.names[level]} II` ? b.name : st.names[level], level, style: st.id };
 }
 
-export async function newTable(store: Store, host: { userId: string; name: string; illuminati: string }, opts: {
+export async function newTable(store: Store, host: { userId: string; name: string; illuminati: string; utcOffset?: number }, opts: {
   seats: number; computerSeats?: number; aiLevel?: AiLevel; aiLevels?: AiLevel[]; bots?: { name: string; level: AiLevel; style: string }[]; settings?: Partial<GameSettings>;
 }, notifier?: Notifier): Promise<GameRecord> {
-  const seats: Seat[] = [{ id: 'p1', name: host.name, isAI: false, userId: host.userId, illuminati: host.illuminati }];
+  const seats: Seat[] = [{ id: 'p1', name: host.name, isAI: false, userId: host.userId, illuminati: host.illuminati, ...(host.utcOffset !== undefined ? { utcOffset: host.utcOffset } : {}) }];
   const firstAi = opts.seats - (opts.computerSeats ?? 0) + 1;
   const levels = Array.from({ length: opts.computerSeats ?? 0 }, (_, k) => opts.aiLevels?.[k] ?? opts.aiLevel ?? 'normal');
   // Named computers, each with its own style; their Illuminati are picked when the game starts.
@@ -116,14 +118,14 @@ export async function newTable(store: Store, host: { userId: string; name: strin
   return rec;
 }
 
-export async function joinTable(store: Store, code: string, who: { userId: string; name: string; illuminati: string }, notifier?: Notifier): Promise<GameRecord> {
+export async function joinTable(store: Store, code: string, who: { userId: string; name: string; illuminati: string; utcOffset?: number }, notifier?: Notifier): Promise<GameRecord> {
   const rec = await store.getByInvite(code.toUpperCase());
   if (!rec) throw new RuleError('No game with that invite code.');
   if (rec.seats.some((s) => s.userId === who.userId)) return rec;
   const seat = rec.seats.find((s) => !s.isAI && !s.userId);
   if (!seat) throw new RuleError('That game is full.');
   const before = rec.updatedAt;
-  Object.assign(seat, { userId: who.userId, name: who.name, illuminati: who.illuminati });
+  Object.assign(seat, { userId: who.userId, name: who.name, illuminati: who.illuminati, ...(who.utcOffset !== undefined ? { utcOffset: who.utcOffset } : {}) });
   await fillPending(store, rec);
   maybeStart(rec); // the last seat was just filled: the game starts now
   rec.updatedAt = Date.now();
@@ -181,7 +183,7 @@ function maybeStart(rec: GameRecord) {
       }
       // The stand-alone SubGenius game: everybody is a faction of the Church, and the decks are shared.
       if (rec.settings.subgeniusRules) ill = CHURCH;
-      return { id: s.id, name: s.name, isAI: s.isAI, aiLevel: s.aiLevel, aiStyle: s.aiStyle, aiStyleData: s.isAI ? s.aiStyleData : undefined, deck: randomDeck(seed + i, ill, { sets: enabledSets(rec.settings) }) };
+      return { id: s.id, name: s.name, isAI: s.isAI, aiLevel: s.aiLevel, aiStyle: s.aiStyle, aiStyleData: s.isAI ? s.aiStyleData : undefined, utcOffset: s.utcOffset, deck: randomDeck(seed + i, ill, { sets: enabledSets(rec.settings) }) };
 
     }),
   });

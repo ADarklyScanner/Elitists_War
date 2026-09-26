@@ -12,12 +12,17 @@ export interface AlertSettings {
 }
 import { RuleError, goalCount, goalNeeded, waitingFor, cardName, packSelectable, type Action } from '../engine';
 
+/** A reported time zone offset, if it is a sane one (UTC-14 to UTC+14). */
+const offsetOf = (x: unknown) => (typeof x === 'number' && Number.isFinite(x) && Math.abs(x) <= 840 ? Math.round(x) : undefined);
+
 export interface ApiRequest {
   op: 'list' | 'new' | 'join' | 'view' | 'move' | 'orders' | 'tick' | 'alerts' | 'delete' | 'profile';
   gameId?: string;
   code?: string;
   name?: string;
   illuminati?: string;
+  /** The player's time zone, minutes east of UTC (cards that read the local clock: Australia). */
+  utcOffset?: number;
   seats?: number;
   computerSeats?: number;
   quick?: boolean;
@@ -82,7 +87,7 @@ store: Store, userId: string, req: ApiRequest, notifier?: Notifier, alertSetting
     case 'new': {
       const seats = Math.min(8, Math.max(2, req.seats ?? 2));
       const lv = (x?: string): AiLevel => (x === 'easy' || x === 'hard' ? x : 'normal');
-      const rec = await newTable(store, { userId, name, illuminati: req.illuminati ?? 'bavarian-illuminati' }, {
+      const rec = await newTable(store, { userId, name, illuminati: req.illuminati ?? 'bavarian-illuminati', utcOffset: offsetOf(req.utcOffset) }, {
         seats, computerSeats: Math.min(seats - 1, req.computerSeats ?? 0),
         settings: { houseRules: req.quick ? ['quickGame'] : [], ...(agreedGoal(req.basicGoal) ? { basicGoal: agreedGoal(req.basicGoal) } : {}), ...packSettings(req) },
         aiLevel: lv(req.level), aiLevels: req.bots ? req.bots.map((b) => lv(b.level)) : req.levels?.map(lv), bots: req.bots,
@@ -90,7 +95,7 @@ store: Store, userId: string, req: ApiRequest, notifier?: Notifier, alertSetting
       return reply(rec, userId);
     }
     case 'join':
-      return reply(await joinTable(store, req.code ?? '', { userId, name, illuminati: req.illuminati ?? 'the-network' }, notifier), userId);
+      return reply(await joinTable(store, req.code ?? '', { userId, name, illuminati: req.illuminati ?? 'the-network', utcOffset: offsetOf(req.utcOffset) }, notifier), userId);
     case 'view': {
       const rec = await store.get(req.gameId ?? '');
       if (!rec || !rec.seats.some((s) => s.userId === userId)) throw new RuleError('Game not found.');

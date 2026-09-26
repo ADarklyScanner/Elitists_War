@@ -13,7 +13,9 @@ function activeMods(s: GameState, iid: string, opts: ValueOpts): Modifier[] {
 
 export function alignments(s: GameState, iid: string, opts: { goals?: boolean } = {}): Alignment[] {
   const d = def(s, iid);
-  let al = [...(d.alignments ?? [])] as Alignment[];
+  // A card may define its own starting alignments in place of the printed ones (Dittoheads).
+  const base = HOOKS[d.id]?.baseAlignments;
+  let al = [...(base ? base(s, iid) : d.alignments ?? [])] as Alignment[];
   for (const m of s.cards[iid].mods) {
     if (m.kind === 'addAlign' && m.align) {
       const opp = OPPOSITE[m.align];
@@ -22,10 +24,14 @@ export function alignments(s: GameState, iid: string, opts: { goals?: boolean } 
     }
     if (m.kind === 'removeAlign' && m.align) al = al.filter((a) => a !== m.align);
   }
-  // Cards in play that change alignments (e.g. an NWO making Corporate count as Government).
-  for (const self of activeHookCards(s)) {
-    const h = HOOKS[s.cards[self].cardId];
-    if (h.alignmentMod) al = h.alignmentMod(s, self, iid, al, !!opts.goals);
+  // Cards in play that change alignments (e.g. an NWO making Corporate count as Government). A card
+  // whose change takes precedence over every other card's (`lastWord`) goes last.
+  const active = activeHookCards(s);
+  for (const last of [false, true]) {
+    for (const self of active) {
+      const h = HOOKS[s.cards[self].cardId];
+      if (h.alignmentMod && !!h.lastWord === last) al = h.alignmentMod(s, self, iid, al, !!opts.goals);
+    }
   }
   return al;
 }
@@ -39,9 +45,12 @@ export function attributes(s: GameState, iid: string): string[] {
     if (m.kind === 'removeAttr' && m.attr) attrs = attrs.filter((a) => a !== m.attr);
   }
   for (const nwo of activeNwos(s)) NWO_EFFECTS[s.cards[nwo].cardId]?.attributes?.(s, iid, attrs);
-  for (const self of activeHookCards(s)) {
-    const h = HOOKS[s.cards[self].cardId];
-    if (h.attributeMod) attrs = h.attributeMod(s, self, iid, attrs);
+  const active = activeHookCards(s);
+  for (const last of [false, true]) {
+    for (const self of active) {
+      const h = HOOKS[s.cards[self].cardId];
+      if (h.attributeMod && !!h.lastWord === last) attrs = h.attributeMod(s, self, iid, attrs);
+    }
   }
   return attrs;
 }
@@ -114,6 +123,10 @@ export function resistance(s: GameState, iid: string, opts: ValueOpts = { defens
     }
   }
   adds.push(sumHooks(s, (h, self) => h.resistanceMod?.(s, self, iid)));
+  for (const self of activeHookCards(s)) {
+    const m = HOOKS[s.cards[self].cardId].resistanceMul?.(s, self, iid);
+    if (m && m > 1) muls.push(m);
+  }
   const v = combine(d.resistance ?? 0, activeMods(s, iid, opts), { set: 'setResistance', mul: 'mulResistance', add: 'resistance' }, { muls, adds }, opts);
   return Math.max(0, v);
 }

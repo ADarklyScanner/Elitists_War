@@ -1,5 +1,6 @@
 // Encoded by the card-content pass. See docs/CARD_SCRIPTING.md.
 // Plot cards that need the event/choice/target engine features (batch 1).
+import { noteCostDiscard } from '../game';
 import type { Alignment, GameEvent, GameState, PlotPlay } from '../types';
 import type { PlotHandler } from '../plotTypes';
 import { registerGoalProgress, registerGoals, registerPlots } from '../plotTypes';
@@ -362,7 +363,7 @@ registerPlots({
       if (d.length !== 1 || d[0] === play.card || !player(s, pl).hand.includes(d[0]) || def(s, d[0]).type !== 'Plot') return 'Discard exactly one other Plot card from your hand.';
       return null;
     },
-    apply(s, _pl, play) { discardCard(s, play.targets![0]); },
+    apply(s, pl, play) { discardCard(s, play.targets![0]); noteCostDiscard(s, pl, [{ kind: 'plot', place: 'hand', cards: [play.targets![0]] }]); },
     resolve(s, pl, play) {
       const t = play.target!;
       const holder = s.players.find((p) => p.hand.includes(t));

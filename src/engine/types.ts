@@ -143,6 +143,16 @@ export interface PlayerState {
   resigned?: boolean;
   /** General-purpose once-per-game markers for a card whose text needs one (Oil Spill's Green-Group bonus). */
   flags?: Record<string, boolean>;
+  /**
+   * Go Fish (Assassins errata): this player received a Plot card from a rival, or was forced to show a
+   * rival a hidden Plot, and is immune to Go Fish while `turnsTaken` is no more than this.
+   */
+  goFishShield?: number;
+  /**
+   * The player's local time zone, in minutes east of UTC, when the interface reported it: cards that
+   * read the player's clock use it (Australia). Without it the clock of the device running the game is used.
+   */
+  utcOffset?: number;
 }
 
 export type AttackType = 'control' | 'destroy';
@@ -228,6 +238,13 @@ export interface AttackCtx {
    * it (the Drug Companies): set once the attack starts, read when it resolves.
    */
   stripAlignment?: Alignment;
+  /**
+   * Society of Assassins: a player chose to treat the attacking and the defending Group's Fanatic
+   * alignments as the same one (instead of opposite) for this attack.
+   */
+  fanaticSame?: boolean;
+  /** Society of Assassins: the defender treats the target's Fanatic alignment as its master's (they share it). */
+  fanaticMasterSame?: boolean;
 }
 
 /** An open response window: everyone may act; closes when all players have passed in a row. */
@@ -288,6 +305,7 @@ export interface GameEvent {
   type: 'turnStart' | 'drawn' | 'takeover' | 'destroyed' | 'devastated' | 'discarded' | 'plotResolved' | 'relief'
     | 'failedTakeover' // a Group played from hand failed to be taken over (Opportunity Knocks)
     | 'costDiscard'    // cards were discarded from a hand or deck to pay a Plot's cost (Go, Lemmings, Go!)
+    | 'tokenPlacement' // the active player's Action tokens are about to be placed (Strange Bedfellows)
     | 'action';       // an action outside an attack was announced and waits for responses before it happens
   player?: string;         // whose turn / who did it
   card?: string;           // card involved
@@ -340,7 +358,7 @@ export interface GoalOption {
 /** A declared victory, waiting while the other players try to stop it (R016). */
 export interface VictoryClaim {
   player: string;
-  goals: string[];         // GoalOption ids declared (a Goal card is shown: exposed)
+  goals: string[];         // GoalOption ids declared (a Goal card is shown: exposed; 'copy:<card id>' is a Goal copied by Copy Shops)
   labels: string[];        // what was said when declaring, for everyone to read
 }
 

@@ -6,6 +6,7 @@ import type { PlotHandler } from '../plotTypes';
 import { registerPlots } from '../plotTypes';
 import { registerHooks, registerChoice } from '../hooks';
 import { registerZap, paralysisPlot, freezePlot } from './families';
+import { plusTen } from './plots';
 import { cardName, def } from '../cards';
 import { alignments, attributes } from '../stats';
 import { nwoColor } from '../nwo';
@@ -222,8 +223,9 @@ registerPlots({
 });
 registerHooks({
   'alien-abduction': {
-    // Until the end of the turn: the linked Personality has no alignments and cannot gain any, since
-    // this override runs after every other alignment-changing mod or hook and always wins.
+    // Until the end of the turn: the linked Personality has no alignments and cannot gain any "for any
+    // reason": `lastWord` makes this override run after every other alignment-changing card.
+    lastWord: true,
     alignmentMod: (s, self, iid, current) => (iid === s.cards[self].linkedTo ? [] : current),
     onTurnStart: (s, self) => { if (s.cards[self].data?.turn !== s.turn) discardCard(s, self); },
   },
@@ -242,8 +244,9 @@ registerPlots({
       if (!ctx || ctx.instant) return 'Play this when a Place is attacked, not by an Instant attack.';
       if (!isPlace(s, ctx.target)) return 'Only an attack on a Place can play this card.';
       if (pl !== ctx.attackerPlayer && pl !== ctx.targetPlayer) return 'Only the attacker or the defender may play this.';
-      // RULING: "only one such card may be played during any attack" is read as one live copy at a
-      // time; a defender's copy bumps an attacker's copy back to hand, but not the other way round.
+      // "Only one such card may be played during any attack; if a defender plays this card, an attacker
+      // must take his back": one live copy per attack. The defender's copy bumps the attacker's back to
+      // hand; the attacker may not play one over the defender's.
       if (pl === ctx.attackerPlayer && liveCopyBy(s, ctx, ctx.targetPlayer!)) return 'The defender has already played Back to the Salt Mines in this attack.';
       return null;
     },
@@ -431,30 +434,10 @@ registerPlots({
 
 // ---------------------------------------------------------------- Crusade
 
+// Crusade is worded exactly like the base game's +10 Plots (and their official rewording): +10 Power or
+// Resistance to one of your Church Groups; with an action it is played as that action is declared (the
+// Group's own attack, or its aid) and counts only for it; for defense it lasts until the end of the turn,
+// for defense only, not toward Goals. So it uses the same family (plots.ts plusTen).
 registerPlots({
-  'crusade': {
-    timing: ['declare', 'anytime'],
-    needs: { target: 'ownGroup', mode: ['action-power', 'action-resistance', 'turn-power', 'turn-resistance'] },
-    check(s, pl, play, ctx) {
-      if (!own(s, pl, play.target) || !isGroup(s, play.target!) || !hasAttr(s, play.target!, 'Church')) return 'Choose a Church Group you control.';
-      const mode = play.mode ?? '';
-      if (!['action-power', 'action-resistance', 'turn-power', 'turn-resistance'].includes(mode)) return 'Choose Power or Resistance, for one action or for the turn.';
-      if (mode.startsWith('action')) {
-        // RULING: "played with an action" is read as the Group's own attack, like similar +10 Plots
-        // (Swiss Bank Account); it does not extend to aiding or opposing another attack.
-        if (!ctx || ctx.attacker !== play.target || ctx.attackerPlayer !== pl || ctx.plays.length) return 'Play this when your Group\'s own attack is first declared.';
-      } else if (ctx) return 'Play the turn-long defense bonus outside an attack.';
-      return null;
-    },
-    apply(s, pl, play, ctx) {
-      if (play.mode!.startsWith('action')) ctx!.attackBonus.push({ player: pl, plot: play.card, forGroup: play.target, amount: 10, label: 'Crusade' });
-    },
-    resolve(s, pl, play) {
-      if (play.mode!.startsWith('turn')) {
-        const kind = play.mode!.endsWith('power') ? 'power' : 'resistance';
-        s.cards[play.target!].mods.push({ source: play.card, kind, value: 10, defenseOnly: true, until: 'endOfTurn', countsForGoals: false });
-        log(s, `Crusade gives ${cardName(s, play.target!)} +10 ${kind === 'power' ? 'Power' : 'Resistance'} on defense until the end of the turn.`, pl);
-      }
-    },
-  },
+  'crusade': plusTen({ attributes: ['Church'] }),
 });

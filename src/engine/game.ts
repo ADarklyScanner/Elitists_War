@@ -12,7 +12,7 @@ import {
 } from './geometry';
 import { abilitiesOf, attackingGroups, matches } from './abilities';
 import { alignmentPairs, alignments, attributes, globalPower, power, resistance } from './stats';
-import { NWO_EFFECTS, interestingTimesMode } from './nwo';
+import { NWO_EFFECTS, fanaticUnited, interestingTimesMode } from './nwo';
 import { PLOTS, GOALS, GOAL_EXPOSE_BONUS } from './plotTypes';
 import { HOOKS, CHOICES, EVENT_ABILITY_CARDS, isCancelled, linkedPlotLive, paralyzedGroups, abilitiesDisabled, activeHookCards, anyHook, fireHooks, goalCheck, hooksOf, registerChoice, sumHooks, type AbilityParams, type ActivatedAbility, type CardHooks } from './hooks';
 import type { AiLevel, AnnouncedKind, Choice, GameEvent, PlotEffect } from './types';
@@ -23,7 +23,9 @@ import { costProblem, payCost } from './costs';
 // ---------------------------------------------------------------- setup
 
 export interface DeckList { illuminati: string; plots: string[]; groups: string[] }
-export interface NewPlayer { id: string; name: string; isAI: boolean; aiLevel?: AiLevel; aiStyle?: string; aiStyleData?: PlayerState['aiStyleData']; deck: DeckList }
+export interface NewPlayer { id: string; name: string; isAI: boolean; aiLevel?: AiLevel; aiStyle?: string; aiStyleData?: PlayerState['aiStyleData']; deck: DeckList;
+  /** The player's time zone (minutes east of UTC), for cards that read the local clock (Australia). */
+  utcOffset?: number }
 
 export const DEFAULT_SETTINGS: GameSettings = { basicGoal: 12, responseHours: 24, houseRules: [] };
 
@@ -71,7 +73,7 @@ export function createGame(opts: { id?: string; seed?: number; players: NewPlaye
     Object.assign(s.cards[ill], { controller: p.id, x: 0, y: 0, rot: 0 });
     s.layout = LAYOUT_VERSION;
     const player: PlayerState = {
-      id: p.id, name: p.name, isAI: p.isAI, ...(p.isAI && p.aiLevel ? { aiLevel: p.aiLevel } : {}), ...(p.isAI && p.aiStyle ? { aiStyle: p.aiStyle } : {}), ...(p.isAI && p.aiStyleData ? { aiStyleData: { ...p.aiStyleData } } : {}), illuminati: ill,
+      id: p.id, name: p.name, isAI: p.isAI, ...(p.isAI && p.aiLevel ? { aiLevel: p.aiLevel } : {}), ...(p.isAI && p.aiStyle ? { aiStyle: p.aiStyle } : {}), ...(p.isAI && p.aiStyleData ? { aiStyleData: { ...p.aiStyleData } } : {}), ...(p.utcOffset !== undefined ? { utcOffset: p.utcOffset } : {}), illuminati: ill,
       plotDeck: shuffle(s, p.deck.plots.map((c) => mk(c, 'plotDeck'))),
       groupDeck: p.deck.groups.map((c) => mk(c, 'groupDeck')),
       hand: [], discard: [], destroyedCredit: [], turnsTaken: 0, eliminated: false, autoPass: false,
@@ -127,7 +129,7 @@ function createSubGeniusGame(opts: Parameters<typeof createGame>[0]): GameState 
     const ill = mk(p.deck.illuminati || CHURCH, 'structure', p.id);
     Object.assign(s.cards[ill], { controller: p.id, x: 0, y: 0, rot: 0 });
     s.players.push({
-      id: p.id, name: p.name, isAI: p.isAI, ...(p.isAI && p.aiLevel ? { aiLevel: p.aiLevel } : {}), ...(p.isAI && p.aiStyle ? { aiStyle: p.aiStyle } : {}), ...(p.isAI && p.aiStyleData ? { aiStyleData: { ...p.aiStyleData } } : {}), illuminati: ill,
+      id: p.id, name: p.name, isAI: p.isAI, ...(p.isAI && p.aiLevel ? { aiLevel: p.aiLevel } : {}), ...(p.isAI && p.aiStyle ? { aiStyle: p.aiStyle } : {}), ...(p.isAI && p.aiStyleData ? { aiStyleData: { ...p.aiStyleData } } : {}), ...(p.utcOffset !== undefined ? { utcOffset: p.utcOffset } : {}), illuminati: ill,
       plotDeck: [], groupDeck: [], hand: [], discard: [], destroyedCredit: [], turnsTaken: 0, eliminated: false, autoPass: false,
     });
   }
@@ -246,6 +248,21 @@ export function log(s: GameState, text: string, player?: string) {
   text = text.replace(/\bYou's\b/g, 'your').replace(/^your\b/, 'Your');
   s.log.push({ turn: s.turn, player, text });
 }
+/**
+ * The real-world clock, for the rare card whose rules read it (Australia). Tests replace `now` to fix the
+ * time. The engine reads it only in a `beforeAction` hook, which records the result in the state.
+ */
+export const localClock = { now: (): Date => new Date() };
+
+/** The day of the week (0 = Sunday) and hour (0-23) in a player's local time. */
+export function localTime(s: GameState, playerId: string): { day: number; hour: number } {
+  const now = localClock.now();
+  const off = s.players.find((p) => p.id === playerId)?.utcOffset;
+  if (off === undefined) return { day: now.getDay(), hour: now.getHours() };
+  const t = new Date(now.getTime() + off * 60_000);
+  return { day: t.getUTCDay(), hour: t.getUTCHours() };
+}
+
 export const player = (s: GameState, id: string) => {
   const p = s.players.find((x) => x.id === id);
   if (!p) throw new RuleError(`No player ${id}`);
@@ -365,6 +382,7 @@ function runContinuation(s: GameState, then: string, e?: GameEvent) {
   if (then === 'draws') turnDraws(s);
   else if (then === 'takeoverPrompt') takeoverStep(s);
   else if (then === 'finishBeginning') finishBeginning(s);
+  else if (then === 'placeTokens') placeTokens(s);
   else if (then === 'resolveAction' && e) resolveAction(s, e);
 }
 
@@ -490,9 +508,17 @@ function catacombsSides(s: GameState, master: string, ignore: Set<string>): Side
   return SIDES.filter((side) => !occupied(s, c.controller!, attachRect(s, master, side), new Set([...ignore, master])));
 }
 
+/** Why `master` may not take `iid` as a puppet, by `iid`'s own card (Dittoheads), or null. */
+export function masterProblem(s: GameState, iid: string, master: string): string | null {
+  return HOOKS[s.cards[iid]?.cardId]?.masterRule?.(s, iid, master) ?? null;
+}
+
 /** Sides open to moving `group` onto `master`: real arrows, or any side under Dallas Catacombs. */
 export function movableSides(s: GameState, playerId: string, group: string, master: string): Side[] {
+  if (masterProblem(s, group, master)) return [];
   const ignore = new Set(subtree(s, group));
+  const h = HOOKS[s.cards[group].cardId];
+  if (h?.anySideMaster && h.anySideOnMove) return openSides(s, master, ignore);
   const free = anyHook(s, (h, self) => controllerOf2(s, self) === playerId && !!h.freeArrows?.(s, self, master));
   return free ? catacombsSides(s, master, ignore) : openArrows(s, master, ignore);
 }
@@ -600,9 +626,11 @@ export function askChoice(s: GameState, playerId: string, choice: Choice) {
 }
 
 /** Let one player see cards privately (e.g. a rival's hidden Plots). Others only learn that he looked. */
-export function revealTo(s: GameState, playerId: string, cards: string[], why: string) {
+export function revealTo(s: GameState, playerId: string, cards: string[], why: string, forced = true) {
   const p = player(s, playerId);
   p.known = [...new Set([...(p.known ?? []), ...cards])];
+  // Go Fish (Assassins errata): a player forced to show a rival hidden Plots is immune to it for a while.
+  if (forced) for (const owner of hiddenPlotOwners(s, cards)) if (owner !== playerId) shieldFromGoFish(s, owner);
   s.log.push({ turn: s.turn, player: playerId, to: playerId, text: `${why}: ${cards.map((c) => cardName(s, c)).join(', ') || 'nothing'}.` });
 }
 
@@ -618,10 +646,51 @@ export function canExpose(s: GameState, iid: string): boolean {
  * Expose cards in a hand. Cards that cannot be exposed stay hidden. Returns the cards that are now
  * exposed, so log lines only ever name those.
  */
-export function exposeCards(s: GameState, cards: string[]): string[] {
+export function exposeCards(s: GameState, cards: string[], opts: { voluntary?: boolean } = {}): string[] {
   const shown = cards.filter((c) => s.cards[c] && canExpose(s, c));
+  // Go Fish (Assassins errata): being forced to show hidden Plots makes their owner immune to it for a while.
+  const owners = opts.voluntary ? [] : hiddenPlotOwners(s, shown);
   for (const c of shown) s.cards[c].exposed = true;
+  for (const o of owners) shieldFromGoFish(s, o);
   return shown;
+}
+
+/** Players owning the still-hidden Plots among `cards` that lie in their hand or Plot deck. */
+function hiddenPlotOwners(s: GameState, cards: string[]): string[] {
+  const out = new Set<string>();
+  for (const c of cards) {
+    const card = s.cards[c];
+    if (!card || card.exposed || !['Plot', 'Illuminati'].includes(def(s, c).type)) continue;
+    const holder = s.players.find((p) => p.hand.includes(c) || p.plotDeck.includes(c));
+    if (holder) out.add(holder.id);
+  }
+  return [...out];
+}
+
+/**
+ * Go Fish (Assassins errata): anyone who has received a Plot card from a rival, or been forced to show a
+ * rival a hidden Plot in his hand or deck, is immune to Go Fish until the end of his next turn.
+ */
+export function shieldFromGoFish(s: GameState, playerId: string) {
+  const p = s.players.find((x) => x.id === playerId);
+  if (!p) return;
+  // His next turn: the one under way if it is his own, otherwise the coming one (turnsTaken counts finished turns).
+  const through = p.turnsTaken + (activePlayer(s)?.id === p.id && s.phase !== 'setup' ? 1 : 0);
+  p.goFishShield = Math.max(p.goFishShield ?? -1, through);
+}
+export const goFishShielded = (s: GameState, playerId: string) => {
+  const p = s.players.find((x) => x.id === playerId);
+  return !!p && p.goFishShield !== undefined && p.turnsTaken <= p.goFishShield;
+};
+
+/**
+ * Cards were discarded from a hand or a deck to pay for a Plot or a Group's special ability: announce
+ * it (Go, Lemmings, Go! answers it). `parts` says how many cards of each kind came from where.
+ */
+export function noteCostDiscard(s: GameState, payer: string, parts: { kind: 'plot' | 'group'; place: 'hand' | 'deck'; cards: string[] }[]) {
+  const live = parts.filter((x) => x.cards.length);
+  if (!live.length) return;
+  raiseEvent(s, { type: 'costDiscard', player: payer, cards: live.flatMap((x) => x.cards), data: { parts: live.map((x) => ({ ...x, cards: [...x.cards] })) } });
 }
 
 /** A player's hidden hand cards of one kind that could be exposed (or looked at) by another card. */
@@ -679,6 +748,8 @@ function forbiddenUse(s: GameState, playerId: string, card: string, target: stri
 export function discardCard(s: GameState, iid: string) {
   const c = s.cards[iid];
   if (resourceProtected(s, iid)) { log(s, `${cardName(s, iid)} is protected and stays in play.`); return; }
+  // A copy made by Copy Shops (Assassins) is lost the moment it is used up or nullified: nobody may keep it.
+  if (c.data?.copyOf) { vanishCopy(s, iid); return; }
   const wasPlot = def(s, iid).type === 'Plot' && (c.zone === 'hand' || c.zone === 'table');
   // Groups and Resources discarded from hand or from play are announced too (And STAY Dead!, Cover of Darkness).
   const wasCard = def(s, iid).type !== 'Plot' && def(s, iid).type !== 'Illuminati' && (c.zone === 'hand' || c.zone === 'structure' || c.zone === 'resources');
@@ -692,6 +763,12 @@ export function discardCard(s: GameState, iid: string) {
   if (s.common) (def(s, iid).type === 'Plot' ? s.common.plotDiscard : s.common.groupDiscard).push(iid);
   else player(s, c.owner).discard.push(iid);
   if ((wasPlot || wasCard) && s.turn > 0) raiseEvent(s, { type: 'discarded', card: iid, player: c.owner, by, data: { from } });
+}
+
+/** A Copy Shops copy leaves the game: it never reaches a discard pile, so nobody can scavenge it. */
+function vanishCopy(s: GameState, iid: string) {
+  removeFromPiles(s, iid);
+  Object.assign(s.cards[iid], { zone: 'removed', setAside: true, controller: undefined, master: undefined, linkedTo: undefined, tokens: 0, exposed: false });
 }
 
 /** Discard a hand card, or (Plots only) return it to its owner's Plot deck at a chosen position. */
@@ -842,7 +919,8 @@ function afterDraws(s: GameState, drawn: string[]) {
 function takeoverStep(s: GameState) {
   const p = activePlayer(s);
   // A seized turn (Seize the Time) keeps the automatic takeover: that card only forbids draws (and, by errata, Plots).
-  if (!s.turnFlags.noTakeover && !s.turnFlags.restricted && takeoverOptions(s, p.id).length) {
+  // A card may already have used the automatic takeover up (Grave Robbers).
+  if (!s.turnFlags.noTakeover && !s.turnFlags.restricted && !s.turnFlags.takeoverDone && takeoverOptions(s, p.id).length) {
     // A card's question asked during the draws (Crystal Skull) is answered first.
     const pr: Prompt = { player: p.id, kind: 'takeover' };
     if (s.prompt) (s.promptQueue ??= []).push(pr); else s.prompt = pr;
@@ -855,6 +933,14 @@ function finishBeginning(s: GameState) {
   const p = activePlayer(s);
   // Close the takeover prompt, but keep any card's question still waiting for an answer.
   if (!s.prompt || s.prompt.kind === 'takeover') s.prompt = s.promptQueue?.shift();
+  // Cards played during the placing of Action tokens answer this event (Strange Bedfellows); when nobody
+  // holds one, the tokens are placed at once.
+  raiseEvent(s, { type: 'tokenPlacement', player: p.id }, 'placeTokens');
+}
+
+/** R001 step 4: the active player's cards get their Action tokens, then the main phase begins. */
+function placeTokens(s: GameState) {
+  const p = activePlayer(s);
   for (const iid of structureCards(s, p.id)) {
     const d = def(s, iid);
     if (d.type === 'Illuminati') {
@@ -882,6 +968,8 @@ function finishBeginning(s: GameState) {
   const twoPlayerRule = (s.players.length === 2 || !!s.common) && s.turnFlags.takeoverDone && !s.turnFlags.extraTurn;
   s.log.push({ turn: s.turn, player: p.id, info: true, text: `${p.name}'s Groups get their Action tokens${twoPlayerRule ? ' (two-player rule: no Illuminati token this turn after an automatic takeover)' : ''}. Main phase.` });
   s.phase = 'main';
+  // Effects that lasted only while the tokens were placed end now (Strange Bedfellows).
+  fireHooks(s, (h, self) => h.onTokensPlaced?.(s, self));
 }
 
 export function takeoverOptions(s: GameState, playerId: string): { card: string; onto: string; side: Side }[] {
@@ -894,6 +982,7 @@ export function takeoverOptions(s: GameState, playerId: string): { card: string;
   const candidates = s.common ? s.common.uncontrolled.filter((c) => s.cards[c].placedBy === playerId && s.cards[c].placedTurn === s.turn) : p.hand;
   for (const card of candidates) {
     if (s.cards[card].data?.noTakeoverTurn === s.turn) continue; // returned by Botched Contact
+    if (s.cards[card].data?.permissionRefusedTurn === s.turn) continue; // its takeover was refused (Science Alarmists)
     if (anyHook(s, (h, self) => !!h.forbidAttack?.(s, self, undefined, card, 'takeover', playerId))) continue;
     if (def(s, card).type === 'Resource' && canEnterPlay(s, card, playerId)) out.push({ card, onto: p.illuminati, side: 'TOP' });
     if (def(s, card).type !== 'Group' || !canEnterPlay(s, card)) continue;
@@ -901,7 +990,7 @@ export function takeoverOptions(s: GameState, playerId: string): { card: string;
     const useSpots = HOOKS[s.cards[card].cardId]?.anySideMaster
       ? structureCards(s, playerId).filter((m) => !para.has(m)).flatMap((m) => openSides(s, m).map((side) => ({ onto: m, side })))
       : spots;
-    for (const spot of useSpots) out.push({ card, ...spot });
+    for (const spot of useSpots) if (!masterProblem(s, card, spot.onto)) out.push({ card, ...spot });
   }
   return out;
 }
@@ -1164,6 +1253,11 @@ export const isOver = (s: GameState) => s.phase === 'gameOver';
  * rule. No Group counts more than double and at most 3 Groups count double (R016).
  */
 export function goalCount(s: GameState, playerId: string, extraDouble?: (iid: string) => boolean): number {
+  return goalTally(s, playerId, extraDouble).count;
+}
+
+/** goalCount, and how many of the counted Groups counted double (at most 3, R016). */
+export function goalTally(s: GameState, playerId: string, extraDouble?: (iid: string) => boolean): { count: number; doubled: number } {
   const ill = illuminatiOf(s, playerId);
   const doubles = abilitiesOf(s, ill).filter((a) => a.kind === 'doubleCount') as { kind: 'doubleCount'; match: never; minPower?: number; unlessRivalStronger?: boolean }[];
   // A rival control a matching Group with more Power than this one (Society of Assassins: Secret Groups).
@@ -1179,7 +1273,7 @@ export function goalCount(s: GameState, playerId: string, extraDouble?: (iid: st
     if (doubled < 3 && twice) { count++; doubled++; }
   }
   count += sumHooks(s, (h, self) => (controllerOf2(s, self) === playerId ? h.goalBonus?.(s, self) : 0));
-  return count;
+  return { count, doubled };
 }
 
 function tokenBarredForGoals(s: GameState, iid: string) {
@@ -1237,10 +1331,55 @@ export function goalOptions(s: GameState, playerId: string): GoalOption[] {
       const why = GOALS[s.cards[g].cardId]?.(s, playerId) ?? null;
       out.push({ id: g, card: g, label: `Goal card: ${cardName(s, g)}`, met: !!why, why: why ? `${cardName(s, g)}: ${why}` : undefined });
     }
+    // Goals copied by Copy Shops (Assassins) for a victory claim still being decided.
+    out.push(...copiedGoalOptions(s, playerId, s.claims?.find((c) => c.player === playerId)?.goals ?? []));
     const special = specialGoal(s, playerId);
     if (special) out.push(special);
     return out;
   } finally { goalCheck.active = was; }
+}
+
+/** The Goals copied by Copy Shops among these claimed Goal ids ('copy:<card id>'), as GoalOptions. */
+function copiedGoalOptions(s: GameState, playerId: string, goals: string[]): GoalOption[] {
+  const out: GoalOption[] = [];
+  for (const g of goals) {
+    if (!g.startsWith('copy:')) continue;
+    const id = g.slice(5);
+    const was = goalCheck.active;
+    goalCheck.active = true;
+    let why: string | null;
+    try { why = GOALS[id]?.(s, playerId) ?? null; } finally { goalCheck.active = was; }
+    out.push({ id: g, label: `Goal card copied by Copy Shops: ${CARDS[id]?.name ?? id}`, met: !!why, why: why ? `${CARDS[id]?.name ?? id} (a copy): ${why}` : undefined });
+  }
+  return out;
+}
+
+/**
+ * Copy Shops (Assassins): a copied Goal counts only if its player can win with it at once. It is
+ * declared like a Goal card (R016: at the moment victory may be declared, rivals may then try to stop
+ * it), but the copy itself is never in anyone's hand. Returns why it cannot be declared, or null.
+ */
+export function copiedGoalProblem(s: GameState, playerId: string, goalCardId: string): string | null {
+  const why = declareBlocked(s, playerId);
+  if (why) return `A copied Goal must win at once, and ${why.charAt(0).toLowerCase()}${why.slice(1)}`;
+  if (interestingTimesMode(s) === 'basic') return 'Only the Basic Goal can win while Interesting Times is in effect.';
+  if (!GOALS[goalCardId]) return `${CARDS[goalCardId]?.name ?? goalCardId} is not available in this version yet.`;
+  if (!copiedGoalOptions(s, playerId, [`copy:${goalCardId}`])[0]?.met) return `You cannot win with ${CARDS[goalCardId].name} right now, so a copy of it does not count.`;
+  if (s.claims?.find((c) => c.player === playerId)?.goals.includes(`copy:${goalCardId}`)) return 'You have already declared victory with that Goal.';
+  return null;
+}
+export function declareCopiedGoal(s: GameState, playerId: string, goalCardId: string) {
+  const why = copiedGoalProblem(s, playerId, goalCardId);
+  if (why) throw new RuleError(why);
+  const p = player(s, playerId);
+  const id = `copy:${goalCardId}`;
+  const label = `Goal card copied by Copy Shops: ${CARDS[goalCardId].name}`;
+  if (s.phase === 'main') knock(s, p);
+  const claim = s.claims?.find((c) => c.player === p.id);
+  if (claim) { claim.goals.push(id); claim.labels.push(label); }
+  else (s.claims ??= []).push({ player: p.id, goals: [id], labels: [label] });
+  log(s, `${p.name} declares victory with a copy of ${CARDS[goalCardId].name}. Everyone else may now try to stop it.`, p.id);
+  if (s.window) s.window.passed = [p.id];
 }
 
 /**
@@ -1364,7 +1503,7 @@ function declareVictory(s: GameState, p: PlayerState, goal: string) {
   if (!opt.met) throw new RuleError(`You do not meet this Goal right now (${opt.label}), so you cannot declare victory with it.`);
   if (s.phase === 'main') knock(s, p);
   // A Goal card is shown to prove you hold it: it is not played, and it stays exposed if the claim fails.
-  if (opt.card) exposeCards(s, [opt.card]);
+  if (opt.card) exposeCards(s, [opt.card], { voluntary: true });
   if (claim) { claim.goals.push(opt.id); claim.labels.push(opt.label); }
   else (s.claims ??= []).push({ player: p.id, goals: [opt.id], labels: [opt.label] });
   log(s, `${p.name} declares victory: ${opt.label}${opt.card ? ' (shows the card)' : ''}. Everyone else may now try to stop it.`, p.id);
@@ -1383,7 +1522,7 @@ function resolveClaims(s: GameState) {
   s.claims = undefined;
   const ill = (id: string) => s.cards[player(s, id).illuminati].cardId;
   const held = claims.filter((c) => !player(s, c.player).eliminated)
-    .map((c) => ({ c, met: goalOptions(s, c.player).filter((o) => o.met && c.goals.includes(o.id)) }))
+    .map((c) => ({ c, met: [...goalOptions(s, c.player), ...copiedGoalOptions(s, c.player, c.goals)].filter((o) => o.met && c.goals.includes(o.id)) }))
     .filter((x) => x.met.length);
   const clash: string[] = [];
   let winners = held.filter((w) => {
@@ -1429,7 +1568,7 @@ function eliminate(s: GameState, p: PlayerState) {
     // Resources); otherwise his cards go to the shared discard piles.
     const taker = p.eliminatedBy && !player(s, p.eliminatedBy).eliminated ? player(s, p.eliminatedBy) : undefined;
     for (const iid of [...p.hand]) {
-      if (taker && def(s, iid).type === 'Plot') { p.hand = p.hand.filter((x) => x !== iid); taker.hand.push(iid); s.cards[iid].owner = taker.id; }
+      if (taker && def(s, iid).type === 'Plot') { p.hand = p.hand.filter((x) => x !== iid); taker.hand.push(iid); s.cards[iid].owner = taker.id; shieldFromGoFish(s, taker.id); }
       else discardCard(s, iid);
     }
     p.hand = [];
@@ -1552,7 +1691,7 @@ function checkElimination(s: GameState, endOfTurn = false) {
       // the end of the turn, when he wins outright if he is still puppet-less.
       const arise = p.hand.find((iid) => s.cards[iid].cardId === 'arise');
       if (arise && !s.ariseWatch?.includes(p.id)) {
-        exposeCards(s, [arise]);
+        exposeCards(s, [arise], { voluntary: true });
         (s.ariseWatch ??= []).push(p.id);
         log(s, `${p.name} shows Arise! and stays in the game until the end of the turn.`, p.id);
         continue;
@@ -1712,10 +1851,18 @@ function immuneTo(s: GameState, target: string, attackerGroups: string[], ctx?: 
 
 /** Sides of `master` where `target` could be placed as a new puppet (Yetis waives the printed-arrow requirement). */
 function placementSides(s: GameState, master: string, target: string, ignore?: Set<string>): Side[] {
+  if (masterProblem(s, target, master)) return [];
   return HOOKS[s.cards[target].cardId]?.anySideMaster ? openSides(s, master, ignore) : openArrows(s, master, ignore);
 }
 
-export function validateAttack(s: GameState, playerId: string, a: Extract<Action, { type: 'attack' }>, opts: { outOfTurn?: boolean; anyHand?: boolean } = {}): string | null {
+/**
+ * `opts.strip`: the Drug Companies' attack, rolled exactly as an Attack to Control but capturing nothing
+ * (no open arrow needed, any Group in play). `opts.partitionOf`: Partition lets this duplicate of a Huge
+ * Place in play (that card's instance id) be attacked from hand.
+ */
+export interface AttackOpts { outOfTurn?: boolean; anyHand?: boolean; strip?: boolean; partitionOf?: string }
+
+export function validateAttack(s: GameState, playerId: string, a: Extract<Action, { type: 'attack' }>, opts: AttackOpts = {}): string | null {
   if (!opts.outOfTurn) {
     if (s.phase !== 'main' || activePlayer(s).id !== playerId) return 'You can only attack during the main phase of your own turn.';
     if (s.attack || s.window || s.prompt) return 'Finish the current action first.';
@@ -1742,11 +1889,15 @@ export function validateAttack(s: GameState, playerId: string, a: Extract<Action
   } else if (fromHand) {
     if (a.attackType !== 'control' && !opts.anyHand) return 'Groups in your hand can only be attacked to control.';
     if (!opts.anyHand && !player(s, playerId).hand.includes(a.target)) return 'You can only attack Groups from your own hand.';
-    if (!canEnterPlay(s, a.target)) return 'That Group is already in play or was destroyed.';
+    const partitioned = !!opts.partitionOf && s.cards[opts.partitionOf]?.zone === 'structure' && s.cards[opts.partitionOf].cardId === tgt.cardId;
+    if (!partitioned && !canEnterPlay(s, a.target)) return 'That Group is already in play or was destroyed.';
   } else if (tgt.zone !== 'structure') return 'The target must be in play or in your hand.';
-  if (a.attackType === 'control') {
+  if (opts.strip && (fromHand || tgt.zone !== 'structure')) return 'Choose a Group in play.';
+  if (a.attackType === 'control' && !opts.strip) {
     if (!fromHand && tgt.controller === playerId) return 'You already control that Group.';
     const open = placementSides(s, a.attacker, a.target);
+    const rule = masterProblem(s, a.target, a.attacker);
+    if (rule) return rule;
     if (!open.length) return `${cardName(s, a.attacker)} has no open control arrow.`;
     if (a.side && !open.includes(a.side)) return 'That control arrow is not open.';
   }
@@ -1770,7 +1921,7 @@ export function validateAttack(s: GameState, playerId: string, a: Extract<Action
 }
 
 /** Start an attack. Plots such as Opportunity Knocks may start one outside the attacker's turn. */
-export function startAttack(s: GameState, playerId: string, a: Extract<Action, { type: 'attack' }>, opts: { outOfTurn?: boolean; anyHand?: boolean } = {}) {
+export function startAttack(s: GameState, playerId: string, a: Extract<Action, { type: 'attack' }>, opts: AttackOpts & { stripAlignment?: Alignment } = {}) {
   const err = validateAttack(s, playerId, a, opts);
   if (err) throw new RuleError(err);
   const tgt = s.cards[a.target];
@@ -1782,8 +1933,9 @@ export function startAttack(s: GameState, playerId: string, a: Extract<Action, {
   const ctx: AttackCtx = {
     id: ++s.attackCounter, type: a.attackType, instant: false, attacker: a.attacker, attackerPlayer: playerId,
     target: a.target, targetPlayer: fromHand || fromArea ? undefined : tgt.controller, fromHand, ...(fromArea ? { fromArea } : {}),
-    arrow: a.attackType === 'control' ? a.side ?? placementSides(s, a.attacker, a.target)[0] : undefined,
+    arrow: a.attackType === 'control' && !opts.strip ? a.side ?? placementSides(s, a.attacker, a.target)[0] : undefined,
     privileged: !!a.privileged, aid: [], oppose: [], attackBonus: [], defenseBonus: [], plays: [],
+    ...(opts.stripAlignment ? { stripAlignment: opts.stripAlignment } : {}),
   };
   if (a.privileged) s.turnFlags.bavarianPrivilege = true;
   s.attack = ctx;
@@ -1852,6 +2004,8 @@ export function attackIllegal(s: GameState, ctx: AttackCtx): string | null {
     }
     if (isSecret(s, tgt) && !isSecret(s, att) && def(s, att).type !== 'Illuminati' && !anyHook(s, (h, self) => !!h.secretOverride?.(s, self, att, tgt))) return `${cardName(s, tgt)} is now Secret: ${cardName(s, att)} may not attack it.`;
     if (!overridesImmunity && immuneTo(s, tgt, [att])) return `${cardName(s, tgt)} is now immune to ${cardName(s, att)}.`;
+    // The Drug Companies' attack needs the alignment it is trying to remove (Assassins FAQ).
+    if (ctx.stripAlignment && !alignments(s, tgt).includes(ctx.stripAlignment)) return `${cardName(s, tgt)} no longer has the ${ctx.stripAlignment} alignment.`;
     for (const ab of abilitiesOf(s, illuminatiOf(s, ctx.attackerPlayer))) {
       if (ctx.type === 'destroy' && ab.kind === 'canOnlyDestroy' && !matches(s, tgt, ab.match)) return `${cardName(s, tgt)} is no longer a Group your Illuminati may destroy.`;
     }
@@ -1890,7 +2044,7 @@ export function recheckAttack(s: GameState) {
     pp.voided = true;
     card.zone = 'hand'; card.controller = undefined;
     player(s, card.owner).hand.push(pp.iid);
-    exposeCards(s, [pp.iid]);
+    exposeCards(s, [pp.iid], { voluntary: true });
     log(s, `${cardName(s, pp.iid)} is no longer legal (${bad}) and returns to ${player(s, card.owner).name}'s hand, exposed.`, pp.player);
   }
 }
@@ -1990,12 +2144,16 @@ export function attackStrength(s: GameState, ctx: AttackCtx): StrengthBreakdown 
     for (const c of aid) add('a', contributionPower(s, c), `${cardName(s, c.iid!)} aids${(c as { useGlobal?: boolean }).useGlobal ? ' (Global)' : ''}`);
     // Alignment modifier for the leading attacker only.
     const pairs = alignmentPairs(s, att, tgt);
+    // Society of Assassins: a player chose to treat the two Fanatic alignments as the same one.
+    if (ctx.fanaticSame && !fanaticUnited(s) && alignments(s, att).includes('Fanatic') && alignments(s, tgt).includes('Fanatic')) { pairs.same++; pairs.opposite--; }
     let perSame = 4, perOpp = 4;
     for (const n of Object.values(s.nwo)) {
       const v = n ? NWO_EFFECTS[s.cards[n].cardId]?.alignmentValues?.() : undefined;
       if (v) { perSame = v.same; perOpp = v.opposite; }
     }
-    const replaces = abilitiesOf(s, att).some((a) => a.kind === 'attackBonus' && a.replacesAlignmentPenalty && (a.on === 'both' || a.on === ctx.type) && matches(s, tgt, a.target));
+    // A Group taking part in the attack may let it ignore the effects of opposed alignments (Pale People
+    // In Black): whether it leads the attack or aids it.
+    const replaces = [att, ...(noAbilities ? [] : aid.map((c) => c.iid!))].some((g) => abilitiesOf(s, g).some((a) => a.kind === 'attackBonus' && a.replacesAlignmentPenalty && (a.on === 'both' || a.on === ctx.type) && matches(s, tgt, a.target)));
     if (ctx.type === 'control') add('a', pairs.same * perSame - (replaces ? 0 : pairs.opposite * perOpp), 'alignments');
     else add('a', pairs.opposite * perOpp - (replaces ? 0 : pairs.same * perSame), 'alignments');
     // Abilities: "any attempt" bonuses from all your Groups; the leader's "direct" bonuses do not
@@ -2027,7 +2185,10 @@ export function attackStrength(s: GameState, ctx: AttackCtx): StrengthBreakdown 
       add('d', resistance(s, tgt), `${td.name} Resistance`);
       const m = s.cards[tgt].master;
       if (!ctx.fromHand && m && def(s, m).type === 'Group') {
-        const shared = alignments(s, tgt).filter((x) => x !== 'Fanatic' && alignments(s, m).includes(x)).length;
+        let shared = alignments(s, tgt).filter((x) => x !== 'Fanatic' && alignments(s, m).includes(x)).length;
+        // Two Fanatics share their alignment only when a card says they are the same one (Society of
+        // Assassins' choice, Dittoheads under a Fanatic master).
+        if ((ctx.fanaticMasterSame || HOOKS[s.cards[tgt].cardId]?.fanaticSameAsMaster) && alignments(s, tgt).includes('Fanatic') && alignments(s, m).includes('Fanatic')) shared++;
         add('d', shared * 4, `shares alignments with its master`);
       }
     } else {
@@ -2149,14 +2310,16 @@ function finishAttack(s: GameState) {
         if (pp.player === ctx.attackerPlayer && !agents && !(pp.play.target && helpers.has(pp.play.target))) continue;
         card.zone = 'hand'; card.controller = undefined;
         player(s, card.owner).hand.push(pp.iid);
-        if (!agents) exposeCards(s, [pp.iid]);
+        if (!agents) exposeCards(s, [pp.iid], { voluntary: true });
       }
-    } else if (ctx.illegal && ctx.instantCard && s.cards[ctx.instantCard]?.zone === 'table') {
-      // An Instant attack made illegal before it resolved: its Plot returns to its owner's hand, exposed.
+    }
+    if (ctx.illegal && ctx.instantCard && s.cards[ctx.instantCard]?.zone === 'table') {
+      // An attack launched by a card (an Instant attack, or a non-Instant Disaster) made illegal before
+      // it resolved: its Plot returns to its owner's hand, exposed.
       const card = s.cards[ctx.instantCard];
-      card.zone = 'hand'; card.controller = undefined;
+      card.zone = 'hand'; card.controller = undefined; card.linkedTo = undefined;
       player(s, card.owner).hand.push(ctx.instantCard);
-      exposeCards(s, [ctx.instantCard]);
+      exposeCards(s, [ctx.instantCard], { voluntary: true });
     }
     // A cancelled Disaster gives back the token it took from its target (R036).
     if (ctx.disaster && ctx.tokenTaken && s.cards[tgt].zone === 'structure') s.cards[tgt].tokens++;
@@ -2174,7 +2337,9 @@ function finishAttack(s: GameState) {
       } else log(s, `${cardName(s, tgt)} cannot be Devastated and survives.`);
     } else if (ctx.disaster) {
       let destroyed = false;
-      if (ctx.disaster.destroyMargin !== null && margin >= ctx.disaster.destroyMargin && !ctx.disaster.devastateOnly) {
+      // A Place that cannot be destroyed is at most Devastated by a Disaster.
+      const indestructible = abilitiesOf(s, tgt).some((a) => a.kind === 'cannotBeDestroyed') || anyHook(s, (h, self) => !!h.preventDestroy?.(s, self, tgt, ctx));
+      if (ctx.disaster.destroyMargin !== null && margin >= ctx.disaster.destroyMargin && !ctx.disaster.devastateOnly && !indestructible) {
         log(s, `${cardName(s, tgt)} is destroyed!`);
         destroyGroup(s, tgt, ctx.attackerPlayer);
         destroyed = true;
@@ -2325,7 +2490,8 @@ function placeTree(s: GameState, iid: string, controller: string, m: string, sd:
   placeGroup(s, iid, controller, m, sd);
   for (const { child, local } of layout[iid] ?? []) {
     let want: Side | undefined = rotate(local, s.cards[iid].rot ?? 0);
-    const open = openArrows(s, iid);
+    // A puppet that may hang on any side of its master (Yetis, Dittoheads) keeps a side with no arrow.
+    const open = HOOKS[s.cards[child].cardId]?.anySideMaster ? openSides(s, iid) : openArrows(s, iid);
     if (!open.includes(want)) { want = open[0]; if (want) res.displaced.push(child); }
     if (want) placeTree(s, child, controller, iid, want, layout, res, o);
     else if (o.defer) res.pending.push({ group: child, master: iid });
@@ -2427,14 +2593,20 @@ export function destroyGroup(s: GameState, iid: string, by: string, attacker?: s
     }
   }
   fireHooks(s, (h, self) => h.onDestroy?.(s, self, iid, by));
-  raiseEvent(s, { type: 'destroyed', card: iid, by, player: prev, data: { layout, attacker } });
-  // Linked Plots are discarded; linked Resources are destroyed with the Group (R041).
+  // The cards linked to it, for cards that undo the destruction (Near Miss).
+  const links = Object.values(s.cards).filter((o) => o.linkedTo === iid && (o.zone === 'resources' || o.zone === 'table')).map((o) => ({ iid: o.iid, zone: o.zone, controller: o.controller }));
+  raiseEvent(s, { type: 'destroyed', card: iid, by, player: prev, data: { layout, attacker, links } });
+  // Linked Plots are discarded; linked Resources are destroyed with the Group (R041). A Group that
+  // comes back keeping its linked Plots has them set aside for its return (General Disorder).
+  const keeps = !!HOOKS[c.cardId]?.keepsLinkedPlots;
   for (const other of Object.values(s.cards)) {
     if (other.linkedTo !== iid) continue;
     if (other.zone === 'resources') {
       const owner = other.controller;
       Object.assign(other, { zone: 'destroyed', controller: undefined, linkedTo: undefined, tokens: 0 });
       raiseEvent(s, { type: 'destroyed', card: other.iid, by, player: owner });
+    } else if (keeps && other.zone === 'table') {
+      Object.assign(other, { zone: 'removed', setAside: true, linkedTo: undefined, data: { ...other.data, keptFor: iid } });
     } else discardCard(s, other.iid);
   }
   Object.assign(c, { zone: 'destroyed', controller: undefined, master: undefined, x: undefined, y: undefined, tokens: 0, mods: [], devastated: false });
@@ -2625,7 +2797,7 @@ function applyPlot(s: GameState, playerId: string, play: PlotPlay, ctx?: AttackC
   const ill = s.cards[p.illuminati];
   ill.data = { ...ill.data, marchTurn: s.turn };
   const top = p.plotDeck.shift();
-  if (top) { s.cards[top].zone = 'hand'; p.hand.push(top); discardCard(s, top); }
+  if (top) { s.cards[top].zone = 'hand'; p.hand.push(top); discardCard(s, top); noteCostDiscard(s, playerId, [{ kind: 'plot', place: 'deck', cards: [top] }]); }
   discardCard(s, play.march);
   log(s, `March on Washington stands in for one of the actions ${cardName(s, play.card)} needs; the top card of the Plot deck is discarded.`, playerId);
   return value;
@@ -2643,7 +2815,7 @@ export function playPlot(s: GameState, playerId: string, play: PlotPlay, declari
   // The engine pays a declared cost ("Requires ... Action") before the card does anything.
   if (h.requires) payCost(s, play, discardCard);
   // Go, Lemmings, Go! (Assassins): Plot cards discarded from hand to pay a declared cost.
-  if (h.requires && play.discards?.length) raiseEvent(s, { type: 'costDiscard', player: playerId, cards: [...play.discards], data: { kind: 'plot', place: 'hand' } });
+  if (h.requires && play.discards?.length) noteCostDiscard(s, playerId, [{ kind: 'plot', place: 'hand', cards: play.discards }]);
   const pp: PlayedPlot = { iid: play.card, player: playerId, play, effect: { t: 'none' } };
   log(s, `${player(s, playerId).name} plays ${d.name}${play.target && s.cards[play.target] ? ` on ${cardName(s, play.target)}` : ''}.`, playerId);
   const ctx = s.attack;
@@ -2789,6 +2961,10 @@ const NO_ACTIONS_EXCEPT_ALLOWED = new Set<Action['type']>([
 export function applyAction(state: GameState, playerId: string, action: Action): GameState {
   const s: GameState = structuredClone(state);
   ensureLayout(s); // games saved before cards had real shapes
+  // Cards whose rules read the world outside the game record what they read first (Australia's clock).
+  if (Object.values(s.cards).some((c) => (c.zone === 'structure' || c.zone === 'resources') && HOOKS[c.cardId]?.beforeAction)) {
+    fireHooks(s, (h, self) => h.beforeAction?.(s, self));
+  }
   // Offers and answers to offers never wait for priority: anyone may make or answer one at any time.
   // Pledging Relief is a promise, not a play, and leaving the game is always possible.
   if (isDealAction(action) || action.type === 'pledgeRelief' || action.type === 'resign') { if (s.phase === 'gameOver') throw new RuleError('The game is over.'); }
@@ -2890,7 +3066,7 @@ export function applyAction(state: GameState, playerId: string, action: Action):
       if (!canExpose(s, action.card)) throw new RuleError(`${cardName(s, action.card)} is hidden beneath a card and cannot be shown.`);
       const to = s.players.find((x) => x.id === action.to);
       if (!to || to.id === playerId || to.eliminated) throw new RuleError('Choose a rival still in the game.');
-      revealTo(s, to.id, [action.card], `${p.name} shows you a hidden Plot`);
+      revealTo(s, to.id, [action.card], `${p.name} shows you a hidden Plot`, false);
       log(s, `${p.name} shows a hidden Plot to ${to.name}.`, playerId);
       break;
     }
@@ -2905,6 +3081,7 @@ export function applyAction(state: GameState, playerId: string, action: Action):
       if (!p.hand.includes(action.card) || s.cards[action.card].cardId !== s.cards[ctx.target].cardId || action.card === ctx.target) throw new RuleError('You need a duplicate of the Group being attacked.');
       if (ctx.targetPlayer === playerId) throw new RuleError('You cannot use agents against your own Group.');
       if (s.cards[ctx.target].data?.noAgents) throw new RuleError('That Group is immune to agents.');
+      if (HOOKS[s.cards[action.card].cardId]?.neverAgents) throw new RuleError(`${cardName(s, action.card)} may never be used as an agents card.`);
       if (action.as === 'aid' && ctx.fromHand) throw new RuleError('Agents can only oppose an attack on a Group played from hand.');
       if (anyHook(s, (h, self) => controllerOf2(s, self) === ctx.targetPlayer && h.cancelAgents?.(s, self) === true)) throw new RuleError('Agents give no bonus against this Group.');
       removeFromHand(s, action.card);
@@ -2913,6 +3090,7 @@ export function applyAction(state: GameState, playerId: string, action: Action):
       (action.as === 'aid' ? ctx.attackBonus : ctx.defenseBonus).push(entry);
       ctx.plays.push({ iid: action.card, player: playerId, play: { card: action.card }, effect: { t: 'none' } });
       ctx.usedAgents = true;
+      fireHooks(s, (h, self) => h.onAgents?.(s, self, ctx, entry, action.as));
       log(s, `${p.name} reveals agents in ${cardName(s, action.card)} (${action.as === 'aid' ? '+10 to the attack' : '−6 to the attack'}).`, playerId);
       s.window!.passed = [];
       break;
@@ -3258,7 +3436,7 @@ function startPlayResource(s: GameState, playerId: string, card: string, decided
 }
 
 /** The automatic takeover (R001 step 3): a Group onto an open arrow, or a Resource beside the structure. */
-function doTakeover(s: GameState, playerId: string, action: Extract<Action, { type: 'takeover' }>) {
+function doTakeover(s: GameState, playerId: string, action: Extract<Action, { type: 'takeover' }>, opts: { permitted?: boolean } = {}) {
   const p = player(s, playerId);
   if (s.prompt?.kind !== 'takeover' || s.prompt.player !== playerId) throw new RuleError('You cannot make an automatic takeover now.');
   if (!takeoverOptions(s, playerId).some((o) => o.card === action.card && (def(s, action.card).type === 'Resource' || (o.onto === action.onto && o.side === action.side)))) throw new RuleError('That placement is not legal.');
@@ -3273,6 +3451,27 @@ function doTakeover(s: GameState, playerId: string, action: Extract<Action, { ty
       return;
     }
   }
+  // A card may make this takeover need its controller's permission (Science Alarmists).
+  if (!opts.permitted) {
+    const asker = activeHookCards(s).find((self) => {
+      const owner = controllerOf2(s, self);
+      return !!owner && owner !== playerId && !player(s, owner).eliminated && !!HOOKS[s.cards[self].cardId].takeoverPermission?.(s, self, action.card, playerId);
+    });
+    if (asker) {
+      const owner = controllerOf2(s, asker)!;
+      const pr = s.prompt;
+      s.prompt = undefined;
+      log(s, `${p.name} wants to take over ${cardName(s, action.card)} automatically: ${cardName(s, asker)} needs ${player(s, owner).name}'s permission.`, playerId);
+      askChoice(s, owner, {
+        key: 'takeoverPermission', source: asker,
+        question: `${p.name} wants to take over ${cardName(s, action.card)} automatically. Because you control ${cardName(s, asker)}, this needs your permission.`,
+        options: [{ id: 'grant', label: 'Give permission' }, { id: 'refuse', label: 'Refuse' }],
+        min: 1, max: 1, data: { player: playerId, card: action.card, onto: action.onto, side: action.side },
+      });
+      if (pr) (s.promptQueue ??= []).unshift(pr);
+      return;
+    }
+  }
   s.turnFlags.takeoverDone = true;
   if (def(s, action.card).type === 'Resource') playResourceCard(s, action.card, playerId, { decided: true });
   else {
@@ -3284,6 +3483,24 @@ function doTakeover(s: GameState, playerId: string, action: Extract<Action, { ty
   // Rivals may respond to an automatic takeover (Sabotage, Botched Contact) before tokens are placed.
   raiseEvent(s, { type: 'takeover', player: playerId, card: action.card }, 'finishBeginning');
 }
+
+registerChoice('takeoverPermission', {
+  // A computer player does not let a rival take its protected Groups for free.
+  ai: () => ['refuse'],
+  resolve(s, pl, ids, raw) {
+    const d = raw as { player: string; card: string; onto: string; side: Side };
+    const who = player(s, d.player);
+    if (ids[0] === 'grant') {
+      log(s, `${player(s, pl).name} gives permission.`, pl);
+      if (s.prompt?.kind === 'takeover' && s.prompt.player === d.player) doTakeover(s, d.player, { type: 'takeover', card: d.card, onto: d.onto, side: d.side }, { permitted: true });
+      return;
+    }
+    log(s, `${player(s, pl).name} refuses: ${who.name} may not take over ${cardName(s, d.card)} this turn.`, pl);
+    s.cards[d.card].data = { ...s.cards[d.card].data, permissionRefusedTurn: s.turn };
+    // Nothing else to take over: the automatic takeover step ends.
+    if (s.prompt?.kind === 'takeover' && s.prompt.player === d.player && !takeoverOptions(s, d.player).length) finishBeginning(s);
+  },
+});
 
 /** A linked Plot on the table (Backmasquerade) that grants its own activated ability, currently live. */
 const isLinkedAbilityCard = (s: GameState, c: CardInstance) =>
@@ -3515,6 +3732,19 @@ export function syncConditions(s: GameState) {
       discardCard(s, c.iid);
     }
   }
+  // Cards that make others lose the tokens they hold (Antitrust Legislation) do so at once.
+  const losers = activeHookCards(s).filter((self) => HOOKS[s.cards[self].cardId].losesTokens);
+  if (losers.length) {
+    for (const c of Object.values(s.cards)) {
+      if ((c.zone !== 'structure' && c.zone !== 'resources') || (!c.tokens && !c.heldTokens)) continue;
+      if (losers.some((self) => HOOKS[s.cards[self].cardId].losesTokens!(s, self, c.iid))) {
+        log(s, `${cardName(s, c.iid)} loses its Action token${c.tokens + (c.heldTokens ?? 0) > 1 ? 's' : ''}.`, c.controller);
+        c.tokens = 0; c.heldTokens = undefined;
+      }
+    }
+  }
+  // A Copy Shops copy that came back to a hand (made illegal, cancelled) is lost: nobody may keep it.
+  for (const c of Object.values(s.cards)) if (c.data?.copyOf && (c.zone === 'hand' || c.zone === 'discard')) vanishCopy(s, c.iid);
   const para = paralyzedGroups(s);
   for (const c of Object.values(s.cards)) {
     if (c.zone !== 'structure' && c.zone !== 'resources') { if (c.heldTokens) c.heldTokens = undefined; continue; }
@@ -3616,35 +3846,74 @@ function catchNameSlip(s: GameState, p: PlayerState, card: string) {
   if (owner.id === p.id) throw new RuleError('You cannot catch your own slip this way.');
   if (!anyTime(s, p.id)) throw new RuleError('You can call out a slip whenever you may act, but not right now.');
   const top = owner.plotDeck.shift();
-  if (top) { s.cards[top].zone = 'hand'; s.cards[top].owner = p.id; p.hand.push(top); }
+  if (top) { s.cards[top].zone = 'hand'; s.cards[top].owner = p.id; p.hand.push(top); shieldFromGoFish(s, p.id); }
   log(s, `${p.name} catches ${owner.name} misnaming ${cardName(s, c.linkedTo!)}: ${owner.name} hands over ${top ? `the top card of their Plot deck` : 'nothing (their deck is empty)'}.`, p.id);
   if (s.window) s.window.passed = s.window.kind === 'plot' ? [p.id] : [];
 }
 
 /**
- * Reunite the two halves of a Place split by Partition (Assassins): both must be this player's.
- * RULING: the half being folded away must currently have no puppets of its own (the printed card lets
- * the owner choose which of its links to keep; asking to clear its puppets first is a close, simpler
- * stand-in for that choice).
+ * Partition (Assassins): once one half of a split Place controls the other (is its master), the player
+ * controlling them may declare them reunited at any time. The puppet half is removed (its own puppets
+ * move up onto the reunited Place, or go back to hand where there is no room); the Place is whole again
+ * and gets every card linked to either half. Where that leaves two copies of the same card linked to
+ * it, the owner chooses which to discard.
  */
 function reunitePartition(s: GameState, p: PlayerState, group: string) {
   if (!anyTime(s, p.id)) throw new RuleError('You can reunite a Place split by Partition whenever you may act, but not right now.');
   const g = s.cards[group];
   const otherId = g?.data?.partitionPair as string | undefined;
   const o = otherId ? s.cards[otherId] : undefined;
-  if (!g || !o || g.zone !== 'structure' || o.zone !== 'structure' || g.controller !== p.id || o.controller !== p.id) {
-    throw new RuleError('You must control both halves of a Place split by Partition to reunite them.');
+  if (!g || !o || !otherId || g.zone !== 'structure' || o.zone !== 'structure' || g.controller !== p.id || o.controller !== p.id) {
+    throw new RuleError('Choose a Place split by Partition whose two halves are both yours.');
   }
-  if (puppets(s, otherId!).length) throw new RuleError('Move that half\'s puppets away before you can reunite it.');
+  const [master, puppet] = o.master === group ? [group, otherId] : g.master === otherId ? [otherId, group] : [undefined, undefined];
+  if (!master || !puppet) throw new RuleError('The two halves can be reunited only when one of them controls the other.');
+  const whole = s.cards[master];
+  // The puppet half leaves; its puppets move up onto the reunited Place.
+  const kids = puppets(s, puppet);
+  Object.assign(s.cards[puppet], { zone: 'removed', master: undefined, x: undefined, y: undefined, side: undefined });
+  for (const k of kids) {
+    const side = openArrows(s, master, new Set(subtree(s, k)))[0];
+    if (side) moveSubtree(s, k, p.id, master, side, 'hand');
+    else {
+      for (const x of subtree(s, k)) {
+        Object.assign(s.cards[x], { zone: 'hand', controller: undefined, master: undefined, x: undefined, y: undefined, side: undefined, tokens: 0 });
+        player(s, s.cards[x].owner).hand.push(x);
+      }
+      log(s, `${cardName(s, k)} finds no room on the reunited Place and goes back to hand.`, p.id);
+    }
+  }
   for (const other of Object.values(s.cards)) {
-    if ((other.zone === 'resources' || other.zone === 'table') && other.linkedTo === otherId) other.linkedTo = group;
+    if ((other.zone === 'resources' || other.zone === 'table') && other.linkedTo === puppet) other.linkedTo = master;
   }
-  g.mods = g.mods.filter((m) => m.source !== 'partition');
-  g.data = { ...g.data, partitionPair: undefined };
-  Object.assign(o, { zone: 'discard', controller: undefined, master: undefined, x: undefined, y: undefined, side: undefined, tokens: 0, mods: [], data: undefined });
-  player(s, p.id).discard.push(otherId!);
-  log(s, `${p.name} reunites ${cardName(s, group)}: it is whole again.`, p.id);
+  s.cards[puppet].zone = 'structure'; // so that the discard below treats it as a card leaving play
+  s.cards[puppet].controller = p.id;
+  discardCard(s, puppet);
+  whole.mods = whole.mods.filter((m) => m.source !== 'partition');
+  whole.data = { ...whole.data, partitionPair: undefined };
+  log(s, `${p.name} reunites ${cardName(s, master)}: it is whole again and keeps every card linked to either half.`, p.id);
+  // Two copies of the same card now linked to it: the owner keeps one of each.
+  const linked = Object.values(s.cards).filter((c) => (c.zone === 'resources' || c.zone === 'table') && c.linkedTo === master);
+  const byId = new Map<string, string[]>();
+  for (const c of linked) byId.set(c.cardId, [...(byId.get(c.cardId) ?? []), c.iid]);
+  for (const [, dup] of byId) {
+    if (dup.length < 2) continue;
+    askChoice(s, p.id, {
+      key: 'partitionLinks', question: `The reunited ${cardName(s, master)} has ${dup.length} copies of ${cardName(s, dup[0])} linked to it. Choose the one to keep; the others are discarded.`,
+      options: dup.map((c) => ({ id: c, label: cardName(s, c) })), min: 1, max: 1, data: { cards: dup },
+    });
+  }
 }
+
+registerChoice('partitionLinks', {
+  resolve(s, pl, ids, raw) {
+    const cards = (raw.cards as string[] | undefined) ?? [];
+    for (const c of cards) if (c !== ids[0] && (s.cards[c]?.zone === 'resources' || s.cards[c]?.zone === 'table')) {
+      log(s, `${cardName(s, c)} is discarded from the reunited Place.`, pl);
+      discardCard(s, c);
+    }
+  },
+});
 
 /** SubGenius rules: spend 1 Illuminati token or 2 tokens of other Groups to draw a Group into the uncontrolled area, at any time. */
 function buyGroup(s: GameState, p: PlayerState, payWith: string[]) {

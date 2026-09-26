@@ -351,13 +351,25 @@ describe('Cease-Fire', () => {
 });
 
 describe('Crusade', () => {
-  it('gives a Church Group +10 Power for its own declared attack', () => {
+  it('gives a Church Group +10 Power for its own attack, played as the attack is declared', () => {
     let s = scenario();
     const church = put(s, 'p1', 'church-of-elvis');
     const target = put(s, 'p2', 'the-mafia');
     const c = give(s, 'p1', 'crusade', { hand: true });
-    s = attack(s, church, target, 'destroy');
-    s = act(s, 'p1', { type: 'playPlot', play: { card: c, target: church, mode: 'action-power' } });
+    s = act(s, 'p1', { type: 'attack', attackType: 'destroy', attacker: church, target, plots: [{ card: c, target: church, mode: 'power' }] });
+    expect(s.attack!.attackBonus.some((b) => b.plot === c && b.amount === 10)).toBe(true);
+  });
+  it('also counts for a Church Group aiding an attack (its action), but not once the attack is under way for the leader', () => {
+    let s = scenario();
+    const leader = put(s, 'p1', 'the-mafia');
+    const church = put(s, 'p1', 'church-of-elvis');
+    const target = put(s, 'p2', 'boy-sprouts');
+    const c = give(s, 'p1', 'crusade', { hand: true });
+    s = attack(s, leader, target, 'control');
+    expect(() => act(s, 'p1', { type: 'playPlot', play: { card: c, target: church, mode: 'power' } })).toThrow(/attacker when the attack is declared, or on a Group aiding/);
+    s.cards[church].mods.push({ source: 'test', kind: 'addAlign', align: 'Straight', until: 'permanent' });
+    s = act(s, 'p1', { type: 'aid', group: church });
+    s = act(s, 'p1', { type: 'playPlot', play: { card: c, target: church, mode: 'power' } });
     expect(s.attack!.attackBonus.some((b) => b.plot === c && b.amount === 10)).toBe(true);
   });
   it('gives a Church Group +10 defense until the end of the turn, not counting for Goals', () => {
@@ -365,7 +377,7 @@ describe('Crusade', () => {
     const church = put(s, 'p1', 'church-of-elvis');
     const before = resistance(s, church);
     const c = give(s, 'p1', 'crusade', { hand: true });
-    s = playAndResolve(s, 'p1', { card: c, target: church, mode: 'turn-resistance' });
+    s = playAndResolve(s, 'p1', { card: c, target: church, mode: 'resistance' });
     expect(resistance(s, church, { defense: true } as never)).toBe(before + 10);
     expect(resistance(s, church, { goals: true } as never)).toBe(before);
   });
@@ -373,6 +385,6 @@ describe('Crusade', () => {
     const s = scenario();
     const other = put(s, 'p1', 'the-mafia');
     const c = give(s, 'p1', 'crusade', { hand: true });
-    expect(() => act(s, 'p1', { type: 'playPlot', play: { card: c, target: other, mode: 'turn-power' } })).toThrow(/Church/);
+    expect(() => act(s, 'p1', { type: 'playPlot', play: { card: c, target: other, mode: 'power' } })).toThrow(/Church/);
   });
 });

@@ -4,19 +4,20 @@
 // floating-point-error, frankenfood, go-fish, go-lemmings-go, grave-robbers, hubble-trouble,
 // junk-bonds, lab-explosion, let-the-sunshine-in, may-day, metric-system,
 // my-karma-ran-over-your-dogma, near-miss, nevermore, partition.
-import type { Alignment, GameEvent, GameState, PlotPlay } from '../types';
+import type { Alignment, AttackCtx, GameEvent, GameState, PlotPlay, Side } from '../types';
 import type { PlotHandler } from '../plotTypes';
 import { registerPlots } from '../plotTypes';
-import { linkedPlotLive, registerChoice, registerHooks, type AbilityParams } from '../hooks';
+import { HOOKS, anyHook, linkedPlotLive, registerChoice, registerHooks, type AbilityParams } from '../hooks';
 import { CARDS, cardName, def } from '../cards';
-import { type Match, matches } from '../abilities';
+import { type Match, abilitiesOf, matches } from '../abilities';
 import { alignments, attributes, isOpposite, power } from '../stats';
 import { openArrows, structureCards } from '../geometry';
 import {
-  activePlayer, askChoice, clearConditions, controllerOf2, currentOutcome, discardCard, exposableHand, exposeCards,
-  giveToken, isUnique, log, placeGroup, player, playResourceCard, raiseEvent, revealTo, tokenBarred,
-  zappedPlayer, zapsOn,
+  activePlayer, askChoice, attackCancelled, attackStrength, canEnterPlay, clearConditions, controllerOf2, currentOutcome, discardCard,
+  exposeCards, finalRoll, giveToken, goFishShielded, isCancelled, isParalyzed, isUnique, log, masterProblem, noteCostDiscard, placeGroup,
+  player, playResourceCard, revealTo, shieldFromGoFish, startAttack, tokenBarred, validateAttack, zappedPlayer, zapsOn,
 } from '../game';
+import { groupDeckOf, plotDeckOf } from '../expansions';
 import { freezePlot, paralysisPlot, registerZap, zapPlot } from './families';
 
 // ---------------------------------------------------------------- shared local helpers
@@ -58,10 +59,16 @@ function discardTop(s: GameState, pl: string, deck: 'plotDeck' | 'groupDeck'): s
   return top;
 }
 
-/** Go, Lemmings, Go! (Assassins): discarding cards to pay a cost draws extra discards of the same kind and place. */
+/** Go, Lemmings, Go! (Assassins): announce cards discarded from a hand or a deck to pay a cost. */
 function costDiscarded(s: GameState, payer: string, kind: 'plot' | 'group', place: 'hand' | 'deck', cards: string[]) {
-  if (!cards.length) return;
-  raiseEvent(s, { type: 'costDiscard', player: payer, cards: [...cards], data: { kind, place } });
+  noteCostDiscard(s, payer, [{ kind, place, cards }]);
+}
+/** Discard the top card of a player's Plot or Group deck (the shared one under SubGenius rules). */
+function discardDeckTop(s: GameState, pl: string, deck: 'plot' | 'group'): string | undefined {
+  const arr = deck === 'plot' ? plotDeckOf(s, pl) : groupDeckOf(s, pl);
+  const top = arr.shift();
+  if (top) { s.cards[top].zone = 'hand'; player(s, pl).hand.push(top); discardCard(s, top); }
+  return top;
 }
 
 // ================================================================== Zaps
@@ -90,9 +97,11 @@ registerZap('family-values', {
   registerHooks({ 'lab-explosion': labExplosion.hooks });
 }
 
-// Fickle Finger of Fate: the victim loses the automatic takeover entirely, but the first direct attack
-// their own Illuminati leads each turn gets a flat +10 (not Global Power). Several copies on the same
-// player still give only +10 in total (CFAQ). Not usable in a two-player game (card text).
+// Fickle Finger of Fate: the victim loses the automatic takeover entirely, but gets +10 to the Power of
+// his Illuminati for any one direct attack it makes each turn (CFAQ: Power, not Global Power; one direct
+// attack). The victim chooses which: each time his Illuminati declares an attack while the bonus is still
+// unused this turn, he is asked whether to use it on this one. Several copies on the same player still
+// give only +10 in total (CFAQ). Not usable in a two-player game (card text).
 const isCanonicalFFoF = (s: GameState, self: string): boolean => {
   const victim = zappedPlayer(s, self);
   if (!victim) return false;
@@ -107,28 +116,46 @@ const isCanonicalFFoF = (s: GameState, self: string): boolean => {
         if (type === 'takeover' && attackerPlayer === zappedPlayer(s, self)) return `${cardName(s, self)}: ${player(s, attackerPlayer).name} has lost the automatic takeover.`;
         return null;
       },
-      // RULING: the printed card lets the victim choose which attack gets the +10; the engine applies it
-      // automatically to the first direct attack their Illuminati leads each turn, since there is no
-      // mechanism here for declining a passive attack modifier in advance.
+      onAttackStart(s, self, ctx) {
+        const victim = zappedPlayer(s, self);
+        if (!victim || ctx.instant || ctx.attackerPlayer !== victim || ctx.attacker !== player(s, victim).illuminati) return;
+        if (!isCanonicalFFoF(s, self) || ffofUsed(s, victim)) return;
+        askChoice(s, victim, {
+          key: 'ffof-bonus', source: self,
+          question: `${cardName(s, self)}: use your +10 for this turn on this attack by your Illuminati?`,
+          options: [{ id: 'use', label: 'Yes: +10 to this attack' }, { id: 'save', label: 'No: keep it for a later attack this turn' }],
+          min: 1, max: 1, data: { zap: self, attack: ctx.id },
+        });
+      },
       attackMod(s, self, ctx, side) {
         if (side !== 'attack' || !ctx.attacker) return 0;
-        const victim = zappedPlayer(s, self);
-        if (!victim || ctx.attackerPlayer !== victim || ctx.attacker !== player(s, victim).illuminati) return 0;
-        if (!isCanonicalFFoF(s, self)) return 0;
-        if (s.cards[self].data?.usedTurn === s.turn) return 0;
-        return 10;
+        return s.cards[self].data?.bonusAttack === ctx.id ? 10 : 0;
       },
       onAttackEnd(s, self, ctx) {
-        const victim = zappedPlayer(s, self);
-        if (!victim || ctx.attackerPlayer !== victim || ctx.attacker !== player(s, victim).illuminati) return;
-        if (!isCanonicalFFoF(s, self) || s.cards[self].data?.usedTurn === s.turn) return;
-        s.cards[self].data = { ...s.cards[self].data, usedTurn: s.turn };
+        // An attack that never happened (cancelled) did not use the bonus up.
+        if (s.cards[self].data?.bonusAttack === ctx.id && attackCancelled(ctx)) {
+          s.cards[self].data = { ...s.cards[self].data, bonusAttack: undefined, usedTurn: undefined };
+        }
       },
     },
   });
   registerPlots({ 'fickle-finger-of-fate': ffof.plot });
   registerHooks({ 'fickle-finger-of-fate': ffof.hooks });
 }
+/** Has this player already used a Fickle Finger of Fate bonus this turn (on any copy)? */
+function ffofUsed(s: GameState, victim: string): boolean {
+  return Object.values(s.cards).some((c) => c.cardId === 'fickle-finger-of-fate' && c.zone === 'table' && zappedPlayer(s, c.iid) === victim && c.data?.usedTurn === s.turn);
+}
+registerChoice('ffof-bonus', {
+  resolve(s, pl, picked, data) {
+    const zap = data.zap as string;
+    if (picked[0] !== 'use' || !s.cards[zap] || s.attack?.id !== data.attack) return;
+    s.cards[zap].data = { ...s.cards[zap].data, usedTurn: s.turn, bonusAttack: data.attack };
+    log(s, `${player(s, pl).name} uses the Fickle Finger of Fate: +10 to this attack by their Illuminati.`, pl);
+  },
+  // The computer takes the bonus on the first attack: a later one is not guaranteed.
+  ai: () => ['use'],
+});
 
 // ================================================================== Paralysis
 
@@ -144,11 +171,11 @@ registerPlots({
   'floating-point-error': freezePlot({ match: { attributes: ['Computer'] }, label: 'Computer' }),
   'junk-bonds': freezePlot({ match: { attributes: ['Bank'] }, label: 'Bank' }),
   'let-the-sunshine-in': freezePlot({ match: { attributes: ['Secret'] }, label: 'Secret' }),
-  // "Satellites" names the category: every Satellite Resource in the base data is Weather Satellite; the
-  // Orbital Mind Control Lasers is named on the card by its full title.
+  // "Satellites" names the category: every Satellite Resource of any set (the Weather Satellite, and the
+  // Killer, Power and Spy Satellites of this pack); the Orbital Mind Control Lasers is named in full.
   'hubble-trouble': freezePlot({
     match: [{ attributes: ['Space'] }, { attributes: ['Science'] }],
-    resources: ['weather-satellite', 'orbital-mind-control-lasers'],
+    resources: [...Object.values(CARDS).filter((c) => c.type === 'Resource' && /Satellite/.test(c.name)).map((c) => c.id), 'orbital-mind-control-lasers'],
     label: 'Space, Science',
   }),
 });
@@ -349,72 +376,119 @@ registerChoice('defection', {
 });
 
 // ================================================================== Grave Robbers
+// "Use this card when you are entitled to take over a Resource": it stands in for that takeover, and the
+// Artifact comes from the Group deck instead of the hand. A player is entitled to take over a Resource
+// at two moments: his automatic takeover (mode 'takeover', played in the window right before it: the
+// turn's automatic takeover is used up) and his once-per-turn Resource play in his main phase (mode
+// 'resource': it costs the Illuminati action that play costs). The player picks the Artifact and, for a
+// Magic one, which Magic Groups spend their actions (6 Power in total).
 
-function graveRobbersOptions(s: GameState, pl: string): string[] {
-  return player(s, pl).groupDeck.filter((iid) => def(s, iid).type === 'Resource' && isArtifact(def(s, iid).uniqueness));
+/** A Magic Artifact: "Magic" is part of a Resource's kind line (its `uniqueness`), not an attribute. */
+const isMagicCard = (s: GameState, c: string) => /\bMagic\b/.test(def(s, c).uniqueness ?? '') || hasAttr(s, c, 'Magic');
+function magicPool(s: GameState, pl: string): string[] {
+  return structureCards(s, pl).filter((g) => own(s, pl, g) && s.cards[g].tokens > 0 && hasAttr(s, g, 'Magic'));
 }
+/** A set of Magic Groups able to pay 6 Power (fewest, strongest first), or null. */
 function magicPayers(s: GameState, pl: string): string[] | null {
-  const pool = structureCards(s, pl).filter((g) => own(s, pl, g) && s.cards[g].tokens > 0 && hasAttr(s, g, 'Magic')).sort((a, b) => power(s, a) - power(s, b));
+  const pool = magicPool(s, pl).sort((a, b) => power(s, a) - power(s, b));
   const one = pool.find((g) => power(s, g) >= 6);
   if (one) return [one];
   let total = 0; const picks: string[] = [];
   for (const g of [...pool].reverse()) { if (total >= 6) break; picks.push(g); total += power(s, g); }
   return total >= 6 ? picks : null;
 }
+function graveRobbersOptions(s: GameState, pl: string): string[] {
+  return player(s, pl).groupDeck.filter((iid) => def(s, iid).type === 'Resource' && isArtifact(def(s, iid).uniqueness)
+    && canEnterPlay(s, iid, pl) && (!isMagicCard(s, iid) || !!magicPayers(s, pl))
+    && !anyHook(s, (h, self) => !!h.forbidAttack?.(s, self, undefined, iid, 'takeover', pl)));
+}
+function graveRobbersMode(s: GameState, play: PlotPlay): 'takeover' | 'resource' {
+  if (play.mode === 'takeover' || play.mode === 'resource') return play.mode;
+  return (eventNow(s) ?? remembered(s, play))?.type === 'drawn' ? 'takeover' : 'resource';
+}
 registerPlots({
   'grave-robbers': {
-    timing: ['event'],
-    events: ['takeover'],
-    check(s, pl, play) {
-      const e = eventNow(s);
-      if (!e || e.type !== 'takeover' || e.player !== pl || !e.card || !s.cards[e.card] || def(s, e.card).type !== 'Resource') {
-        return 'Play this right after you take over a Resource.';
+    timing: ['anytime', 'event'],
+    events: ['drawn'],
+    needs: { mode: ['takeover', 'resource'] },
+    check(s, pl, play, ctx) {
+      if (ctx || s.attack) return 'Grave Robbers is not played during an attack.';
+      if (activePlayer(s).id !== pl) return 'Play this in your own turn, when you may take over a Resource.';
+      if (graveRobbersMode(s, play) === 'takeover') {
+        const e = eventNow(s);
+        if (!e || e.type !== 'drawn' || e.player !== pl) return 'Play this for your automatic takeover, right after your start-of-turn draws.';
+        if (s.turnFlags.takeoverDone || s.turnFlags.noTakeover || s.turnFlags.restricted) return 'You have no automatic takeover left this turn.';
+      } else {
+        if (s.phase !== 'main' || s.window) return 'Play this in your main phase, as your Resource play for the turn (or for your automatic takeover).';
+        if (s.turnFlags.resourcePlayed) return 'You have already brought a Resource into play this turn.';
+        if (s.cards[player(s, pl).illuminati].tokens < 1) return 'Bringing a Resource into play costs an action of your Illuminati.';
+        if (s.turnFlags.illuminatiLocked === pl) return 'Your Illuminati\'s token cannot be spent this turn except to buy a Plot card.';
       }
-      return graveRobbersOptions(s, pl).length ? null : 'You have no Artifact in your Group deck.';
+      return graveRobbersOptions(s, pl).length ? null : 'You have no Artifact in your Group deck that you could bring into play.';
     },
-    apply(s, _pl, play) { remember(s, play); },
+    apply(s, pl, play) {
+      const mode = graveRobbersMode(s, play);
+      remember(s, play);
+      if (mode === 'takeover') { s.turnFlags.takeoverDone = true; return; }
+      s.cards[player(s, pl).illuminati].tokens--;
+      s.turnFlags.resourcePlayed = true;
+    },
     resolve(s, pl) {
-      const opts = graveRobbersOptions(s, pl).filter((c) => !hasAttr(s, c, 'Magic') || !!magicPayers(s, pl));
-      if (!opts.length) return;
+      const opts = graveRobbersOptions(s, pl);
+      if (!opts.length) { log(s, 'Grave Robbers finds no Artifact to bring into play.', pl); return; }
+      log(s, `${player(s, pl).name} searches their Group deck with Grave Robbers.`, pl);
       askChoice(s, pl, {
         key: 'grave-robbers', question: 'Grave Robbers: bring which Artifact into play?', min: 1, max: 1,
-        options: opts.map((c) => ({ id: c, label: `${cardName(s, c)}${hasAttr(s, c, 'Magic') ? ' (Magic: costs Magic actions worth 6 Power)' : ''}` })),
+        options: opts.map((c) => ({ id: c, label: `${cardName(s, c)}${isMagicCard(s, c) ? ' (Magic: costs Magic actions worth 6 Power)' : ''}` })),
       });
     },
   },
 });
+function robGrave(s: GameState, pl: string, c: string, payers: string[]) {
+  for (const g of payers) s.cards[g].tokens--;
+  player(s, pl).groupDeck = player(s, pl).groupDeck.filter((x) => x !== c);
+  s.cards[c].zone = 'hand';
+  player(s, pl).hand.push(c);
+  playResourceCard(s, c, pl);
+  // "If it has actions, it starts with a full complement of Action tokens."
+  const card = s.cards[c] as { zone: string; cardId: string; tokens: number };
+  if (card.zone === 'resources' && HOOKS[card.cardId]?.hasAction) card.tokens = 1;
+  log(s, `${player(s, pl).name} robs a grave for ${cardName(s, c)}${payers.length ? `, paid by ${payers.map((g) => cardName(s, g)).join(', ')}` : ''}.`, pl);
+}
 registerChoice('grave-robbers', {
   resolve(s, pl, picked) {
     const c = picked[0];
-    if (!c || !player(s, pl).groupDeck.includes(c) || !graveRobbersOptions(s, pl).includes(c)) return;
-    // RULING: the card lets the player pay with Magic actions worth 6 Power; the engine picks the
-    // combination automatically (cheapest first) since the choice of *which* Artifact already stands in
-    // for the player's decision here.
-    if (hasAttr(s, c, 'Magic')) {
-      const payers = magicPayers(s, pl);
-      if (!payers) return;
-      for (const g of payers) s.cards[g].tokens--;
-    }
-    player(s, pl).groupDeck = player(s, pl).groupDeck.filter((x) => x !== c);
-    playResourceCard(s, c, pl);
-    log(s, `${player(s, pl).name} robs a grave for ${cardName(s, c)}.`, pl);
+    if (!c || !graveRobbersOptions(s, pl).includes(c)) return;
+    if (!isMagicCard(s, c)) { robGrave(s, pl, c, []); return; }
+    askGraveRobbersPayers(s, pl, c);
   },
+});
+function askGraveRobbersPayers(s: GameState, pl: string, c: string, again = false) {
+  const pool = magicPool(s, pl);
+  askChoice(s, pl, {
+    key: 'grave-robbers-pay', min: 1, max: pool.length,
+    question: `${again ? 'Those do not add up to 6 Power. ' : ''}${cardName(s, c)} is Magic: choose Magic Groups of yours to spend their actions, 6 Power in total.`,
+    options: pool.map((g) => ({ id: g, label: `${cardName(s, g)} (Power ${power(s, g)})` })), data: { card: c },
+  });
+}
+registerChoice('grave-robbers-pay', {
+  resolve(s, pl, picked, data) {
+    const c = data.card as string;
+    if (!player(s, pl).groupDeck.includes(c)) return;
+    const ok = picked.every((g) => magicPool(s, pl).includes(g));
+    if (!ok || totalPower(s, picked) < 6) { if (magicPayers(s, pl)) askGraveRobbersPayers(s, pl, c, true); return; }
+    robGrave(s, pl, c, picked);
+  },
+  ai: (s, pl) => magicPayers(s, pl) ?? [],
 });
 
 // ================================================================== Go Fish
+// Official errata: anyone who has received a Plot card from a rival, or been forced to show a rival a
+// hidden Plot in his hand or deck, is immune to Go Fish until the end of his next turn. The engine tracks
+// that wherever it happens (game.ts shieldFromGoFish: deals, trades, thefts, looks and exposures). Only
+// hidden Plots are affected (Card FAQ): a named Plot the rival holds only exposed does not count.
 
-function goFishImmune(s: GameState, victim: string): boolean {
-  const until = s.cards[player(s, victim).illuminati].data?.goFishImmuneThroughTurnsTaken as number | undefined;
-  return until !== undefined && player(s, victim).turnsTaken <= until;
-}
-function markGoFishImmune(s: GameState, who: string) {
-  const c = s.cards[player(s, who).illuminati];
-  c.data = { ...c.data, goFishImmuneThroughTurnsTaken: player(s, who).turnsTaken + 1 };
-}
 registerPlots({
-  // RULING: the errata's immunity ("received a Plot card from a rival, or been forced to show a rival any
-  // non-exposed Plot") is tracked only for Go Fish's own effects here, not for every other way a Plot
-  // could change hands or be revealed in the game.
   'go-fish': {
     timing: ['anytime'],
     needs: { target: 'rival', mode: [] },
@@ -423,7 +497,7 @@ registerPlots({
       const victim = t?.controller;
       if (!t || t.zone !== 'structure' || def(s, play.target!).type !== 'Illuminati' || !victim || victim === pl) return 'Name a rival.';
       if (!play.mode || !CARDS[play.mode] || CARDS[play.mode].type !== 'Plot') return 'Name a Plot card.';
-      if (goFishImmune(s, victim)) return `${player(s, victim).name} is immune to Go Fish until the end of their next turn.`;
+      if (goFishShielded(s, victim)) return `${player(s, victim).name} is immune to Go Fish until the end of their next turn.`;
       return null;
     },
     apply() {},
@@ -432,92 +506,212 @@ registerPlots({
       if (!victim) return;
       const named = play.mode!;
       const vp = player(s, victim);
-      const hidden = exposableHand(s, victim, 'Plot');
-      revealTo(s, pl, hidden, `Go Fish reveals ${vp.name}'s hidden Plots`);
-      markGoFishImmune(s, victim);
-      const matching = vp.hand.filter((c) => def(s, c).type === 'Plot' && s.cards[c].cardId === named);
+      const hidden = vp.hand.filter((c) => ['Plot', 'Illuminati'].includes(def(s, c).type) && !s.cards[c].exposed);
+      const matching = hidden.filter((c) => s.cards[c].cardId === named);
+      revealTo(s, pl, hidden, `Go Fish: ${vp.name}'s hidden Plots`);
       if (!matching.length) {
-        const mine = player(s, pl).hand.filter((c) => def(s, c).type === 'Plot');
-        exposeCards(s, mine);
-        log(s, `${player(s, pl).name} plays Go Fish naming ${cardName(s, named)} against ${vp.name}, who has none: all of ${player(s, pl).name}'s Plots are exposed.`, pl);
+        const shown = exposeCards(s, player(s, pl).hand.filter((c) => ['Plot', 'Illuminati'].includes(def(s, c).type)));
+        log(s, `${player(s, pl).name} plays Go Fish naming ${CARDS[named].name} against ${vp.name}, who has none hidden: ${player(s, pl).name}'s Plots are exposed${shown.length ? ` (${shown.map((c) => cardName(s, c)).join(', ')})` : ''}.`, pl);
         return;
       }
+      let discarded = 0;
       for (const c of matching) {
         vp.hand = vp.hand.filter((x) => x !== c);
-        s.cards[c].zone = 'hand';
-        s.cards[c].exposed = false;
+        Object.assign(s.cards[c], { zone: 'hand', exposed: false });
+        if (s.common) s.cards[c].owner = pl;
         player(s, pl).hand.push(c);
-        for (let i = 0; i < 2 && vp.plotDeck.length; i++) discardTop(s, victim, 'plotDeck');
+        for (let i = 0; i < 2; i++) if (discardDeckTop(s, victim, 'plot')) discarded++;
       }
-      markGoFishImmune(s, pl);
-      log(s, `${player(s, pl).name} plays Go Fish naming ${cardName(s, named)} against ${vp.name}: ${matching.length} card${matching.length === 1 ? '' : 's'} given up, plus ${matching.length * 2} Plot discard${matching.length === 1 ? '' : 's'}.`, pl);
+      shieldFromGoFish(s, pl); // he has now received Plots from a rival
+      log(s, `${player(s, pl).name} plays Go Fish naming ${CARDS[named].name} against ${vp.name}: ${matching.length} card${matching.length === 1 ? '' : 's'} handed over, and ${discarded} undrawn Plot${discarded === 1 ? '' : 's'} discarded.`, pl);
     },
   },
 });
 
 // ================================================================== Go, Lemmings, Go!
+// Answers any discard of Plots or Group cards, from a hand or a deck, made to pay for a Plot or a
+// special ability (the engine announces every such cost with noteCostDiscard, base-game cards included).
+// One card discarded: two more of the same kind; several: as many again of each kind, from the same place.
+// Extra hand discards are chosen by the victim, made up from his deck if his hand runs short; extra deck
+// discards come from the deck only (never from the hand, even if the deck runs out).
 
-function goLemmingsExtra(s: GameState, victim: string, kind: 'plot' | 'group', place: 'hand' | 'deck', n: number) {
-  const need = n === 1 ? 2 : n;
-  const p = player(s, victim);
-  const typeName = kind === 'plot' ? 'Plot' : 'Group';
+type CostPart = { kind: 'plot' | 'group'; place: 'hand' | 'deck'; cards: string[] };
+const kindOf = (s: GameState, c: string): 'plot' | 'group' => (['Plot', 'Illuminati'].includes(def(s, c).type) ? 'plot' : 'group');
+function lemmingsDeckDiscards(s: GameState, victim: string, kind: 'plot' | 'group', n: number): number {
   let done = 0;
-  if (place === 'hand') {
-    for (const c of p.hand.filter((x) => def(s, x).type === typeName)) { if (done >= need) break; discardCard(s, c); done++; }
-  }
-  const deckArr = kind === 'plot' ? p.plotDeck : p.groupDeck;
-  while (done < need && deckArr.length) { discardTop(s, victim, kind === 'plot' ? 'plotDeck' : 'groupDeck'); done++; }
-  if (done) log(s, `Go, Lemmings, Go! makes ${p.name} discard ${done} more card${done === 1 ? '' : 's'}, for no benefit.`, victim);
+  while (done < n && discardDeckTop(s, victim, kind)) done++;
+  return done;
+}
+function goLemmingsParts(e: GameEvent): CostPart[] {
+  const d = (e.data ?? {}) as { parts?: CostPart[]; kind?: 'plot' | 'group'; place?: 'hand' | 'deck' };
+  return d.parts ?? [{ kind: d.kind ?? 'plot', place: d.place ?? 'hand', cards: e.cards ?? [] }];
 }
 registerPlots({
-  // RULING: the printed card triggers on any discard of Plots or Groups paid to power a Plot or a
-  // Group's ability. This engine only raises the underlying 'costDiscard' event for the two generalised
-  // discard-cost mechanisms it has (a Plot's declared "Requires ... Discards" cost, and this batch's own
-  // manual deck/hand discard costs); the many one-off Group-ability discard costs elsewhere are not
-  // individually wired up to it.
   'go-lemmings-go': {
     timing: ['event'],
     events: ['costDiscard'],
-    check(s, pl, play) {
+    check(s, pl) {
       const e = eventNow(s);
-      if (!e || e.type !== 'costDiscard' || !e.player || e.player === pl) return 'Play this right after a rival discards cards to pay a cost.';
+      if (!e || e.type !== 'costDiscard' || !e.player || e.player === pl) return 'Play this right after a rival discards cards to pay for a Plot or a special ability.';
+      if (player(s, e.player).eliminated) return 'That player is out of the game.';
       return null;
     },
     apply(s, _pl, play) { remember(s, play); },
     resolve(s, _pl, play) {
       const e = remembered(s, play);
-      if (!e?.player || !e.cards?.length) return;
-      const data = (e.data ?? {}) as { kind?: 'plot' | 'group'; place?: 'hand' | 'deck' };
-      goLemmingsExtra(s, e.player, data.kind ?? 'plot', data.place ?? 'hand', e.cards.length);
+      if (!e?.player || !e.cards?.length || player(s, e.player).eliminated) return;
+      const victim = e.player;
+      const parts = goLemmingsParts(e);
+      const total = parts.reduce((n, x) => n + x.cards.length, 0);
+      let fromDeck = 0;
+      const handDue: { kind: 'plot' | 'group'; n: number }[] = [];
+      for (const part of parts) {
+        const n = total === 1 ? 2 : part.cards.length;
+        if (part.place === 'deck') fromDeck += lemmingsDeckDiscards(s, victim, part.kind, n);
+        else handDue.push({ kind: part.kind, n });
+      }
+      if (fromDeck) log(s, `Go, Lemmings, Go!: ${player(s, victim).name} discards ${fromDeck} more card${fromDeck === 1 ? '' : 's'} from their deck, for no benefit.`, victim);
+      for (const due of handDue) askLemmingsHand(s, victim, due.kind, due.n);
     },
   },
 });
+function askLemmingsHand(s: GameState, victim: string, kind: 'plot' | 'group', n: number) {
+  const hand = player(s, victim).hand.filter((c) => kindOf(s, c) === kind && !s.cards[c].data?.lockedInHand);
+  if (hand.length <= n) {
+    // No choice to make: the whole hand of that kind goes, and the deck makes up the difference.
+    for (const c of hand) discardCard(s, c);
+    const more = lemmingsDeckDiscards(s, victim, kind, n - hand.length);
+    if (hand.length + more) log(s, `Go, Lemmings, Go!: ${player(s, victim).name} discards ${hand.length + more} more ${kind === 'plot' ? 'Plot' : 'Group'} card${hand.length + more === 1 ? '' : 's'}, for no benefit.`, victim);
+    return;
+  }
+  askChoice(s, victim, {
+    key: 'lemmings-hand', min: n, max: n,
+    question: `Go, Lemmings, Go!: discard ${n} more ${kind === 'plot' ? 'Plot' : 'Group'} card${n === 1 ? '' : 's'} from your hand. Choose which.`,
+    options: hand.map((c) => ({ id: c, label: cardName(s, c) })), data: { kind, n },
+  });
+}
+registerChoice('lemmings-hand', {
+  resolve(s, pl, picked, data) {
+    const kind = data.kind as 'plot' | 'group';
+    const gone = picked.filter((c) => player(s, pl).hand.includes(c) && kindOf(s, c) === kind);
+    for (const c of gone) discardCard(s, c);
+    log(s, `Go, Lemmings, Go!: ${player(s, pl).name} discards ${gone.length} more card${gone.length === 1 ? '' : 's'} from hand, for no benefit.`, pl);
+  },
+  // The computer gives up the cards with the lowest printed Power first (Plots have none: hand order).
+  ai: (s, _pl, options, data) => [...options].sort((a, b) => (def(s, a.id).power ?? 0) - (def(s, b.id).power ?? 0)).slice(0, data.n as number).map((o) => o.id),
+});
 
 // ================================================================== Near Miss
+// Played when a Place is destroyed, by any means (Card FAQ: Disasters, attacks, World War III, backfires
+// …): the destruction becomes a mere Devastation. Right after the roll of an attack that is destroying a
+// Place ('save' in the roll window) the attack only Devastates; once a Place has been destroyed ('save'
+// in the response window of its destruction) it comes back to where it was, Devastated, with its puppets
+// and linked cards. Or ('clear') it removes a Place's Devastation. Two Near Misses never make a complete
+// miss: a Place a Near Miss saved this turn cannot have that Devastation cleared by another. A Place
+// that cannot be destroyed anyway (cannotBeDestroyed, preventDestroy) needs no Near Miss.
 
+function indestructible(s: GameState, t: string, ctx?: AttackCtx): boolean {
+  return abilitiesOf(s, t).some((a) => a.kind === 'cannotBeDestroyed') || anyHook(s, (h, self) => !!h.preventDestroy?.(s, self, t, ctx));
+}
+/** Why this attack, as it stands after the roll, is not about to destroy its target Place (null if it is). */
+function destroyingPlace(s: GameState, ctx: AttackCtx): string | null {
+  if (!ctx.roll) return 'Play this right after the roll, when the attack would destroy a Place.';
+  if (ctx.type !== 'destroy' || !s.cards[ctx.target] || s.cards[ctx.target].zone !== 'structure' || def(s, ctx.target).subtype !== 'Place') return 'This attack is not trying to destroy a Place.';
+  if (currentOutcome(s, ctx) !== 'success') return 'This attack is not currently succeeding.';
+  if (indestructible(s, ctx.target, ctx)) return `${cardName(s, ctx.target)} cannot be destroyed anyway.`;
+  if (ctx.disaster) {
+    const margin = attackStrength(s, ctx).strength - finalRoll(ctx);
+    if (ctx.disaster.devastateOnly || ctx.disaster.destroyMargin === null || margin < ctx.disaster.destroyMargin) return 'This Disaster will only Devastate the Place, not destroy it.';
+  }
+  return null;
+}
+type Layout = { iid: string; master?: string; side?: Side }[];
+function destroyedPlaceEvent(s: GameState, e: GameEvent | undefined): string | null {
+  if (!e || e.type !== 'destroyed' || !e.card || !s.cards[e.card]) return 'Play this right after a Place is destroyed.';
+  if (def(s, e.card).subtype !== 'Place' || s.cards[e.card].zone !== 'destroyed') return 'Play this right after a Place is destroyed.';
+  if (s.cards[e.card].data?.neverReturns || s.cards[e.card].data?.removedFromGame) return `${cardName(s, e.card)} is gone for good.`;
+  const spot = ((e.data as { layout?: Layout } | undefined)?.layout ?? [])[0];
+  const m = spot?.master ? s.cards[spot.master] : undefined;
+  if (!spot || !m || m.zone !== 'structure' || !e.player || m.controller !== e.player || !spot.side || !openArrows(s, spot.master!).includes(spot.side)) {
+    return `${cardName(s, e.card)} has no place left to come back to.`;
+  }
+  return null;
+}
+function unDestroy(s: GameState, pl: string, e: GameEvent) {
+  const place = e.card!;
+  const owner = e.player!;
+  const data = (e.data ?? {}) as { layout?: Layout; links?: { iid: string; zone: string; controller?: string }[] };
+  const layout = data.layout ?? [];
+  const spot = layout[0];
+  placeGroup(s, place, owner, spot.master!, spot.side!);
+  Object.assign(s.cards[place], { devastated: true, tokens: 0, killed: false });
+  for (const x of s.players) x.destroyedCredit = x.destroyedCredit.filter((d) => d !== place);
+  // Its puppets had gone back to hand: they come back where they were, where there is still room.
+  for (const l of layout.slice(1)) {
+    const c = s.cards[l.iid];
+    const m = l.master ? s.cards[l.master] : undefined;
+    if (!c || c.zone !== 'hand' || !player(s, owner).hand.includes(l.iid) || !m || m.zone !== 'structure' || m.controller !== owner || !l.side || !openArrows(s, l.master!).includes(l.side)) continue;
+    placeGroup(s, l.iid, owner, l.master!, l.side);
+    s.cards[l.iid].tokens = 0;
+  }
+  // So do the cards that were linked to it.
+  for (const l of data.links ?? []) {
+    const c = s.cards[l.iid];
+    if (!c) continue;
+    if (l.zone === 'resources' && c.zone === 'destroyed') {
+      for (const x of s.players) x.destroyedCredit = x.destroyedCredit.filter((d) => d !== l.iid);
+      Object.assign(c, { zone: 'resources', controller: owner, linkedTo: place, tokens: 0 });
+    } else if (l.zone === 'table' && c.zone === 'discard') {
+      for (const x of s.players) x.discard = x.discard.filter((d) => d !== l.iid);
+      if (s.common) s.common.plotDiscard = s.common.plotDiscard.filter((d) => d !== l.iid);
+      Object.assign(c, { zone: 'table', controller: l.controller, linkedTo: place });
+    }
+  }
+  s.cards[place].data = { ...s.cards[place].data, nearMissTurn: s.turn };
+  log(s, `Near Miss: ${cardName(s, place)} is only Devastated after all, and is back in ${player(s, owner).name}'s Power Structure.`, pl);
+}
+function nearMissMode(s: GameState, play: PlotPlay, ctx?: AttackCtx): 'save' | 'clear' {
+  if (play.mode === 'save' || play.mode === 'clear') return play.mode;
+  return ctx?.roll || eventNow(s)?.type === 'destroyed' ? 'save' : 'clear';
+}
 registerPlots({
   'near-miss': {
-    timing: ['roll', 'anytime'],
+    timing: ['roll', 'anytime', 'event'],
+    events: ['destroyed', 'devastated'],
     needs: { target: 'place', mode: ['save', 'clear'] },
-    check(s, pl, play, ctx) {
-      const mode = play.mode ?? (ctx ? 'save' : 'clear');
+    check(s, _pl, play, ctx) {
+      const mode = nearMissMode(s, play, ctx);
       if (mode === 'save') {
-        if (!ctx || !ctx.roll) return 'Play this right after the roll, when the attack would destroy a Place.';
-        if (!s.cards[ctx.target] || def(s, ctx.target).subtype !== 'Place') return 'The target of this attack is not a Place.';
-        if (currentOutcome(s, ctx) !== 'success') return 'This attack is not currently succeeding.';
-        if (ctx.plays.some((p) => s.cards[p.iid]?.cardId === 'near-miss')) return 'Only one Near Miss can help against this attack.';
-        return null;
+        if (ctx) {
+          const why = destroyingPlace(s, ctx);
+          if (why) return why;
+          if (ctx.plays.some((p) => s.cards[p.iid]?.cardId === 'near-miss' && !isCancelled(ctx.plays, p.iid))) return 'Only one Near Miss can help against this attack.';
+          return null;
+        }
+        return destroyedPlaceEvent(s, eventNow(s));
       }
       if (ctx) return 'Removing Devastation is not part of an attack.';
       if (!inPlay(s, play.target) || def(s, play.target!).subtype !== 'Place' || !s.cards[play.target!].devastated) return 'Choose a Devastated Place.';
       if (s.attack && s.attack.target === play.target) return 'That Place was just Devastated: wait until this attack is over.';
+      // Two Near Misses together never turn a destruction into a complete miss.
+      if (s.cards[play.target!].data?.nearMissTurn === s.turn) return 'A Near Miss has already turned this Place\'s destruction into Devastation: a second one cannot clear it.';
       return null;
     },
     apply(s, _pl, play, ctx) {
-      if (ctx) { ctx.disaster = { destroyMargin: ctx.disaster?.destroyMargin ?? null, devastateOnly: true }; }
+      s.cards[play.card].data = { ...s.cards[play.card].data, mode: nearMissMode(s, play, ctx) };
+      if (ctx) {
+        ctx.disaster = { destroyMargin: ctx.disaster?.destroyMargin ?? null, devastateOnly: true };
+        s.cards[ctx.target].data = { ...s.cards[ctx.target].data, nearMissTurn: s.turn };
+      } else remember(s, play);
     },
     resolve(s, pl, play) {
-      if ((play.mode ?? 'clear') !== 'clear' || !play.target) return;
+      if (s.cards[play.card].data?.mode === 'save') {
+        const e = remembered(s, play);
+        if (!e || destroyedPlaceEvent(s, e)) { log(s, 'Near Miss comes too late: the Place cannot come back.', pl); return; }
+        unDestroy(s, pl, e);
+        return;
+      }
+      if (!play.target || !s.cards[play.target]?.devastated) return;
       s.cards[play.target].devastated = false;
       log(s, `${player(s, pl).name} plays Near Miss: ${cardName(s, play.target)} recovers from Devastation.`, pl);
     },
@@ -546,9 +740,11 @@ function banCostCheck(s: GameState, pl: string, mode: string | undefined, payWit
 function payBanCost(s: GameState, pl: string, mode: string | undefined, payWith: string[] | undefined) {
   if (mode === 'illuminati') { s.cards[player(s, pl).illuminati].tokens--; return; }
   const p = player(s, pl);
-  let fromHand = 0;
-  for (const c of payWith ?? []) { if (p.hand.includes(c)) fromHand++; discardCard(s, c); }
-  costDiscarded(s, pl, 'plot', fromHand === (payWith?.length ?? 0) ? 'hand' : 'deck', payWith ?? []);
+  const hand = (payWith ?? []).filter((c) => p.hand.includes(c));
+  const deck = (payWith ?? []).filter((c) => !p.hand.includes(c));
+  for (const c of deck) { p.plotDeck = p.plotDeck.filter((x) => x !== c); s.cards[c].zone = 'hand'; p.hand.push(c); }
+  for (const c of payWith ?? []) discardCard(s, c);
+  noteCostDiscard(s, pl, [{ kind: 'plot', place: 'hand', cards: hand }, { kind: 'plot', place: 'deck', cards: deck }]);
 }
 registerPlots({
   'nevermore': {
@@ -597,46 +793,87 @@ registerHooks({
   },
 });
 
-// ================================================================== Partition
 
+// ================================================================== Partition
+// On your own turn, with a duplicate of a Huge Place in play in your hand: take the duplicate over
+// automatically (mode 'takeover': it goes on an open arrow you name) or attack it to control from your
+// hand (mode 'attack': `helper` is the attacking Group, a real Attack to Control that may fail). Once the
+// duplicate is in play the Place is split: two non-Huge Places, each with half the printed Power (rounded
+// up), each with +10 attacking the other (game.ts attackStrength). Agents cards work normally against
+// either (they share the card). The halves are reunited with the `reunitePartition` action (game.ts),
+// once one controls the other. Names given to the halves have no effect on play (Card FAQ), so the
+// engine does not ask for any.
+
+const partitionOriginal = (s: GameState, t: string) => Object.values(s.cards).find((c) => c.zone === 'structure' && c.cardId === s.cards[t].cardId && c.iid !== t)?.iid;
+function splitPlace(s: GameState, pl: string, t: string, orig: string) {
+  const half = Math.ceil((def(s, t).power ?? 0) / 2);
+  for (const iid of [t, orig]) {
+    s.cards[iid].mods = [
+      ...s.cards[iid].mods.filter((m) => m.source !== 'partition'),
+      { source: 'partition', kind: 'setPower', value: half, lower: true, until: 'permanent' },
+      { source: 'partition', kind: 'removeAttr', attr: 'Huge', until: 'permanent' },
+    ];
+    s.cards[iid].data = { ...s.cards[iid].data, partitionPair: iid === t ? orig : t };
+  }
+  log(s, `Partition splits ${cardName(s, t)} in two: each half has ${half} Power and is no longer Huge.`, pl);
+}
 registerPlots({
-  // RULING: the printed card lets you bring your duplicate Huge Place into play either by an automatic
-  // takeover or by a full Attack to Control; this engine implements only the uncontested "automatic
-  // takeover" path (an ordinary attack that could fail would need to reuse the whole attack subsystem for
-  // one rare card). The Place still ends up split exactly as printed once it is in play.
   'partition': {
     timing: ['anytime'],
-    needs: { target: 'handGroup' },
-    check(s, pl, play) {
-      if (s.phase !== 'main' || activePlayer(s).id !== pl || s.attack) return 'Play this on your own turn, outside an attack.';
+    needs: { target: 'handGroup', mode: ['takeover', 'attack'], helper: true },
+    check(s, pl, play, ctx) {
+      if (ctx || s.attack || s.phase !== 'main' || activePlayer(s).id !== pl) return 'Play this on your own turn, outside an attack.';
       const t = play.target;
       if (!t || !inHand(s, pl, t) || def(s, t).subtype !== 'Place' || !hasAttr(s, t, 'Huge')) return 'Choose a Huge Place card from your hand.';
-      if (!Object.values(s.cards).some((c) => c.zone === 'structure' && c.cardId === s.cards[t].cardId)) return 'No copy of that Place is in play to partition.';
-      const spot = structureCards(s, pl).flatMap((m) => openArrows(s, m).map((side) => ({ onto: m, side })))[0];
-      if (!spot) return 'You have no open arrow to place it on.';
+      if (!partitionOriginal(s, t)) return 'No copy of that Place is in play to partition.';
+      if ((play.mode ?? 'takeover') === 'attack') {
+        const a = play.helper;
+        if (!a) return 'Choose the Group of yours that attacks to control it.';
+        return validateAttack(s, pl, { type: 'attack', attackType: 'control', attacker: a, target: t }, { partitionOf: partitionOriginal(s, t) });
+      }
+      const onto = play.helper;
+      if (anyHook(s, (h, self) => !!h.forbidAttack?.(s, self, undefined, t, 'takeover', pl))) return 'A card in play forbids that automatic takeover.';
+      if (!partitionSpots(s, pl, t).length) return 'You have no open arrow to place it on.';
+      if (onto && !partitionSpots(s, pl, t).some((x) => x.onto === onto)) return `${cardName(s, onto)} has no open arrow for it.`;
       return null;
     },
     apply() {},
     resolve(s, pl, play) {
       const t = play.target!;
-      if (!inHand(s, pl, t)) return;
-      const cardId = s.cards[t].cardId;
-      const orig = Object.values(s.cards).find((c) => c.zone === 'structure' && c.cardId === cardId)?.iid;
-      const spot = structureCards(s, pl).flatMap((m) => openArrows(s, m).map((side) => ({ onto: m, side })))[0];
-      if (!orig || !spot) return;
+      const orig = partitionOriginal(s, t);
+      if (!inHand(s, pl, t) || !orig) return;
+      if ((play.mode ?? 'takeover') === 'attack') {
+        // A real Attack to Control from hand; the split happens if it succeeds (the hook below).
+        s.cards[play.card].linkedTo = `attack:${s.attackCounter + 1}`;
+        s.cards[play.card].data = { ...s.cards[play.card].data, partition: t, orig };
+        startAttack(s, pl, { type: 'attack', attackType: 'control', attacker: play.helper!, target: t }, { partitionOf: orig });
+        return;
+      }
+      const spots = partitionSpots(s, pl, t);
+      const spot = spots.find((x) => x.onto === play.helper) ?? spots[0];
+      if (!spot) return;
       placeGroup(s, t, pl, spot.onto, spot.side);
       s.cards[t].tokens = 0;
-      log(s, `${player(s, pl).name} plays a duplicate ${cardName(s, t)} into play: Partition splits it.`, pl);
-      const printed = def(s, t).power ?? 0;
-      const half = Math.ceil(printed / 2);
-      for (const iid of [t, orig]) {
-        s.cards[iid].mods = [
-          ...s.cards[iid].mods.filter((m) => m.source !== 'partition'),
-          { source: 'partition', kind: 'setPower', value: half, lower: true, until: 'permanent' },
-          { source: 'partition', kind: 'removeAttr', attr: 'Huge', until: 'permanent' },
-        ];
-        s.cards[iid].data = { ...s.cards[iid].data, partitionPair: iid === t ? orig : t };
+      s.cards[t].capturedTurn = s.turn;
+      log(s, `${player(s, pl).name} takes over a duplicate ${cardName(s, t)} automatically.`, pl);
+      splitPlace(s, pl, t, orig);
+    },
+  },
+});
+function partitionSpots(s: GameState, pl: string, t: string): { onto: string; side: Side }[] {
+  return structureCards(s, pl).filter((m) => !isParalyzed(s, m)).flatMap((m) => openArrows(s, m).map((side) => ({ onto: m, side })))
+    .filter((x) => !masterProblem(s, t, x.onto));
+}
+registerHooks({
+  'partition': {
+    onAttackEnd(s, self, ctx) {
+      if (s.cards[self].linkedTo !== `attack:${ctx.id}`) return;
+      const d = s.cards[self].data as { partition?: string; orig?: string } | undefined;
+      const t = d?.partition, orig = d?.orig;
+      if (ctx.result === 'success' && !attackCancelled(ctx) && t && orig && s.cards[t]?.zone === 'structure' && s.cards[orig]?.zone === 'structure') {
+        splitPlace(s, ctx.attackerPlayer, t, orig);
       }
+      discardCard(s, self);
     },
   },
 });

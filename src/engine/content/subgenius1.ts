@@ -1,5 +1,6 @@
 // SubGenius pack, batch "subgenius1": Bobbies through Yetis (24 Group/Organization cards).
 // See docs/CARD_SCRIPTING.md, "Expansions", and docs/EXPANSIONS.md.
+import { noteCostDiscard } from '../game';
 import type { AttackCtx, GameEvent, GameState, PlotEffect } from '../types';
 import { registerAbilities } from '../abilities';
 import { registerHooks, registerChoice } from '../hooks';
@@ -336,6 +337,7 @@ registerHooks({
       },
       apply(s, pl, self, p) {
         discardCard(s, p.target!);
+        noteCostDiscard(s, pl, [{ kind: 'plot', place: 'hand', cards: [p.target!] }]);
         s.cards[self].tokens++;
         log(s, `${player(s, pl).name} discards a Plot to give the Rogue SubGenii an Action token.`, pl);
       },

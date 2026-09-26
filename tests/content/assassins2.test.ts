@@ -416,7 +416,7 @@ describe('X-Ray Specs', () => {
     const xr = give(s, 'p1', 'x-ray-specs', { resource: true });
     const ama = under(s, 'p1', 'a-m-a');
     s = act(s, 'p1', { type: 'link', resource: xr, to: ama });
-    s = use(s, 'p1', xr, 'peek', { mode: 'plot' });
+    s = use(s, 'p1', xr, 'peek', { targets: ['p1:plot'] });
     expect(s.cards[ama].tokens).toBe(0);
   });
   it('only links to a Science Group, and cannot be used without an Action token', () => {
@@ -427,7 +427,7 @@ describe('X-Ray Specs', () => {
     const ama = under(s, 'p1', 'a-m-a', 'RIGHT');
     s = act(s, 'p1', { type: 'link', resource: xr, to: ama });
     s.cards[ama].tokens = 0;
-    expect(() => use(s, 'p1', xr, 'peek', { mode: 'plot' })).toThrow(/Action token/);
+    expect(() => use(s, 'p1', xr, 'peek', { targets: ['p1:plot'] })).toThrow(/Action token/);
   });
 });
 
@@ -495,6 +495,10 @@ describe('Flesh-Eating Bacteria', () => {
     s = act(s, 'p1', { type: 'aid', group: booster });
     s = finish(s, [1, 1]);
     expect(s.cards[place].zone).toBe('destroyed');
+    // The player chooses: spend a Science action (which Group's), or let the card go.
+    expect(s.prompt?.choice?.key).toBe('feb-return');
+    expect(act(s, 'p1', { type: 'choose', ids: ['no'] }).cards[card].zone).toBe('discard');
+    s = act(s, 'p1', { type: 'choose', ids: [sci] });
     expect(s.players.find((p) => p.id === 'p1')!.hand).toContain(card);
     expect(s.cards[sci].tokens).toBe(0);
   });

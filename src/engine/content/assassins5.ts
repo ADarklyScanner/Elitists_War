@@ -1,5 +1,5 @@
 // Assassins pack, batch 5. See docs/CARD_SCRIPTING.md ("Expansions") and docs/EXPANSIONS.md.
-import type { Alignment, GameState, PlotPlay, Side } from '../types';
+import type { Alignment, AttackCtx, GameState, PlotPlay, Side } from '../types';
 import { registerPlots } from '../plotTypes';
 import { anyHook, hooksOf, registerChoice, registerHooks } from '../hooks';
 import { cardName, def, OPPOSITE } from '../cards';
@@ -7,7 +7,7 @@ import { type Match, matches } from '../abilities';
 import { alignments, attributes, power } from '../stats';
 import { openArrows, puppets, sideOf, subtree } from '../geometry';
 import {
-  askChoice, attackCancelled, canEnterPlay, discardCard, exposeCards, giveToken, isCancelled, log, moveSubtree, player,
+  askChoice, attackCancelled, canEnterPlay, discardCard, exposeCards, giveToken, isCancelled, log, moveSubtree, placeGroup, player,
   playResourceCard, startCardAttack, zappedPlayer,
 } from '../game';
 import { freezePlot, paralysisPlot, registerZap } from './families';
@@ -71,12 +71,13 @@ registerPlots({
 
 // ---------------------------------------------------------------- Regi$tered Trademark
 //
-// RULING: the printed rule polices what players say out loud (table talk) about the linked card. This
-// engine has no chat channel to detect a naming slip, so it cannot referee that by itself. The closest
-// faithful version keeps the honor system the paper game already relies on: it stays linked to the
-// chosen Group for good, and either player may record the two penalties the card names — admitting a
-// slip (discarding a Plot) or catching the Group's owner slipping first (they hand over their top
-// Plot) — through the `nameSlip` / `catchNameSlip` engine actions, whenever they judge one happened.
+// RULING: the printed rule polices what players say (in play or in table talk) about the linked Group;
+// software cannot hear table talk, so it cannot referee a slip by itself. The card keeps the honour
+// system the paper game relies on: it stays linked to the chosen Group for good (not even its Group
+// leaving play frees it while the card is there), and the two penalties it names are engine actions any
+// player may take whenever a slip happens: `nameSlip` (you slipped: discard a Plot from hand or the top
+// of your deck) and `catchNameSlip` (the Group's controller slipped and you pointed it out first: he
+// gives you his top undrawn Plot). The interface offers both on the linked Group, and the log says so.
 
 registerPlots({
   'regi-tered-trademark': {
@@ -89,7 +90,7 @@ registerPlots({
     apply: () => undefined,
     resolve(s, pl, play) {
       s.cards[play.card].linkedTo = play.target;
-      log(s, `${cardName(s, play.card)} is linked to ${cardName(s, play.target!)}: it must always be called by its full name.`, pl);
+      log(s, `${cardName(s, play.card)} is linked to ${cardName(s, play.target!)}: from now on everyone must call it "${def(s, play.target!).name}", in full, whenever they mention it. Honour system: a player who slips discards a Plot (use "I slipped" on the card); if its controller slips and a rival points it out first, he gives that rival his top Plot (use "Caught a slip").`, pl);
     },
   },
 });
@@ -177,40 +178,56 @@ registerHooks({
 });
 
 // ---------------------------------------------------------------- Strange Bedfellows
-//
-// RULING: "Alignments changed by this card do not count toward any Goal" needs the change itself to
-// disappear when a Goal is evaluated, which the engine's plain alignment modifiers cannot do (only
-// numeric mods respect `countsForGoals`). So this card stays linked to the Group for as long as the
-// reversal lasts and swaps its alignments through the `alignmentMod` hook instead, which does see the
-// `goals` flag. The engine also only tracks "for one action" as coarsely as it already does for similar
-// defensive bonuses: for the rest of the current turn, whether played during an attack or not. The
-// card's second timing option (played during Action-token placement) is not offered: that phase runs
-// automatically in this engine with no Plot response window.
+// At any time, reverse any or all alignments of one Group you control (`alignment` for one, `mode` a
+// comma-separated list for several, neither for all) for one action: played during an attack (or with its
+// declaration) it lasts for that attack; played at any other time it lasts for the next attack made by
+// anyone (the next action whose outcome alignments decide), and in any case no later than the end of the
+// turn. Played while Action tokens are being placed (the response window before a player's tokens are
+// placed), it lasts only while they are placed. Alignments it changes do not count toward any Goal: the
+// card stays linked while the reversal lasts and swaps the alignments through `alignmentMod`, which is
+// told when a Goal is being checked.
 
 function reversibleAlignments(s: GameState, iid: string): Alignment[] {
   return alignments(s, iid).filter((a) => OPPOSITE[a]);
 }
-function reverseAlignments(s: GameState, pl: string, play: PlotPlay) {
-  const rev = play.alignment ? [play.alignment] : reversibleAlignments(s, play.target!);
+function wantedReversal(s: GameState, play: PlotPlay): Alignment[] | string {
+  const rev = reversibleAlignments(s, play.target!);
+  const want = play.alignment ? [play.alignment] : play.mode ? (play.mode.split(',').map((x) => x.trim()) as Alignment[]) : rev;
+  if (!want.length || new Set(want).size !== want.length) return `Choose which of ${cardName(s, play.target!)}'s alignments to reverse.`;
+  const bad = want.find((a) => !rev.includes(a));
+  return bad ? `${cardName(s, play.target!)} has no ${bad} alignment that can be reversed (it has ${rev.join(', ') || 'none'}).` : want;
+}
+function reverseAlignments(s: GameState, pl: string, play: PlotPlay, ctx?: AttackCtx) {
+  const rev = wantedReversal(s, play) as Alignment[];
+  const tokens = s.window?.kind === 'event' && s.window.event?.type === 'tokenPlacement';
+  const scope = ctx ? 'attack' : tokens || s.phase === 'beginning' ? 'tokens' : 'next';
   s.cards[play.card].linkedTo = play.target;
-  s.cards[play.card].data = { turn: s.turn, rev };
-  log(s, `${cardName(s, play.target!)}'s alignment${rev.length > 1 ? 's are' : ' is'} reversed (${rev.join(', ')}) for the rest of the turn.`, pl);
+  s.cards[play.card].data = { turn: s.turn, rev, scope, attack: ctx?.id };
+  const how = scope === 'attack' ? 'for this attack' : scope === 'tokens' ? 'while Action tokens are placed' : 'for the next action';
+  log(s, `${cardName(s, play.target!)}'s alignment${rev.length > 1 ? 's are' : ' is'} reversed (${rev.join(', ')}) ${how}.`, pl);
 }
 
 registerPlots({
   'strange-bedfellows': {
-    timing: ['anytime', 'declare', 'attack'],
+    timing: ['anytime', 'declare', 'attack', 'event'],
+    events: ['tokenPlacement'],
     needs: { target: 'ownGroup', alignment: true },
     check(s, pl, play) {
       if (!own(s, pl, play.target) || !isGroup(s, play.target)) return 'Choose a Group you control.';
-      const rev = reversibleAlignments(s, play.target!);
-      if (!rev.length) return `${cardName(s, play.target!)} has no alignment that can be reversed.`;
-      if (play.alignment && !rev.includes(play.alignment)) return `Choose one of ${cardName(s, play.target!)}'s alignments (${rev.join(', ')}), or none to reverse all of them.`;
-      return null;
+      if (!reversibleAlignments(s, play.target!).length) return `${cardName(s, play.target!)} has no alignment that can be reversed.`;
+      const want = wantedReversal(s, play);
+      return typeof want === 'string' ? want : null;
     },
-    apply(s, pl, play, ctx) { if (ctx) reverseAlignments(s, pl, play); },
-    resolve(s, pl, play) { reverseAlignments(s, pl, play); },
-    linkLegal: (s, plot, group) => (s.cards[group] && s.cards[plot].data?.turn === s.turn ? 'ok' : 'discard'),
+    apply(s, pl, play, ctx) {
+      if (ctx) reverseAlignments(s, pl, play, ctx);
+      else s.cards[play.card].data = { tokens: s.window?.kind === 'event' && s.window.event?.type === 'tokenPlacement' };
+    },
+    resolve(s, pl, play) {
+      const tokens = !!s.cards[play.card].data?.tokens;
+      reverseAlignments(s, pl, play);
+      if (tokens) s.cards[play.card].data = { ...s.cards[play.card].data, scope: 'tokens' };
+    },
+    linkLegal: (s, plot, group) => (s.cards[group] && s.cards[group].zone === 'structure' && s.cards[plot].data?.turn === s.turn ? 'ok' : 'discard'),
   },
 });
 registerHooks({
@@ -220,11 +237,24 @@ registerHooks({
       const rev = (s.cards[self].data as { rev?: Alignment[] } | undefined)?.rev ?? [];
       let out = [...current];
       for (const a of rev) {
+        if (!out.includes(a)) continue;
         const opp = OPPOSITE[a]!;
-        out = out.filter((x) => x !== opp);
-        if (!out.includes(opp)) out.push(opp);
+        out = out.filter((x) => x !== a && x !== opp);
+        out.push(opp);
       }
       return out;
+    },
+    // "For only one action": the next attack, if it was played outside one.
+    onAttackStart(s, self, ctx) {
+      const d = s.cards[self].data;
+      if (d?.scope === 'next') s.cards[self].data = { ...d, scope: 'attack', attack: ctx.id };
+    },
+    onAttackEnd(s, self, ctx) {
+      const d = s.cards[self].data;
+      if (d?.scope === 'attack' && d.attack === ctx.id && s.cards[self].zone === 'table') discardCard(s, self);
+    },
+    onTokensPlaced(s, self) {
+      if (s.cards[self].data?.scope === 'tokens' && s.cards[self].zone === 'table') discardCard(s, self);
     },
   },
 });
@@ -367,7 +397,9 @@ registerHooks({
       if (ctx.instantCard !== self) return;
       if (!attackCancelled(ctx) && ctx.result === 'failure' && s.cards[ctx.target]?.zone === 'structure') {
         const t = s.cards[ctx.target];
+        // His printed Power is raised to 4; he gains Government and loses Corporate if he had it.
         t.mods.push({ source: self, kind: 'setPower', value: 4, until: 'permanent' });
+        t.mods.push({ source: self, kind: 'removeAlign', align: 'Corporate', until: 'permanent' });
         t.mods.push({ source: self, kind: 'addAlign', align: 'Government', until: 'permanent' });
         t.data = { ...t.data, chiefJustice: true };
         log(s, `${cardName(s, ctx.target)} becomes Chief Justice.`, ctx.attackerPlayer);
@@ -424,15 +456,18 @@ function fluImmune(s: GameState, iid: string, flu: string): boolean {
 }
 function infectWithFlu(s: GameState, pl: string, flu: string, target: string) {
   s.cards[flu].linkedTo = target;
+  s.cards[flu].data = { ...s.cards[flu].data, infectedTurn: s.turn };
   s.cards[target].tokens = 0;
   s.cards[target].mods.push({ source: flu, kind: 'noTokens', until: 'endOfTurn' });
   log(s, `${cardName(s, target)} catches the Flu from ${cardName(s, flu)} and loses its Action token.`, pl);
 }
 registerHooks({
   'the-irish-flu': {
-    // RULING: "the beginning of the next turn" is read as the infected Personality's own owner's next
-    // turn, matching this engine's per-controller turn-start hook (the wording does not say whose turn).
-    onTurnStart(s, self) {
+    // "The Flu moves each turn": at the beginning of the next turn (whoever's it is) after the victim
+    // caught it, the victim becomes immune and its controller passes the Flu on.
+    onEvent(s, self, e) {
+      if (e.type !== 'turnStart' || s.cards[self].zone !== 'table') return;
+      if ((s.cards[self].data?.infectedTurn as number | undefined ?? s.turn) >= s.turn) return;
       const victim = s.cards[self].linkedTo;
       if (!victim || !inPlay(s, victim)) { discardCard(s, self); return; }
       s.cards[victim].data = { ...s.cards[victim].data, immuneFlu: [...((s.cards[victim].data as { immuneFlu?: string[] } | undefined)?.immuneFlu ?? []), self] };
@@ -458,11 +493,10 @@ registerChoice('irish-flu-pass', {
 
 // ---------------------------------------------------------------- This Was Only A Test
 //
-// RULING: "cancelled" is modelled with the same mechanism the engine already uses for an Instant attack
-// made illegal mid-flight (the Plot returns to its owner's hand, exposed): a small, generic addition to
-// `attackIllegal`/`checkPlot` (see game.ts) lets a card mark a specific Instant attack "stopped" and
-// bench that Plot card until its owner has completed one more of their own turns, instead of only
-// reacting to hook-based immunity as the base engine did before.
+// Played when a Disaster is played (Instant or not): that Disaster is cancelled and goes back to the
+// hand of whoever played it, exposed, and may not be used again until after the end of its owner's next
+// turn. The engine marks the Disaster's attack stopped (game.ts attackIllegal), which cancels it and
+// returns its card exactly as for any attack by a card made illegal, and benches the card (checkPlot).
 
 registerPlots({
   'this-was-only-a-test': {
@@ -531,11 +565,12 @@ registerPlots({
 });
 
 // ---------------------------------------------------------------- You Are What You Eat
-//
-// RULING: the card lets the player choose to rehang each former puppet, discard it, or return it to
-// hand. This engine has no generic three-way choice for that, so puppets are rehung automatically where
-// an arrow is open (matching how a normal capture already handles overflow) and sent to their owner's
-// hand otherwise; the "or discard" option is not offered separately.
+// Right after one of your Groups (not your Illuminati) destroys a Group with its attack: the attacker
+// is discarded (it counts as destroyed, but for no Goal: it goes to the destroyed pile and nobody is
+// credited with it) and the destroyed Group, no longer destroyed, takes its place in your Power
+// Structure. Each of the attacker's former puppets (with its own puppets) is then the player's choice:
+// placed on any open arrow of the new card, discarded, or returned to hand. While he decides they wait
+// set aside, out of play.
 
 registerPlots({
   'you-are-what-you-eat': {
@@ -548,6 +583,7 @@ registerPlots({
       if (!attacker || !s.cards[attacker] || s.cards[attacker].zone !== 'structure' || s.cards[attacker].controller !== pl || def(s, attacker).type !== 'Group') {
         return 'Only when a Group of yours (not your Illuminati) did the destroying.';
       }
+      if (!e.card || s.cards[e.card]?.zone !== 'destroyed') return 'That Group is no longer in the destroyed pile.';
       return null;
     },
     apply(s, _pl, play) {
@@ -560,20 +596,67 @@ registerPlots({
       const { attacker, victim } = data;
       const master = s.cards[attacker].master!;
       const side = sideOf(s, attacker)!;
-      const kids = puppets(s, attacker); // captured before the attacker leaves play
-      discardCard(s, attacker); // it counts as destroyed, but never toward a Goal: discardCard gives no destroy credit
-      log(s, `${cardName(s, attacker)} is discarded, in place of what it destroyed.`, pl);
-      moveSubtree(s, victim, pl, master, side, 'hand');
+      // Its former puppets wait, set aside, while the swap is made.
+      const kids = puppets(s, attacker).map((k) => ({ root: k, cards: subtree(s, k) }));
+      for (const k of kids) for (const g of k.cards) Object.assign(s.cards[g], { zone: 'removed', setAside: true });
+      eatenAttacker(s, attacker);
+      log(s, `${cardName(s, attacker)} is discarded: it counts as destroyed, but not for any Goal.`, pl);
+      for (const x of s.players) x.destroyedCredit = x.destroyedCredit.filter((d) => d !== victim);
+      Object.assign(s.cards[victim], { killed: false, tokens: 0 });
+      placeGroup(s, victim, pl, master, side);
       log(s, `${cardName(s, victim)} takes ${cardName(s, attacker)}'s place.`, pl);
-      // Former puppets of the attacker: rehung on the new card where there is room, else back to hand.
-      for (const k of kids) {
-        const open = openArrows(s, victim);
-        if (open.length) { moveSubtree(s, k, pl, victim, open[0], 'hand'); continue; }
-        for (const g of subtree(s, k)) {
-          Object.assign(s.cards[g], { zone: 'hand' as const, controller: undefined, master: undefined, x: undefined, y: undefined, side: undefined });
-          player(s, s.cards[g].owner).hand.push(g);
-        }
-      }
+      askPuppet(s, pl, victim, kids);
     },
   },
+});
+/** The attacker "is considered destroyed but does not count for any Goals": destroyed pile, no credit. */
+function eatenAttacker(s: GameState, attacker: string) {
+  for (const other of Object.values(s.cards)) {
+    if (other.linkedTo !== attacker) continue;
+    if (other.zone === 'resources') Object.assign(other, { zone: 'destroyed', controller: undefined, linkedTo: undefined, tokens: 0 });
+    else discardCard(s, other.iid);
+  }
+  Object.assign(s.cards[attacker], { zone: 'destroyed', controller: undefined, master: undefined, x: undefined, y: undefined, side: undefined, tokens: 0, mods: [], devastated: false });
+}
+type Parked = { root: string; cards: string[] };
+function askPuppet(s: GameState, pl: string, onto: string, left: Parked[]) {
+  const next = left[0];
+  if (!next) return;
+  const sides = s.cards[onto]?.zone === 'structure' ? openArrows(s, onto) : [];
+  askChoice(s, pl, {
+    key: 'yawye-puppet', min: 1, max: 1, data: { onto, left },
+    question: `You Are What You Eat: ${cardName(s, next.root)} was a puppet of the eaten Group. Place it on the new card, discard it, or take it back into your hand?`,
+    options: [
+      ...sides.map((sd) => ({ id: `side:${sd}`, label: `Place it on the ${sd.toLowerCase()} arrow of ${cardName(s, onto)}` })),
+      { id: 'discard', label: 'Discard it' },
+      { id: 'hand', label: 'Return it to your hand' },
+    ],
+  });
+}
+registerChoice('yawye-puppet', {
+  resolve(s, pl, picked, data) {
+    const onto = data.onto as string;
+    const [next, ...rest] = data.left as Parked[];
+    // Back in play for a moment, exactly as it was, so that it can move (or leave) with its own puppets.
+    for (const g of next.cards) Object.assign(s.cards[g], { zone: 'structure', setAside: undefined });
+    const choice = picked[0];
+    const side = choice.startsWith('side:') ? (choice.slice(5) as Side) : undefined;
+    if (side && s.cards[onto]?.zone === 'structure' && openArrows(s, onto, new Set(next.cards)).includes(side)) {
+      moveSubtree(s, next.root, pl, onto, side, 'hand');
+      log(s, `${cardName(s, next.root)} is placed on ${cardName(s, onto)}.`, pl);
+    } else {
+      const toHand = choice !== 'discard';
+      for (const g of next.cards) {
+        const c = s.cards[g];
+        Object.assign(c, { zone: 'hand', controller: undefined, master: undefined, x: undefined, y: undefined, side: undefined, tokens: 0 });
+        player(s, c.owner).hand.push(g);
+      }
+      // Only the puppet itself is discarded; its own puppets go back to hand, as when any Group leaves play.
+      if (!toHand) discardCard(s, next.root);
+      log(s, `${cardName(s, next.root)} is ${toHand ? 'returned to hand' : 'discarded'}.`, pl);
+    }
+    askPuppet(s, pl, onto, rest);
+  },
+  // The computer keeps its puppets in play where it can, and otherwise takes them back.
+  ai: (_s, _pl, options) => [options[0].id.startsWith('side:') ? options[0].id : 'hand'],
 });

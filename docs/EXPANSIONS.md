@@ -130,6 +130,57 @@ Sources:
   destroyed Group like any other; the mark only matters to cards that ask for it.
 - An absolute ban on attacking a Group also stops Instant attacks on it (RFAQ): unchanged
   (`forbidAttack` hooks apply to all attacks).
+- A Place that cannot be destroyed (an ability or a `preventDestroy` card) is at most Devastated by a
+  Disaster. An attack by a card (Instant or not) made illegal before it resolves returns its card to its
+  player's hand, exposed (This Was Only A Test works on non-Instant Disasters too).
+
+## Assassins cards as printed: rules decisions
+
+Every Assassins card is played as printed and as the AFAQ/CFAQ word it; where a card gives a player a
+choice, the engine asks him (`askChoice`), and the computer players have a default answer.
+
+- **Go Fish** (AFAQ errata): anyone who received a Plot card from a rival, or was forced to show a rival a
+  hidden Plot in his hand or deck, is immune to Go Fish until the end of his next turn. The engine records
+  it wherever it happens (deals, Arms Dealers, Go Fish itself, stolen or handed-over Plots, looks at hands
+  and Plot decks, exposures forced by cards). Showing a card by choice (the `showCard` action, a Goal shown
+  for a claim, Arise!) does not count. Only hidden copies of the named Plot are taken (CFAQ).
+- **Go, Lemmings, Go!** answers every discard paid for a Plot or a special ability, base-game cards
+  included (Hoax, Secrets Man Was Not Meant to Know, the 18½ Minute Gap, Air Magic, Fnord, The Big Sellout,
+  Embezzlement, March on Washington, the Flying Saucer, "Requires … Discards" costs and the packs' own).
+  Extra discards from a hand are chosen by the victim.
+- **Antitrust Legislation** (AFAQ errata): when played, each player in turn (its player first) may move
+  Groups before it takes effect, discarding a Plot (hand or top of deck) per move or three for a complete
+  reorganization; the computer players move nothing. Played during an attack, this waits until the attack
+  is over. Then nested Corporate Groups lose their tokens at once and get no new ones. Decision: whether
+  their abilities are off is judged from the Group's own alignments (printed, and as Plots and modifiers on
+  it changed them), because other cards' ongoing alignment changes can themselves depend on which
+  abilities are on.
+- **Australia**: four times its printed Resistance at the weekend or after 5 p.m. in its controller's local
+  time (the time zone the interface reports, else the clock of the device running the game), read at the
+  start of each action and recorded on the card, so an attack keeps the value it began with. National
+  holidays cannot be known by the software and are not applied.
+- **Fickle Finger of Fate**: the victim is asked, whenever his Illuminati attacks while the bonus is
+  unused that turn, whether this is the attack that gets the +10.
+- **Grave Robbers** stands in for a Resource takeover the player is entitled to: his automatic takeover
+  (played right after his start-of-turn draws) or his once-per-turn Resource play (an Illuminati action).
+  He picks the Magic Groups that pay for a Magic Artifact.
+- **Nutrition Nazis** may be played once in a whole game as a Plot (the card says "once per game");
+  while linked, no Nutrition Nazis can come into play as a Group (CFAQ).
+- **Partition**: an automatic takeover of the duplicate, or a real Attack to Control from hand (the split
+  follows a success). Reuniting needs one half to control the other; duplicate links are the owner's choice.
+- **Near Miss** answers any destruction of a Place (CFAQ): after the roll of an attack, or in the response
+  window of a destruction by other means (the Place comes back Devastated where it was, with its puppets
+  and linked cards). It does nothing for a Place that cannot be destroyed anyway.
+- **Society of Assassins**: when its Fanatic Group attacks or is attacked by a Fanatic Group, its player
+  may make the two Fanatic alignments the same one for that attack (either player may: CFAQ), and a
+  defender may make its Fanatic the same as its master's.
+- **Strange Bedfellows**: played outside an attack, the reversal lasts for the next attack; during one,
+  for that attack; during the placing of Action tokens, only while they are placed.
+- **Copy Shops** may copy a Goal, which counts only if it wins at once (declared then and there, like a
+  Goal card); copies leave the game when used up or nullified.
+- **Science Alarmists**: the automatic takeover asks their controller for permission.
+- **Regi$tered Trademark**: table talk cannot be refereed by software; the two penalties are actions any
+  player takes on the honour system, offered on the linked card in the interface.
 
 ## The SubGenius game (stand-alone)
 

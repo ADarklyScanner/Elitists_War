@@ -463,7 +463,7 @@ function newGame(illuminati: string, quick: boolean, basicGoal?: number) {
   const s = createGame({
     seed,
     players: [
-      { id: 'p1', name: 'You', isAI: false, deck: randomDeck(seed, packs.subgeniusRules ? CHURCH : illuminati, { sets }) },
+      { id: 'p1', name: 'You', isAI: false, utcOffset: -new Date().getTimezoneOffset(), deck: randomDeck(seed, packs.subgeniusRules ? CHURCH : illuminati, { sets }) },
       ...bots.map((b, i) => ({ id: `p${i + 2}`, name: b.name, isAI: true, aiLevel: b.level, aiStyle: b.style, aiStyleData: b.data, deck: randomDeck(seed + i + 1, ills[i], { sets }) })),
     ],
     settings: { houseRules: quick ? ['quickGame'] : [], victoryReminder: ui.help !== 'off', ...(basicGoal ? { basicGoal } : {}), ...packs },
@@ -592,6 +592,8 @@ function computeGuide(s: GameState): Guide {
   mark(hand, (h) => {
     const d = def(s, h);
     if (d.type === 'Plot') return plotOptions(s, ui.me, h).length > 0;
+    // A Group card that may also be played like a Plot (Nutrition Nazis).
+    if (d.type === 'Group' && PLOTS[d.id] && plotOptions(s, ui.me, h).length > 0) return true;
     if (d.type === 'Illuminati') return !agentProblem(s, ui.me, h);
     if (d.type === 'Resource') return !s.turnFlags.resourcePlayed && s.cards[me.illuminati].tokens > 0 && canEnterPlay(s, h, ui.me);
     return false; // Groups in hand come into play by takeover or an Attack to Control from the board
@@ -1720,7 +1722,40 @@ function renderInspect(s: GameState): string {
     ${d.subtype === 'NWO' && NWO_EFFECTS[d.id] ? '<p class="small muted">In effect for everyone while on the table.</p>' : ''}
     ${linkedPlots.length ? `<div class="label">Plots linked here</div><div class="opts">${linkedPlots.map((p) => `<button data-inspect="${p}">${esc(cardName(s, p))}</button>`).join('')}</div>` : ''}
     ${linkedRes.length ? `<div class="label">Resources linked here</div><div class="opts">${linkedRes.map((r) => `<button data-inspect="${r}">${esc(cardName(s, r))}</button>`).join('')}</div>` : ''}
+    ${cardActions(s, iid)}
   </div>`;
+}
+
+/**
+ * Engine actions that belong to a card rather than to a step of the turn (Assassins pack): the honour-
+ * system penalties of a Regi$tered Trademark, reuniting a Place split by Partition, removing Zaps and
+ * freeing a Paralyzed Group. Offered on the card when they are legal right now.
+ */
+function cardActions(s: GameState, iid: string): string {
+  const out: { label: string; action: Action; note?: string }[] = [];
+  const c = s.cards[iid];
+  const me = player(s, ui.me);
+  const marks = Object.values(s.cards).filter((x) => x.cardId === 'regi-tered-trademark' && x.zone === 'table' && !!x.linkedTo && (x.linkedTo === iid || x.iid === iid));
+  for (const m of marks) {
+    const g = m.linkedTo!;
+    const name = def(s, g).name;
+    out.push({ label: `I slipped naming "${name}": discard the top card of my Plot deck`, action: { type: 'nameSlip', card: m.iid } });
+    for (const p of me.hand.filter((h) => def(s, h).type === 'Plot')) out.push({ label: `I slipped naming "${name}": discard ${cardName(s, p)} from my hand`, action: { type: 'nameSlip', card: m.iid, discard: p } });
+    const owner = s.cards[g]?.controller;
+    if (owner && owner !== ui.me) out.push({ label: `${player(s, owner).name} slipped naming "${name}" and I said so first: take their top Plot`, action: { type: 'catchNameSlip', card: m.iid } });
+  }
+  if (c.data?.partitionPair) out.push({ label: 'Reunite the two halves of this Place (one controls the other)', action: { type: 'reunitePartition', group: iid } });
+  if (def(s, iid).type === 'Illuminati' && c.controller) out.push({ label: `Remove every Zap from ${player(s, c.controller).name} (an action of your Illuminati)`, action: { type: 'removeZaps', player: c.controller } });
+  if (c.zone === 'structure') {
+    for (const payWith of [c.master, me.illuminati].filter((x): x is string => !!x)) {
+      out.push({ label: `Free it from Paralysis with the action of ${cardName(s, payWith)}`, action: { type: 'freeGroup', group: iid, payWith } });
+    }
+  }
+  const ok = out.filter((o) => legal(s, ui.me, o.action));
+  if (!ok.length) return marks.length ? '<p class="small muted">Regi$tered Trademark: everyone must call the linked Group by its full printed name. The game cannot hear table talk, so slips are reported on the honour system with the buttons that appear here.</p>' : '';
+  const actions = ok.map((o) => o.action);
+  (window as unknown as { __cardActs: Action[] }).__cardActs = actions;
+  return `<div class="label">Card actions</div>${marks.length ? '<p class="small muted">Regi$tered Trademark works on the honour system: the game cannot hear table talk, so report slips here.</p>' : ''}<div class="opts">${ok.map((o, i) => `<button data-card-act="${i}">${esc(o.label)}</button>`).join('')}</div>`;
 }
 
 // ------------------------------------------------------------------ deals, trades and gifts (R040)
@@ -2082,7 +2117,7 @@ function onHandCard(iid: string) {
     ui.sel = { kind: 'resource', iid };
   } else if (sel.kind === 'attack' && attackOptions(s, ui.me, sel.attacker).some((o) => o.target === iid && o.type === sel.type)) {
     ui.sel = { kind: 'confirm', attacker: sel.attacker, target: iid, type: sel.type, side: sel.type === 'control' ? openArrows(s, sel.attacker)[0] : undefined, plots: [] };
-  } else if (d.type === 'Plot' && (idle(s) || (s.window && waitingFor(s).includes(ui.me)))) {
+  } else if ((d.type === 'Plot' || (d.type === 'Group' && PLOTS[d.id] && plotOptions(s, ui.me, iid).length > 0)) && (idle(s) || (s.window && waitingFor(s).includes(ui.me)))) {
     ui.sel = idle(s) ? { kind: 'plot', card: iid } : ui.sel;
   }
   if (JSON.stringify(ui.sel) === before) ui.inspect = iid;
@@ -2145,6 +2180,10 @@ function bind() {
     ui.inspect = r;
     if (s.cards[r].controller === ui.me && (idle(s) || (s.window && waitingFor(s).includes(ui.me)))) ui.sel = { kind: 'resource', iid: r };
     render();
+  });
+  app.querySelectorAll<HTMLElement>('[data-card-act]').forEach((b) => b.onclick = () => {
+    const a = (window as unknown as { __cardActs: Action[] }).__cardActs[Number(b.dataset.cardAct)];
+    if (a) act(a);
   });
   app.querySelectorAll<HTMLElement>('[data-abil]').forEach((b) => b.onclick = () => {
     const o = (window as unknown as { __abil: { action: Action }[] }).__abil[Number(b.dataset.abil)];
@@ -2488,7 +2527,7 @@ function renderOnline() {
       const bots = friends >= 7 ? [] : botsForGame(Math.floor(Math.random() * 1e9), friends ? 0 : 1, 7 - friends);
       const quick = (app.querySelector('#n-quick') as HTMLInputElement).checked;
       const basicGoal = (ui as Ui & { goal?: number }).goal;
-      try { applyReply(await api({ op: 'new', seats: 1 + friends + bots.length, computerSeats: bots.length, bots, quick, illuminati: pick, ...(basicGoal ? { basicGoal } : {}), ...packSettings() }));
+      try { applyReply(await api({ op: 'new', seats: 1 + friends + bots.length, computerSeats: bots.length, bots, quick, illuminati: pick, utcOffset: -new Date().getTimezoneOffset(), ...(basicGoal ? { basicGoal } : {}), ...packSettings() }));
  homeScreen = 'home'; await openGame(online!.gameId!); } catch (err) { o.msg = (err as Error).message; render(); }
     };
     return;
@@ -2517,7 +2556,7 @@ function renderOnline() {
   app.querySelector<HTMLFormElement>('#join')!.onsubmit = async (e) => {
     e.preventDefault();
     const code = (app.querySelector('#j-code') as HTMLInputElement).value.trim().toUpperCase();
-    try { applyReply(await api({ op: 'join', code, illuminati: pick })); await openGame(online!.gameId!); } catch (err) { o.msg = (err as Error).message; render(); }
+    try { applyReply(await api({ op: 'join', code, illuminati: pick, utcOffset: -new Date().getTimezoneOffset() })); await openGame(online!.gameId!); } catch (err) { o.msg = (err as Error).message; render(); }
   };
 }
 

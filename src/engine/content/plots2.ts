@@ -1,5 +1,6 @@
 // Encoded by the card-content pass. See docs/CARD_SCRIPTING.md.
 // Goals, New World Orders and assorted Plots (batch 2).
+import { noteCostDiscard } from '../game';
 import type { Alignment, AttackCtx, GameState, PlotEffect, PlotPlay } from '../types';
 import type { PlotHandler } from '../plotTypes';
 import { registerGoalProgress, registerGoals, registerPlots } from '../plotTypes';
@@ -45,6 +46,7 @@ function discardTop(s: GameState, pl: string, deck: 'plotDeck' | 'groupDeck') {
   const p = player(s, pl);
   const top = p[deck].shift();
   if (top) { s.cards[top].zone = 'hand'; p.hand.push(top); discardCard(s, top); }
+  return top;
 }
 
 function nwo(): PlotHandler {
@@ -151,6 +153,13 @@ registerHooks({
     attackMod: (s, _self, ctx, side) => (side === 'defense' && s.cards[ctx.target]?.cardId === 'i-r-s' ? 10 : 0),
   },
   'world-war-three': {
+    // Remember which destructions World War III brought about (its tripled attack, or its backfire on the
+    // attacking Nation): Population Reduction (Assassins) does not count them toward its outright win.
+    onDestroy(s, _self, victim) {
+      const ctx = s.attack;
+      if (!ctx || !wwiiiAttack(s, ctx) || (victim !== ctx.target && victim !== ctx.attacker)) return;
+      s.cards[victim].data = { ...s.cards[victim].data, viaWorldWarThree: true };
+    },
     attackMod(s, _self, ctx, side) {
       if (side !== 'attack' || !wwiiiAttack(s, ctx)) return 0;
       return 2 * power(s, ctx.attacker!); // the attacking Nation's Power is tripled
@@ -253,8 +262,9 @@ registerPlots({
     apply(s, pl, play): PlotEffect {
       const p = player(s, pl);
       s.cards[p.illuminati].tokens = 0;
-      discardTop(s, pl, 'plotDeck');
-      discardTop(s, pl, 'groupDeck');
+      const plot = discardTop(s, pl, 'plotDeck');
+      const group = discardTop(s, pl, 'groupDeck');
+      noteCostDiscard(s, pl, [{ kind: 'plot', place: 'deck', cards: plot ? [plot] : [] }, { kind: 'group', place: 'deck', cards: group ? [group] : [] }]);
       const t = s.cards[play.target!];
       Object.assign(t, { zone: 'hand', controller: undefined, linkedTo: undefined });
       p.hand.push(t.iid);
@@ -304,7 +314,7 @@ registerPlots({
       return play.payWith?.length === 1 && matches(s, play.payWith[0], { attributes: ['Magic'] }) ? null : 'Pay with the action of a Magic Group, or discard the top card of your Plot deck.';
     },
     apply(s, pl, play, ctx) {
-      if (play.mode === 'deck') discardTop(s, pl, 'plotDeck'); else pay(s, play.payWith);
+      if (play.mode === 'deck') { const top = discardTop(s, pl, 'plotDeck'); noteCostDiscard(s, pl, [{ kind: 'plot', place: 'deck', cards: top ? [top] : [] }]); } else pay(s, play.payWith);
       const t = ctx!.target;
       const opts = { defense: true, halve: !!s.cards[t].devastated };
       const now = power(s, t, opts);

@@ -1,4 +1,5 @@
 // Plot cards available in this version, built from a few reusable families.
+import { noteCostDiscard } from '../game';
 import type { Alignment, AttackCtx, GameState, PlotEffect, PlotPlay } from '../types';
 import type { PlotHandler } from '../plotTypes';
 import { registerPlots } from '../plotTypes';
@@ -45,7 +46,7 @@ function effectNow(fn: (s: GameState, pl: string, play: PlotPlay) => void): Pick
 // ---------------------------------------------------------------- families
 
 /** "+10 Power or Resistance to one of your [X] Groups" (R028). */
-function plusTen(match: Match): PlotHandler {
+export function plusTen(match: Match): PlotHandler {
   return {
     timing: ['anytime', 'declare', 'attack'],
     needs: { target: 'ownGroup', mode: ['power', 'resistance'] },
@@ -337,7 +338,7 @@ registerPlots({
     pay: (s, pl, play) => {
       pay(s, play.payWith);
       const top = player(s, pl).plotDeck.shift();
-      if (top) { s.cards[top].zone = 'hand'; player(s, pl).hand.push(top); discardCard(s, top); }
+      if (top) { s.cards[top].zone = 'hand'; player(s, pl).hand.push(top); discardCard(s, top); noteCostDiscard(s, pl, [{ kind: 'plot', place: 'deck', cards: [top] }]); }
     },
   }),
   'secrets-man-was-not-meant-to-know': counter({
@@ -349,7 +350,9 @@ registerPlots({
     pay: (s, pl, play) => {
       const p = player(s, pl);
       if (play.mode === 'deck') {
-        for (const top of p.plotDeck.splice(0, 2)) { s.cards[top].zone = 'hand'; p.hand.push(top); discardCard(s, top); }
+        const tops = p.plotDeck.splice(0, 2);
+        for (const top of tops) { s.cards[top].zone = 'hand'; p.hand.push(top); discardCard(s, top); }
+        noteCostDiscard(s, pl, [{ kind: 'plot', place: 'deck', cards: tops }]);
       } else s.cards[p.illuminati].tokens = 0;
     },
   }),
@@ -395,7 +398,8 @@ registerPlots({
     if (!fromHand) {
       const top = p.groupDeck.shift()!;
       s.cards[top].zone = 'hand'; p.hand.push(top); discardCard(s, top);
-    } else if (inHand.length === 2) for (const g of inHand) discardCard(s, g);
+      noteCostDiscard(s, pl, [{ kind: 'group', place: 'deck', cards: [top] }]);
+    } else if (inHand.length === 2) { for (const g of inHand) discardCard(s, g); noteCostDiscard(s, pl, [{ kind: 'group', place: 'hand', cards: inHand }]); }
     else {
       askChoice(s, pl, {
         key: 'fnord-discard', question: 'Choose two Group cards from your hand to discard.',
@@ -534,7 +538,9 @@ registerPlots({
 
 registerChoice('fnord-discard', {
   resolve(s, pl, picked) {
-    for (const g of picked) if (player(s, pl).hand.includes(g) && def(s, g).type === 'Group') discardCard(s, g);
+    const gone = picked.filter((g) => player(s, pl).hand.includes(g) && def(s, g).type === 'Group');
+    for (const g of gone) discardCard(s, g);
+    noteCostDiscard(s, pl, [{ kind: 'group', place: 'hand', cards: gone }]);
     log(s, `${player(s, pl).name} discards two Group cards to pay for Fnord!`, pl);
   },
   // The computer gives up its two weakest Group cards.

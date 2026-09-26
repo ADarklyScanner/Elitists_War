@@ -2,6 +2,7 @@
 // The 36 Resource cards. A Resource enters play linked to its controller's Illuminati ("unlinked");
 // `linkTo` limits which Groups it may be linked to. Parts the engine cannot express yet are marked
 // `// PENDING: …`.
+import { noteCostDiscard } from '../game';
 import type { Alignment, AttackCtx, Contribution, GameState, PlotEffect, Side } from '../types';
 import { RuleError } from '../types';
 import type { ActivatedAbility, CardHooks } from '../hooks';
@@ -90,7 +91,7 @@ const doublerOk = (s: GameState, r: string) => {
 function discardTopPlot(s: GameState, pl: string) {
   const p = player(s, pl);
   const top = p.plotDeck.shift();
-  if (top) { s.cards[top].zone = 'hand'; p.hand.push(top); discardCard(s, top); }
+  if (top) { s.cards[top].zone = 'hand'; p.hand.push(top); discardCard(s, top); noteCostDiscard(s, pl, [{ kind: 'plot', place: 'deck', cards: [top] }]); }
 }
 
 /** Temporarily open the attack window so the engine's own aid/oppose rules can be reused after the roll. */

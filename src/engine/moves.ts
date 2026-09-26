@@ -2,7 +2,7 @@
 // here has already been checked by the rules, so the UI can simply offer them as buttons.
 import type { Action, Alignment, GameState, PlotPlay, Side } from './types';
 import { applyAction, canAid, canOppose, checkPlot, player, plotsInHand, validateAttack, waitingFor } from './game';
-import { cardName, def } from './cards';
+import { CARDS, cardName, def } from './cards';
 import { openArrows, structureCards } from './geometry';
 import { alignments, attributes, power } from './stats';
 import { PLOTS } from './plotTypes';
@@ -54,7 +54,8 @@ export function plotOptions(s: GameState, pl: string, card: string, declaring?: 
   let targets: (string | undefined)[] = [undefined];
   if (needs.target === 'plot') targets = (s.window?.kind === 'plot' ? s.window.plays ?? [] : s.attack?.plays ?? []).map((p) => p.iid).filter((x) => x !== card && s.cards[x]);
   else if (needs.target) targets = targetPool(s, pl, needs.target, card);
-  const modes: (string | undefined)[] = needs.mode ?? (d.id === 'secrets-man-was-not-meant-to-know' ? ['illuminati', 'deck'] : [undefined]);
+  const modes: (string | undefined)[] = d.id === 'go-fish' ? goFishNames(s, pl)
+    : needs.mode ?? (d.id === 'secrets-man-was-not-meant-to-know' ? ['illuminati', 'deck'] : [undefined]);
   const aligns: (Alignment | undefined)[] = needs.alignment ? ALIGNMENTS : [undefined];
   const helpers: (string | undefined)[] = needs.helper ? [undefined, ...structureCards(s, pl).filter((g) => s.cards[g].tokens > 0)] : [undefined];
   // Reload cards: offer each single Group and the largest sets within 5 Power.
@@ -106,6 +107,22 @@ export function plotOptions(s: GameState, pl: string, card: string, declaring?: 
     }
   }
   return out;
+}
+
+/**
+ * Go Fish names a Plot card: offer the Plots this player knows a rival holds (exposed, or seen), and
+ * the Plots in his own hand (a bluff, or a guess).
+ */
+function goFishNames(s: GameState, pl: string): string[] {
+  const me = player(s, pl);
+  const known = new Set(me.known ?? []);
+  const ids = new Set<string>();
+  for (const r of s.players) {
+    if (r.id === pl || r.eliminated) continue;
+    for (const c of r.hand) if (def(s, c).type === 'Plot' && (s.cards[c].exposed || known.has(c))) ids.add(s.cards[c].cardId);
+  }
+  for (const c of me.hand) if (def(s, c).type === 'Plot' && s.cards[c].cardId !== 'go-fish') ids.add(s.cards[c].cardId);
+  return [...ids];
 }
 
 /** checkPlot for a Plot declared together with an attack that has not been made yet. */
@@ -164,6 +181,7 @@ export function describePlay(s: GameState, p: PlotPlay): string {
   if (p.mode === 'deck') parts.push('pay: top 2 Plots of your deck');
   if (p.mode === 'groupDeck') parts.push('pay: top card of your Group deck');
   if (p.mode === 'hand') parts.push('pay: two Group cards from your hand');
+  if (p.mode && CARDS[p.mode]?.type === 'Plot') parts.push(`ask for ${CARDS[p.mode].name}`);
   if (p.alignment) parts.push(`${p.alignment} Groups`);
   if (p.helper) parts.push(`with ${cardName(s, p.helper)}`);
   if (p.targets?.length) parts.push(`tokens for ${p.targets.map((g) => cardName(s, g)).join(', ')}`);
@@ -223,6 +241,14 @@ export function abilityOptions(s: GameState, pl: string, card: string): MoveOpti
   const inPlay = Object.values(s.cards).filter((c) => c.zone === 'structure' || c.zone === 'resources').map((c) => c.iid);
   const plays = (s.window?.kind === 'plot' ? s.window.plays ?? [] : s.attack?.plays ?? []).map((p) => p.iid).filter((i) => s.cards[i]);
   for (const ab of HOOKS[s.cards[card].cardId]?.actions ?? []) {
+    // An ability that lists its own ways of being used (several cards to pick, decks to look at).
+    if (ab.options) {
+      for (const o of ab.options(s, pl, card)) {
+        if (checkAbility(s, pl, card, ab.id, o.params)) continue;
+        out.push({ label: `${cardName(s, card)}: ${ab.label}${o.label ? ` · ${o.label}` : ''}`, action: { type: 'useAbility', card, ability: ab.id, params: o.params } });
+      }
+      continue;
+    }
     const n = ab.needs ?? {};
     let targets: (string | undefined)[] = [undefined];
     if (n.target === 'plot') targets = plays;

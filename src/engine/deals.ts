@@ -26,7 +26,7 @@ import { RuleError } from './types';
 import { cardName, def } from './cards';
 import { openArrows, subtree } from './geometry';
 import { registerPlots } from './plotTypes';
-import { activePlayer, canExpose, isPrivileged, livePlayers, log, moveSubtree, player, tokenBarred } from './game';
+import { activePlayer, canExpose, isPrivileged, livePlayers, log, moveSubtree, player, shieldFromGoFish, tokenBarred } from './game';
 import { anyHook } from './hooks';
 
 export const I_LIED = 'i-lied';
@@ -200,6 +200,8 @@ function deliver(s: GameState, giver: string, receiver: string, side: DealSide, 
       Object.assign(c, { zone: 'hand', controller: undefined, failedTakeoverTurn: undefined });
       // The giver knows which card he handed over; nobody else learns it (R040).
       if (!c.exposed) gp.known = [...new Set([...(gp.known ?? []), iid])];
+      // Go Fish (Assassins errata): receiving a Plot card from a rival makes you immune to it for a while.
+      if (['Plot', 'Illuminati'].includes(def(s, iid).type)) shieldFromGoFish(s, receiver);
       done.cards!.push(iid);
     }
   }
