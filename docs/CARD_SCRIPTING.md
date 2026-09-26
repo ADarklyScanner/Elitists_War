@@ -134,6 +134,19 @@ To give a player an extra turn next, set `s.extraTurnFor = playerId`.
   push a live effect such as a re-roll or a `fail`. Return true to open the roll window again, and never
   do that twice in one attack.
 - `replaceableWhenDestroyed` lets another copy of a Unique Resource come into play once this one is destroyed.
+- `forbidPuppet(s, self, group, master, player)` refuses a master for a Group however it would get there
+  (automatic takeover, capture, move, a card): `puppetForbidden()` / `puppetSides()` in game.ts read it, so a
+  card placing a Group itself should ask `puppetSides(s, player, group, master)` for the sides it may use.
+- `rulesOffTable: true` keeps a card's own `forbidAttack` / `forbidPuppet` working while it waits in a hand or
+  the uncontrolled area (Citizens for Normalcy, NHGH). `forbidIsImmunity: true` says its `forbidAttack` only
+  expresses immunity or "cannot be controlled / destroyed", which Schizm (`overridesImmunity`) sets aside.
+- `replaceAttackResult(s, self, ctx)` deals with the target of a successful attack instead of the usual result
+  (Schizm, the "Bobbies"); `onDiceRolled(s, self, ctx)` runs the moment an attack's dice are first rolled.
+- `onTokensPlaced(s, self, activePlayer)` runs for every active card right after the active player's tokens are
+  placed; `extraGroupDraws` adds start-of-turn Group draws; `globalEqualsPower` makes Global Power equal to
+  Power (`'current'`) or Permanent Power (`'permanent'`, `power(s, iid, { permanent: true })`).
+- `neverDestroyed` / `cannotMove` (static): destroyGroup leaves the card alone and its controller may not move it.
+- A card that ends the turn outside an attack or Plot window calls `endTurnAtOnce(s)`.
 - A question asked during the start-of-turn draws (`askChoice` in `onDraw`) is answered before the
   automatic takeover prompt.
 
@@ -292,3 +305,15 @@ and `cancel` may be a list of Matches (any of them); a single Match with both `a
   Group stops being SubGenius for good). Linked Plots stay with their Group when it changes hands or goes
   to the uncontrolled area. A link is re-checked after every action (`syncConditions`).
 - **The SubGenius attribute** is plain card data: match it with `{ attributes: ['SubGenius'] }`.
+- **Die rolls outside attacks**: roll with `cardRoll(s, player, 1 | 2, key, data)` and handle the result in
+  `registerRollResult({ key(s, player, total, dice, data) {…} })`. The roll is announced as a `dieRoll` event,
+  which the cards changing "any die roll" answer (Bulldada, Luck Plane, S.C.A.M., Shordurpersav with timing
+  `'event'` and `events: ['dieRoll']`; the Janor Device's ability); they read and change it with
+  `eventAnswered(s)`, `rollOf(e)` and `changeRoll(e, …)`. With nobody able to answer, or during an attack (no
+  window can wait there), the handler runs at once. `afterCardRoll` hooks see the final roll.
+- **Control taken outside the automatic takeover**: a successful Attack to Control on a Group in a hand or the
+  uncontrolled area, or a card putting one into play, raises a `gainedControl` event (Comet Hail-"Bob").
+- **Forced plays**: `s.forcedPlay = { player, card }` lets that Plot be played at once whatever its usual
+  moment (Sacred Jests); `plotOptions` then lists every complete legal way to play it.
+- **Illuminati spending**: `turnFlags.illuminatiSpent` lists players whose Illuminati spent a token this turn
+  on anything but buying Plots, and `turnFlags.illuminatiLocked` refuses such spending (Time Control).

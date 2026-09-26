@@ -111,14 +111,26 @@ describe('OverMan', () => {
     s = passAll(s);
     expect(power(s, high)).toBe(3); // already 3
   });
-  it('cannot affect a Personality that is already a False OverMan', () => {
+  it('cannot affect a Personality that is already a False OverMan (and False OverMan cannot affect an OverMan)', () => {
     const s0 = scenario();
     const g = under(s0, 'p2', 'sg4-personality');
-    const card = hand(s0, 'p1', 'overman');
+    const h = under(s0, 'p2', 'sg4-personality2', 'RIGHT');
+    const card = hand(s0, 'p1', 'false-overman');
     let s = play(s0, 'p1', { card, target: g });
     s = passAll(s);
     const card2 = hand(s, 'p1', 'overman');
     expect(() => play(s, 'p1', { card: card2, target: g })).toThrow(/False OverMan/);
+    s = passAll(play(s, 'p1', { card: card2, target: h }));
+    const card3 = hand(s, 'p1', 'false-overman');
+    expect(() => play(s, 'p1', { card: card3, target: h })).toThrow(/already an OverMan/);
+  });
+  it('never links to OverMan Philo Drummond, and neither does False OverMan', () => {
+    const s0 = scenario();
+    const philo = under(s0, 'p2', 'overman-philo-drummond');
+    for (const id of ['overman', 'false-overman']) {
+      const card = hand(s0, 'p1', id);
+      expect(() => play(s0, 'p1', { card, target: philo })).toThrow(/Philo/);
+    }
   });
 });
 
@@ -205,7 +217,11 @@ describe('Rant!', () => {
     const card = hand(s, pl, 'rant');
     s = play(s, pl, { card, target: g, payWith: [pers] });
     s = passUntil(s, 'endOfTurn');
-    expect(s.cards[g]).toMatchObject({ zone: 'structure', controller: pl, master: pers });
+    // Its player picks the arrow of the Personality.
+    expect(s.prompt?.choice?.key).toBe('rant-side');
+    const side = s.prompt!.choice!.options[1].id;
+    s = act(s, pl, { type: 'choose', ids: [side] });
+    expect(s.cards[g]).toMatchObject({ zone: 'structure', controller: pl, master: pers, side });
     expect(s.turnFlags.endedAtOnce).toBe(true);
   });
   it('needs a Personality with an open control arrow to pay', () => {
@@ -296,7 +312,8 @@ describe('Sacred Jests', () => {
     const card = hand(s, 'p1', 'sacred-jests');
     s = play(s, 'p1', { card, target: ill(s, 'p2') });
     expect(s.prompt?.kind).toBe('choose');
-    s = act(s, 'p2', { type: 'choose', ids: ['play'] });
+    const opt = s.prompt!.choice!.options.find((o) => o.id.startsWith('play:'))!;
+    s = act(s, 'p2', { type: 'choose', ids: [opt.id] });
     expect(s.cards[ill(s, 'p2')].data?.played).toBe(true);
     expect(s.cards[victim].zone).not.toBe('hand');
   });
@@ -380,14 +397,16 @@ describe('Smite Them All!', () => {
 });
 
 describe('Stark Fist of Removal', () => {
-  it('your Illuminati keeps one token, a rival\'s loses all of them; the turn ends', () => {
+  it('costs all your own Illuminati tokens (at least one); a rival\'s Illuminati loses all of its; the turn ends', () => {
     const s0 = scenario();
+    s0.cards[ill(s0, 'p1')].tokens = 0;
+    const card = hand(s0, 'p1', 'stark-fist-of-removal');
+    expect(() => play(s0, 'p1', { card, target: ill(s0, 'p2') })).toThrow(/at least one/);
     s0.cards[ill(s0, 'p1')].tokens = 3;
     s0.cards[ill(s0, 'p2')].tokens = 2;
-    const card = hand(s0, 'p1', 'stark-fist-of-removal');
     let s = play(s0, 'p1', { card, target: ill(s0, 'p2') });
     s = passUntil(s, 'endOfTurn');
-    expect(s.cards[ill(s, 'p1')].tokens).toBe(1);
+    expect(s.cards[ill(s, 'p1')].tokens).toBe(0);
     expect(s.cards[ill(s, 'p2')].tokens).toBe(0);
     expect(s.turnFlags.endedAtOnce).toBe(true);
   });

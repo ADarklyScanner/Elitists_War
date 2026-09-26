@@ -8,7 +8,7 @@ import { NWO_EFFECTS, fanaticUnited } from './nwo';
 import { sumHooks, activeHookCards, HOOKS } from './hooks';
 
 function activeMods(s: GameState, iid: string, opts: ValueOpts): Modifier[] {
-  return s.cards[iid].mods.filter((m) => (!m.defenseOnly || opts.defense) && (!opts.goals || m.countsForGoals !== false));
+  return s.cards[iid].mods.filter((m) => (!m.defenseOnly || opts.defense) && (!opts.goals || m.countsForGoals !== false) && (!opts.permanent || m.until === 'permanent'));
 }
 
 export function alignments(s: GameState, iid: string, opts: { goals?: boolean } = {}): Alignment[] {
@@ -56,6 +56,7 @@ export interface ValueOpts {
   selfDefense?: boolean;    // a Group spending its own token to defend itself (R006c)
   noDefenseAdds?: boolean;  // leave out defense-only additions already counted elsewhere (R028: a +10 counts once)
   halve?: boolean;          // Devastated Place defending against an Attack to Destroy (R037)
+  permanent?: boolean;      // Permanent Power: leave out changes that last only for a turn or an attack
 }
 
 /**
@@ -99,6 +100,11 @@ export function globalPower(s: GameState, iid: string): number {
     if (a.kind === 'powerPer' && a.global && c.controller) v += a.value * countControlled(s, c.controller, (g) => g !== iid && matches(s, g, a.per));
   }
   v += sumHooks(s, (h, self) => h.globalMod?.(s, self, iid));
+  // Cards that make Global Power equal to the Group's Power (Nental Ife, Head Launching: its Permanent Power).
+  for (const self of activeHookCards(s)) {
+    const eq = HOOKS[s.cards[self].cardId].globalEqualsPower?.(s, self, iid);
+    if (eq) v = Math.max(v, power(s, iid, { permanent: eq === 'permanent' }));
+  }
   // Global Power is capped at current Power (R029).
   return Math.max(0, Math.min(v, power(s, iid)));
 }

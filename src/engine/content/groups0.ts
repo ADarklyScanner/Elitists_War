@@ -9,7 +9,7 @@ import {
   attackCancelled, cancelledGroups, canEnterPlay, controllerOf2, currentOutcome, destroyGroup, discardCard,
   drawGroup, drawPlot, livePlayers, log, placeGroup, player, playResourceCard, protectedPlayer,
 } from '../game';
-import { disasterTarget, exposableHand, exposeCards } from '../game';
+import { cardRoll, disasterTarget, exposableHand, exposeCards, registerRollResult } from '../game';
 import { magicByCard } from '../hooks';
 
 registerAbilities({
@@ -541,13 +541,8 @@ registerHooks({
     actions: [{
       id: 'roll', label: 'Roll 2d6: draw that many Plots if no more than the Places you control', timing: ['main'], usesToken: true, ai: 'draw',
       check: () => null,
-      apply(s, pl) {
-        const places = structureCards(s, pl).filter((g) => def(s, g).type === 'Group' && def(s, g).subtype === 'Place').length;
-        const [a, b] = roll2d6(s);
-        const n = a + b;
-        if (n <= places) { drawPlot(s, player(s, pl), n); log(s, `Rolled ${n} with ${places} Places controlled: draw ${n} Plots.`, pl); }
-        else log(s, `Rolled ${n} with only ${places} Places controlled: nothing happens.`, pl);
-      },
+      // The roll is announced (cardRoll), so cards that change any die roll may answer it.
+      apply(s, pl) { cardRoll(s, pl, 2, 'flat-earthers', {}, { quiet: true }); },
     }],
   },
 
@@ -778,5 +773,13 @@ registerHooks({
   'local-police-departments': {
     powerMod: (s, self, iid) => (iid === s.cards[self].master ? 1 : 0),
     resistanceMod: (s, self, iid) => (iid === s.cards[self].master ? 3 : 0),
+  },
+});
+
+registerRollResult({
+  'flat-earthers'(s, pl, n) {
+    const places = structureCards(s, pl).filter((g) => def(s, g).type === 'Group' && def(s, g).subtype === 'Place').length;
+    if (n <= places) { drawPlot(s, player(s, pl), n); log(s, `Rolled ${n} with ${places} Places controlled: draw ${n} Plots.`, pl); }
+    else log(s, `Rolled ${n} with only ${places} Places controlled: nothing happens.`, pl);
   },
 });

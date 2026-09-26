@@ -10,13 +10,13 @@ import { def, OPPOSITE, cardName } from '../cards';
 import { type Match, matches, attackingGroups } from '../abilities';
 import { alignments, countControlled, power } from '../stats';
 import { openArrows, structureCards, subtree } from '../geometry';
-import { rollDie, roll2d6, shuffle } from '../rng';
+import { roll2d6, shuffle } from '../rng';
 import {
   activePlayer, announcedCancel, askChoice, attackCancelled, canAid, canEnterPlay, canOppose, controllerOf2, currentOutcome, destroyGroup,
   discardCard, drawPlot, giveToken, isCancelled, isPrivileged, liveEffects, log, moveSubtree, player, playResourceCard,
   protectedPlayer, tokenBarred,
 } from '../game';
-import { canExpose, exposeCards } from '../game';
+import { canExpose, cardRoll, exposeCards, registerRollResult } from '../game';
 import { resourceKinds } from './plots3';
 
 // ---------------------------------------------------------------- helpers
@@ -863,13 +863,8 @@ const T: Record<string, CardHooks> = {
         if (protectedPlayer(s, pl, t.controller)) return 'That player has not finished a first turn yet.';
         return null;
       },
-      apply(s, pl, self, p) {
-        const die = rollDie(s);
-        log(s, `Suicide Squad rolls ${die}.`, pl);
-        // Every card it destroys is discarded (so a Unique one may be played again later).
-        if (die <= 5) { log(s, `${cardName(s, p.target!)} is destroyed and discarded.`); discardCard(s, p.target!); }
-        if (die >= 2) { log(s, `${cardName(s, self)} is destroyed and discarded.`); discardCard(s, self); }
-      },
+      // The roll is announced (cardRoll), so cards that change any die roll may answer it (at once during an attack).
+      apply(s, pl, self, p) { cardRoll(s, pl, 1, 'suicide-squad', { self, target: p.target! }, { quiet: true }); },
     }],
   },
 
@@ -1030,3 +1025,13 @@ function isStorm(s: GameState, ctx: AttackCtx) {
 }
 
 registerHooks(T);
+
+registerRollResult({
+  'suicide-squad'(s, pl, die, _dice, data) {
+    const self = data.self as string, target = data.target as string;
+    log(s, `Suicide Squad rolls ${die}.`, pl);
+    // Every card it destroys is discarded (so a Unique one may be played again later).
+    if (die <= 5 && s.cards[target]?.zone === 'resources') { log(s, `${cardName(s, target)} is destroyed and discarded.`); discardCard(s, target); }
+    if (die >= 2 && s.cards[self]?.zone === 'resources') { log(s, `${cardName(s, self)} is destroyed and discarded.`); discardCard(s, self); }
+  },
+});

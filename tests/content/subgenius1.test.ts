@@ -285,12 +285,22 @@ describe('Good Sex for Mutants Dating League', () => {
     const mafia = put(s0, 'p1', 'the-mafia');
     expect(line(attack(s0, mafia, elvis, 'control'), 'Attack', 'Good Sex for Mutants Dating League')).toBe(-2);
   });
-  it('no penalty for a Weird Group it does not control', () => {
+  it('-2 on a rival\'s attempt to control any Weird Group, not only its own puppets', () => {
     const s0 = scenario();
     put(s0, 'p2', 'good-sex-for-mutants-dating-league');
     const elvis = put(s0, 'p2', 'church-of-elvis');
     const mafia = put(s0, 'p1', 'the-mafia');
+    expect(line(attack(s0, mafia, elvis, 'control'), 'Attack', 'Good Sex for Mutants Dating League')).toBe(-2);
+  });
+  it('no penalty on its own controller\'s attempts, or on a Group that is not Weird', () => {
+    const s0 = scenario();
+    put(s0, 'p1', 'good-sex-for-mutants-dating-league');
+    const elvis = put(s0, 'p2', 'church-of-elvis');
+    const sharks = put(s0, 'p2', 'loan-sharks');
+    const mafia = put(s0, 'p1', 'the-mafia');
     expect(line(attack(s0, mafia, elvis, 'control'), 'Attack', 'Good Sex for Mutants Dating League')).toBe(0);
+    s0.players[1].hand = [];
+    expect(line(attack(s0, mafia, sharks, 'control'), 'Attack', 'Good Sex for Mutants Dating League')).toBe(0);
   });
 });
 
@@ -454,7 +464,7 @@ describe('Secret FisTemple', () => {
     const s0 = scenario();
     const sf = put(s0, 'p1', 'secret-fistemple');
     const npc = put(s0, 'p2', 'nuclear-power-companies');
-    expect(() => attack(s0, sf, npc, 'control')).toThrow(/Personality/);
+    expect(() => attack(s0, sf, npc, 'control')).toThrow(/only control Personalities/);
   });
   it('may attack to control a Personality', () => {
     const s0 = scenario();

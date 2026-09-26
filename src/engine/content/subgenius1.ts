@@ -5,10 +5,10 @@ import { registerAbilities } from '../abilities';
 import { registerHooks, registerChoice } from '../hooks';
 import { def, cardName } from '../cards';
 import { alignments, attributes, power } from '../stats';
-import { openArrows, structureCards } from '../geometry';
-import { rollDie } from '../rng';
+import { structureCards, subtree } from '../geometry';
 import {
-  askChoice, attackCancelled, cancelledGroups, controllerOf2, discardCard, drawPlot, livePlayers, log, placeGroup, player, tokenBarred,
+  askChoice, attackCancelled, cancelledGroups, cardRoll, controllerOf2, discardCard, drawPlot, isCancelled, livePlayers, log, placeGroup, player, puppetSides,
+  registerRollResult, tokenBarred,
 } from '../game';
 import { plotDeckOf } from '../expansions';
 
@@ -21,11 +21,17 @@ const hasAttr = (s: GameState, iid: string | undefined, a: string) => !!iid && a
 /** A card in the exchange (attacker, aid, target, oppose) still counted, i.e. not cancelled. */
 const live = (ctx: AttackCtx, iid: string) => !cancelledGroups(ctx).has(iid);
 const leadsOrAids = (ctx: AttackCtx, self: string) => (ctx.attacker === self || ctx.aid.some((a) => a.iid === self)) && live(ctx, self);
-/** Every card that takes an active part in this attack, on either side. */
-function cast(ctx: AttackCtx): string[] {
-  return [ctx.attacker, ...ctx.aid.map((a) => a.iid), ctx.target, ...ctx.oppose.map((o) => o.iid)].filter((x): x is string => !!x);
-}
 const eventNow = (s: GameState): GameEvent | undefined => (s.window?.kind === 'event' ? s.window.event : undefined);
+/**
+ * Does `master` control `iid`, directly or through its puppets? The SubGenius glossary: a Power Structure is
+ * what the Illuminati controls "both directly and through its puppets", and "master" names direct control
+ * only; so a card saying "controls" reaches every Group below it.
+ */
+function controls(s: GameState, master: string, iid: string): boolean {
+  let c = s.cards[iid];
+  while (c?.master) { if (c.master === master) return true; c = s.cards[c.master]; }
+  return false;
+}
 
 // ---------------------------------------------------------------- abilities (every card needs an entry)
 
@@ -60,51 +66,72 @@ registerAbilities({
 
 // ---------------------------------------------------------------- hooks
 
-// "Bobbies": a hot potato. Successfully attacked (to control or destroy), it never stays: the attacker
-// must discard it or hand it to a rival. It never counts toward any Goal itself, but its (possibly
-// unwilling) owner needs one more Group for the Basic Goal. RULING: a card that destroys Groups directly
-// (bypassing an attack, e.g. some Disasters) is not intercepted here, since only the attack-resolution
-// path is hooked; that is a rare edge case for a card this specialised.
+// "Bobbies": a hot potato. Successfully attacked (to control or destroy, a Disaster included), they never
+// stay: the attacker must discard them or hand them to a rival, instead of the usual result. Nothing
+// else removes or moves them (errata: only an attack on them or the loss of their master), so they are
+// never destroyed and their controller may not move them. They never count toward any Goal themselves,
+// but their (possibly unwilling) owner needs one more Group for the Basic Goal. Whoever takes them over
+// may hang them at once on any rival's open control arrow.
 registerHooks({
   'bobbies': {
     noGoalCount: true,
     goalPenalty: () => 1,
-    preventDestroy: (s, self, target) => target === self,
-    onAttackEnd(s, self, ctx) {
-      if (ctx.target !== self || attackCancelled(ctx) || ctx.result !== 'success') return;
-      if (ctx.type !== 'control' && ctx.type !== 'destroy') return;
-      bobbiesRelocate(s, self, ctx.attackerPlayer);
+    neverDestroyed: true,
+    cannotMove: true,
+    replaceAttackResult(s, self, ctx) {
+      if (ctx.target !== self) return false;
+      bobbiesRelocate(s, self, ctx.attackerPlayer, true);
+      return true;
+    },
+    // Taken over from a hand or the uncontrolled area (a successful attack is handled above).
+    onEnterPlay(s, self) {
+      const pl = s.cards[self].controller;
+      if (!pl || s.attack?.target === self) return;
+      bobbiesRelocate(s, self, pl, false);
     },
   },
 });
 
-function bobbiesRelocate(s: GameState, self: string, byPlayer: string) {
-  if (s.cards[self].zone !== 'structure') return;
-  const spots = livePlayers(s).filter((p) => p.id !== byPlayer)
-    .flatMap((p) => structureCards(s, p.id).flatMap((m) => openArrows(s, m).map((side) => ({ player: p.id, onto: m, side }))));
+/** Open control arrows of rivals of `byPlayer` where the "Bobbies" could be hung. */
+function bobbiesSpots(s: GameState, self: string, byPlayer: string) {
+  return livePlayers(s).filter((p) => p.id !== byPlayer)
+    .flatMap((p) => structureCards(s, p.id).flatMap((m) => puppetSides(s, p.id, self, m).map((side) => ({ player: p.id, onto: m, side }))));
+}
+
+/** `mustGo`: after a successful attack (discard or give); otherwise just taken over (keep, or give). */
+function bobbiesRelocate(s: GameState, self: string, byPlayer: string, mustGo: boolean) {
+  const spots = bobbiesSpots(s, self, byPlayer);
+  if (!mustGo && !spots.length) return;
   const options = [
-    { id: 'discard', label: 'Discard "Bobbies"' },
-    ...spots.map((sp) => ({ id: `give|${sp.player}|${sp.onto}|${sp.side}`, label: `Give "Bobbies" to ${player(s, sp.player).name} (on ${cardName(s, sp.onto)})` })),
+    mustGo ? { id: 'discard', label: 'Discard "Bobbies"' } : { id: 'keep', label: 'Keep "Bobbies" where they are' },
+    ...spots.map((sp) => ({ id: `give|${sp.player}|${sp.onto}|${sp.side}`, label: `Give "Bobbies" to ${player(s, sp.player).name} (on ${cardName(s, sp.onto)}, ${sp.side.toLowerCase()} side)` })),
   ];
   askChoice(s, byPlayer, {
-    key: 'bobbies-relocate', question: '"Bobbies" cannot be kept: discard them, or give them to a rival?',
-    options, min: 1, max: 1, data: { self },
+    key: 'bobbies-relocate',
+    question: mustGo ? '"Bobbies" cannot be kept: discard them, or give them to a rival?' : 'You took over the "Bobbies": keep them, or hang them on a rival\'s open control arrow?',
+    options, min: 1, max: 1, data: { self, mustGo },
   });
 }
 
 registerChoice('bobbies-relocate', {
-  ai: (_s, _pl, options) => [options[0].id],
+  // A computer player is glad to saddle a rival with them.
+  ai: (_s, _pl, options) => [(options.find((o) => o.id.startsWith('give|')) ?? options[0]).id],
   resolve(s, pl, picked, data) {
     const self = data.self as string;
-    if (!self || !s.cards[self] || s.cards[self].zone !== 'structure') return;
+    if (!self || !s.cards[self] || !['structure', 'uncontrolled', 'hand'].includes(s.cards[self].zone)) return;
     const choice = picked[0];
-    if (!choice || choice === 'discard') { discardCard(s, self); log(s, `${cardName(s, self)} is discarded.`, pl); return; }
+    const drop = () => {
+      if (!data.mustGo) return;
+      // Not destroyed: simply discarded (their puppets go where a discarded Group's puppets go).
+      discardCard(s, self);
+      log(s, `${cardName(s, self)} are discarded.`, pl);
+    };
+    if (!choice || choice === 'discard' || choice === 'keep') { drop(); return; }
     const [, ontoPl, onto, side] = choice.split('|');
-    if (!ontoPl || !onto || !side || s.cards[onto]?.zone !== 'structure' || s.cards[onto].controller !== ontoPl || !openArrows(s, onto).includes(side as never)) {
-      discardCard(s, self); log(s, `${cardName(s, self)} is discarded.`, pl); return;
-    }
+    if (!ontoPl || !onto || !side || !puppetSides(s, ontoPl, self, onto).includes(side as never)) { drop(); return; }
     placeGroup(s, self, ontoPl, onto, side as never);
-    log(s, `${cardName(s, self)} is given to ${player(s, ontoPl).name}.`, pl);
+    s.cards[self].tokens = 0;
+    log(s, `${cardName(s, self)} are given to ${player(s, ontoPl).name}.`, pl);
   },
 });
 
@@ -122,67 +149,70 @@ registerHooks({
   },
 
   // +2 Power (and +2 Global Power if it prints any) for a SubGenius Group that directly controls it.
+  // Every SubGenius Group controlling it (directly or through its puppets) gets +2 Power, and +2 Global
+  // Power if it has Global Power of its own.
+  // RULING: "if it already has Global Power" reads the Group's printed Global Power (a globalMod may not ask
+  // for the Global Power it is itself part of).
   'church-of-middle-america': {
     powerMod(s, self, iid) {
-      return s.cards[self].master === iid && hasAttr(s, iid, 'SubGenius') ? 2 : 0;
+      return controls(s, iid, self) && hasAttr(s, iid, 'SubGenius') ? 2 : 0;
     },
-    // globalMod must not call globalPower() of iid (recursion): read its printed value instead.
     globalMod(s, self, iid) {
-      return s.cards[self].master === iid && hasAttr(s, iid, 'SubGenius') && (def(s, iid).globalPower ?? 0) > 0 ? 2 : 0;
+      return controls(s, iid, self) && hasAttr(s, iid, 'SubGenius') && (def(s, iid).globalPower ?? 0) > 0 ? 2 : 0;
     },
   },
 
-  // Immune to a direct Attack to Control, an automatic takeover or a move that would make it a puppet of
-  // the Church of the SubGenius, the Discordian Society, or any Weird or SubGenius Group. Its controller
-  // may spend its token plus an Illuminati token to cancel any Plot.
-  // RULING: automatic takeover and voluntary moves choose a destination arrow without asking any per-arrow
-  // hook, so the "may not be moved under one of these" half is approximated: it blocks the whole automatic
-  // takeover only when literally no other Group of the acting player could receive it, and does not
-  // constrain a later voluntary move at all. The direct-attack half above is fully enforced.
+  // Immune to a direct Attack to Control led by the Church of the SubGenius, the Discordian Society, or
+  // any Weird or SubGenius Group; and never made a puppet of one of these, however it would get there
+  // (an automatic takeover, a capture, a move, a card). Both hold wherever the card waits (a hand, the
+  // uncontrolled area). Its controller may spend its token plus an Illuminati token to cancel any Plot.
   'citizens-for-normalcy': {
-    forbidAttack(s, self, attacker, target, type, attackerPlayer) {
-      if (target !== self || type === 'destroy') return null;
-      const blocked = (g: string) => s.cards[g].cardId === 'discordian-society' || hasAttr(s, g, 'Weird') || hasAttr(s, g, 'SubGenius');
-      if (attacker) return blocked(attacker) ? `${cardName(s, self)} is immune to a direct Attack to Control by ${cardName(s, attacker)}.` : null;
-      if (type === 'takeover') {
-        if (attackerPlayer && player(s, attackerPlayer).illuminati && s.cards[player(s, attackerPlayer).illuminati].cardId === 'church-of-the-subgenius') {
-          return `${cardName(s, self)} cannot become a puppet of the Church of the SubGenius.`;
-        }
-        const spots = attackerPlayer ? structureCards(s, attackerPlayer).filter((g) => !blocked(g) && openArrows(s, g).length) : [];
-        if (attackerPlayer && !spots.length) return `${cardName(s, self)} would have to become a puppet of a Weird or SubGenius Group.`;
-      }
-      return null;
+    forbidIsImmunity: true,
+    rulesOffTable: true,
+    forbidAttack(s, self, attacker, target, type) {
+      if (target !== self || type !== 'control' || !attacker) return null;
+      return normalcyFoe(s, attacker) ? `${cardName(s, self)} is immune to a direct Attack to Control by ${cardName(s, attacker)}.` : null;
+    },
+    forbidPuppet(s, self, group, master) {
+      return group === self && normalcyFoe(s, master) ? `${cardName(s, self)} may never become a puppet of ${cardName(s, master)}.` : null;
     },
     actions: [{
-      id: 'cancel-plot', label: "Spend its token and an Illuminati token: cancel any Plot", timing: ['counter'], usesToken: true, ai: 'never',
-      check(s, pl, self) {
+      id: 'cancel-plot', label: "Spend its token and an Illuminati token: cancel any Plot", timing: ['counter', 'attack', 'roll'], usesToken: true, ai: 'never',
+      needs: { target: 'plot' },
+      check(s, pl, self, p, ctx) {
         if (!own(s, pl, self)) return "You must control the Citizens for Normalcy.";
-        if (!s.window?.plot) return 'Use this while a Plot is waiting to resolve.';
         if (s.cards[player(s, pl).illuminati].tokens < 1) return 'Your Illuminati also needs an Action token.';
+        const pool = s.window?.kind === 'plot' ? s.window.plays ?? [] : ctx?.plays ?? [];
+        const t = p.target ?? (s.window?.kind === 'plot' ? s.window.plot?.iid : undefined);
+        const pp = pool.find((x) => x.iid === t);
+        if (!pp || !s.cards[pp.iid] || def(s, pp.iid).type !== 'Plot' || s.cards[pp.iid].zone !== 'table' || isCancelled(pool, pp.iid)) return 'Choose a Plot card that has just been played.';
         return null;
       },
-      apply(s, pl): PlotEffect {
+      apply(s, pl, _self, p): PlotEffect {
         s.cards[player(s, pl).illuminati].tokens--;
-        const target = s.window!.plot!.iid;
+        const target = p.target ?? s.window!.plot!.iid;
         log(s, `The Citizens for Normalcy cancel ${cardName(s, target)}.`, pl);
         return { t: 'cancelPlot', target };
       },
     }],
   },
 
-  // A fresh Action token as soon as the dice are rolled, in any attack or defense involving a rival's
-  // Violent Group. (No hook fires exactly "as the dice are rolled"; beforeAttackResult, which runs right
-  // after the roll and before the result is applied, is the closest equivalent.)
+  // A new Action token the moment the dice are rolled, when they take part in an attack on a rival's
+  // Violent Group (leading or aiding it), or in the defense against one (as the target, or opposing,
+  // when the attacking side has a rival's Violent Group). The Group only has to be Violent during the
+  // attack (card FAQ).
   'corrective-phrenologists': {
-    beforeAttackResult(s, self, ctx) {
+    onDiceRolled(s, self, ctx) {
       const pl = ctl(s, self);
-      if (!pl) return;
-      if (s.cards[self].data?.phrenologyAttack === ctx.id) return; // already fired for this attack (a re-roll re-opens this hook)
-      const involved = leadsOrAids(ctx, self) || ctx.target === self || ctx.oppose.some((o) => live(ctx, o.iid ?? '') && o.iid === self);
-      if (!involved) return;
-      if (!cast(ctx).some((g) => g !== self && ctl(s, g) && ctl(s, g) !== pl && hasAlign(s, g, 'Violent'))) return;
-      s.cards[self].data = { ...s.cards[self].data, phrenologyAttack: ctx.id };
-      if (!tokenBarred(s, self)) { s.cards[self].tokens = Math.max(1, s.cards[self].tokens); log(s, `${cardName(s, self)} gets a fresh Action token.`, pl); }
+      if (!pl || !live(ctx, self)) return;
+      const rivalViolent = (g?: string) => !!g && live(ctx, g) && !!ctl(s, g) && ctl(s, g) !== pl && hasAlign(s, g, 'Violent');
+      const attacking = leadsOrAids(ctx, self) && rivalViolent(ctx.target);
+      const defending = (ctx.target === self || ctx.oppose.some((o) => o.iid === self))
+        && [ctx.attacker, ...ctx.aid.map((a) => a.iid)].some((g) => rivalViolent(g));
+      if (!attacking && !defending) return;
+      if (tokenBarred(s, self)) return;
+      s.cards[self].tokens++;
+      log(s, `${cardName(s, self)} get a new Action token.`, pl);
     },
   },
 
@@ -201,13 +231,13 @@ registerHooks({
     }],
   },
 
-  // May add its Power to the defense of another SubGenius Group its controller controls, as a free move
-  // (no token spent, and it keeps its own).
+  // May add its Power to the defense of any SubGenius Group its controller controls, itself included, as a
+  // free move (no token spent, and it keeps its own); once per attack.
   'drs-for-bob': {
     actions: [{
-      id: 'defend-subgenius', label: 'Add its Power to another SubGenius Group\'s defense, free', timing: ['attack'], usesToken: false, ai: 'boostDefense',
+      id: 'defend-subgenius', label: 'Add its Power to a SubGenius Group\'s defense, free', timing: ['attack'], usesToken: false, ai: 'boostDefense',
       check(s, pl, self, _p, ctx) {
-        if (!ctx || ctx.target === self) return 'Choose a defence of another SubGenius Group you control.';
+        if (!ctx) return 'Use this while a SubGenius Group you control is attacked.';
         if (ctl(s, self) !== pl || ctl(s, ctx.target) !== pl) return 'You must control both Drs. for "Bob" and the defending Group.';
         if (!hasAttr(s, ctx.target, 'SubGenius')) return 'The defending Group must be SubGenius.';
         if (ctx.plays.some((p) => p.ability === self)) return 'Drs. for "Bob" has already helped this attack.';
@@ -240,12 +270,12 @@ registerHooks({
     },
   },
 
-  // Rivals' attempts to control a Weird Group it directly controls get -2.
+  // Every rival of its controller gets -2 on any attempt to control any Weird Group (wherever it is).
   'good-sex-for-mutants-dating-league': {
     attackMod(s, self, ctx, side) {
       const pl = ctl(s, self);
       if (side !== 'attack' || !pl || ctx.type !== 'control' || ctx.instant || ctx.attackerPlayer === pl) return 0;
-      return s.cards[ctx.target]?.master === self && hasAlign(s, ctx.target, 'Weird') ? -2 : 0;
+      return hasAlign(s, ctx.target, 'Weird') ? -2 : 0;
     },
   },
 
@@ -278,30 +308,25 @@ registerHooks({
         const e = eventNow(s);
         return e && e.type === 'discarded' && e.card && def(s, e.card).type === 'Plot' ? null : 'Use this right after a Plot is discarded.';
       },
+      // The die roll is announced (cardRoll), so cards that change any die roll may answer it.
       apply(s, pl) {
         const card = eventNow(s)!.card!;
-        const roll = rollDie(s);
-        if (roll > 3) { log(s, `MWOWM rolls ${roll}: too slow to catch ${cardName(s, card)}.`, pl); return; }
-        if (s.cards[card].zone !== 'discard') return;
-        for (const x of s.players) x.discard = x.discard.filter((i) => i !== card);
-        if (s.common) { s.common.plotDiscard = s.common.plotDiscard.filter((i) => i !== card); }
-        s.cards[card].zone = 'hand';
-        player(s, pl).hand.push(card);
-        log(s, `MWOWM rolls ${roll}: it catches ${cardName(s, card)}.`, pl);
+        cardRoll(s, pl, 1, 'mwowm', { card });
       },
     }],
   },
 
-  // Once it takes part in an attack, marks the target as soon as the dice are rolled: that Group misses
-  // its next chance to get a new Action token.
+  // When they take part in an attack (leading, aiding or opposing), the target is marked the moment the
+  // dice are rolled, whatever the outcome: that Group misses its next chance to get new Action tokens,
+  // then the mark goes (finishBeginning in game.ts). The mark stays on the card wherever it goes.
   'phlegm-elementals': {
-    beforeAttackResult(s, self, ctx) {
-      if (s.cards[self].data?.phlegmAttack === ctx.id) return;
-      const involved = leadsOrAids(ctx, self) || ctx.target === self || ctx.oppose.some((o) => o.iid === self);
+    onDiceRolled(s, self, ctx) {
+      const involved = leadsOrAids(ctx, self) || ctx.oppose.some((o) => o.iid === self && live(ctx, self));
       if (!involved) return;
-      s.cards[self].data = { ...s.cards[self].data, phlegmAttack: ctx.id };
       const tgt = s.cards[ctx.target];
-      if (tgt && tgt.zone === 'structure') { tgt.data = { ...tgt.data, skipTokenGain: true }; log(s, `${cardName(s, ctx.target)} is befouled: it misses its next Action token.`); }
+      if (!tgt || def(s, ctx.target).type !== 'Group') return;
+      tgt.data = { ...tgt.data, skipTokenGain: true };
+      log(s, `${cardName(s, ctx.target)} is befouled: it misses its next Action tokens.`);
     },
   },
 
@@ -342,14 +367,12 @@ registerHooks({
     }],
   },
 
-  // Gets an Action token at each rival's token placement, if it has none. (No hook fires precisely at
-  // "token placement"; turnStart, right before it, is the closest equivalent.)
+  // Gets an Action token during each rival's token placement phase, if it has none.
   's-l-a-k': {
-    onEvent(s, self, e) {
-      if (e.type !== 'turnStart' || !e.player) return;
+    onTokensPlaced(s, self, active) {
       const pl = ctl(s, self);
-      if (!pl || e.player === pl) return;
-      if (s.cards[self].tokens === 0 && !tokenBarred(s, self)) { s.cards[self].tokens = 1; log(s, 'S.L.A.K. never rests: it gets an Action token.', pl); }
+      if (!pl || active === pl) return;
+      if (s.cards[self].tokens === 0 && !s.cards[self].heldTokens && !tokenBarred(s, self)) { s.cards[self].tokens = 1; log(s, 'S.L.A.K. never rests: it gets an Action token.', pl); }
     },
   },
 
@@ -361,16 +384,18 @@ registerHooks({
     },
   },
 
-  // May only attack to control Personalities; every Personality it controls is SubGenius; it may pass its
-  // own token to its master or to a puppet that is SubGenius by its own printed card; it always has its
-  // master's alignments.
+  // May only control Personalities (no other card may become its puppet, however it would get there);
+  // every Personality it controls is SubGenius; it may pass its own token to its master or to a puppet,
+  // if that Group is SubGenius by its own printed card; it always has its master's alignments.
   'secret-fistemple': {
-    forbidAttack(s, self, attacker, target, type) {
-      return attacker === self && type === 'control' && def(s, target).subtype !== 'Personality'
-        ? `${cardName(s, self)} may only attack to control a Personality.` : null;
+    // Nothing but Personalities anywhere below it (a Group coming in brings its own puppets along).
+    forbidPuppet(s, self, group, master) {
+      if (master !== self && !controls(s, self, master)) return null;
+      const incoming = s.cards[group].zone === 'structure' ? subtree(s, group) : [group];
+      return incoming.some((g) => def(s, g).subtype !== 'Personality') ? `${cardName(s, self)} may only control Personalities.` : null;
     },
     attributeMod(s, self, iid, current) {
-      return s.cards[iid].master === self && def(s, iid).subtype === 'Personality' && !current.includes('SubGenius') ? [...current, 'SubGenius'] : current;
+      return controls(s, self, iid) && def(s, iid).subtype === 'Personality' && !current.includes('SubGenius') ? [...current, 'SubGenius'] : current;
     },
     alignmentMod(s, self, iid, current) {
       if (iid !== self) return current;
@@ -385,7 +410,7 @@ registerHooks({
         const isMaster = t === s.cards[self].master;
         const isPuppet = s.cards[t].master === self;
         if (!isMaster && !isPuppet) return "Choose the Secret FisTemple's master or one of its own puppets.";
-        if (!isMaster && !(def(s, t).attributes ?? []).includes('SubGenius')) return 'That puppet must be SubGenius by its own printed card.';
+        if (!(def(s, t).attributes ?? []).includes('SubGenius')) return 'That Group must be SubGenius by its own printed card.';
         return null;
       },
       apply(s, pl, _self, p) {
@@ -395,9 +420,9 @@ registerHooks({
     }],
   },
 
-  // Every Group it directly controls gets +5 Resistance.
+  // Every Group it controls (its puppets, and theirs) gets +5 Resistance.
   'subgenius-fistemples': {
-    resistanceMod: (s, self, iid) => (s.cards[iid].master === self ? 5 : 0),
+    resistanceMod: (s, self, iid) => (controls(s, self, iid) ? 5 : 0),
   },
 
   // Whenever a rival attacks a Group in your Power Structure, draw a Plot as the attack begins.
@@ -410,12 +435,10 @@ registerHooks({
     },
   },
 
-  // Cannot really be controlled: never counts as destroyed for other cards, and when destroyed goes to
-  // the uncontrolled area (or its destroyer's hand in a standard game) instead of the destroyed pile.
-  // RULING: this covers the Basic Goal / destroy-credit bookkeeping (noDestroyCredit) and where the card
-  // ends up (survivesDestruction); a rival's own "draw a Plot when you destroy a Group" ability still
-  // triggers, since undoing every downstream effect of the 'destroyed' event is beyond what a single
-  // Group's hooks can safely intercept.
+  // When destroyed they go to the uncontrolled area (or their destroyer's hand in a standard game) and
+  // never count as destroyed for any purpose: destroyGroup (game.ts) announces no destruction, so no
+  // card reacts to it or gives credit for it. ("You can't actually CONTROL them" is flavor: they are
+  // controlled like any Group.)
   'xists': {
     noDestroyCredit: true,
     survivesDestruction: true,
@@ -425,6 +448,26 @@ registerHooks({
   // may attack to control it.
   'yetis': {
     anySideMaster: true,
+  },
+});
+
+/** The masters the Citizens for Normalcy refuse: the Church of the SubGenius, the Discordian Society, Weird or SubGenius Groups. */
+function normalcyFoe(s: GameState, g: string): boolean {
+  const id = s.cards[g]?.cardId;
+  return id === 'church-of-the-subgenius' || id === 'discordian-society' || hasAlign(s, g, 'Weird') || hasAttr(s, g, 'SubGenius');
+}
+
+// MWOWM's die roll, once everyone had the chance to change it: 3 or less takes the discarded Plot.
+registerRollResult({
+  mwowm(s, pl, total, _dice, data) {
+    const card = data.card as string;
+    if (total > 3) { log(s, `MWOWM: ${total} is too slow to catch ${cardName(s, card)}.`, pl); return; }
+    if (!s.cards[card] || s.cards[card].zone !== 'discard') return;
+    for (const x of s.players) x.discard = x.discard.filter((i) => i !== card);
+    if (s.common) s.common.plotDiscard = s.common.plotDiscard.filter((i) => i !== card);
+    s.cards[card].zone = 'hand';
+    player(s, pl).hand.push(card);
+    log(s, `MWOWM catches ${cardName(s, card)}.`, pl);
   },
 });
 

@@ -3,18 +3,19 @@
 // build on (the uncontrolled area, the shared decks, "Requires ... Action" costs).
 import type { AttackCtx, GameState, PlotEffect, PlotPlay } from '../types';
 import { registerPlots } from '../plotTypes';
-import { registerChoice, registerHooks, hooksOf } from '../hooks';
+import { HOOKS, registerChoice, registerHooks, hooksOf } from '../hooks';
 import { cardName, def } from '../cards';
-import { alignments, attributes } from '../stats';
+import { alignments, attributes, power } from '../stats';
 import { openArrows, puppets, structureCards, subtree } from '../geometry';
 import { roll2d6, shuffle, nextRandom } from '../rng';
 import { anyOf, groupActions, illuminatiAction, plotDiscards, targetAction } from '../costs';
 import { sgRules, uncontrolledCards } from '../expansions';
 import {
-  activePlayer, askChoice, canEnterPlay, checkPlot, controllerOf2, discardCard,
-  drawGroup, drawPlot, exposableHand, exposeCards, giveToken, isCancelled, livePlayers, log, placeGroup, player,
-  playPlot, playResourceCard, putUncontrolled, resourcesOf,
+  activePlayer, askChoice, canEnterPlay, changeRoll, checkPlot, controllerOf2, discardCard,
+  drawGroup, drawPlot, eventAnswered, exposableHand, exposeCards, giveToken, isCancelled, livePlayers, log, placeGroup, player,
+  playPlot, playResourceCard, puppetSides, putUncontrolled, raiseEvent, resourcesOf, tokenBarred,
 } from '../game';
+import { describePlay, plotOptions } from '../moves';
 
 // ---------------------------------------------------------------- small local helpers
 
@@ -34,6 +35,22 @@ function auditee(s: GameState, pl: string, play: PlotPlay): string | undefined {
 /** Plots just played, either in the counter window or during an attack (18-1/2 Minute Gap's pool). */
 function counterPool(s: GameState, ctx?: AttackCtx) {
   return s.window?.kind === 'plot' ? s.window.plays ?? [] : ctx?.plays ?? [];
+}
+
+/** A card's roll outside an attack waiting for answers (a 'dieRoll' event), if there is one right now. */
+function cardRollNow(s: GameState) {
+  const e = eventAnswered(s);
+  return e?.type === 'dieRoll' ? e : undefined;
+}
+/** That roll is made again (S.C.A.M., Shordurpersav). */
+function rerollCardRoll(s: GameState, pl: string, why: string) {
+  const e = cardRollNow(s);
+  if (!e) return;
+  const n = (e.data?.dice as number[] | undefined)?.length ?? 2;
+  const dice = n === 2 ? roll2d6(s) : [roll2d6(s)[0]];
+  changeRoll(e, { dice });
+  e.data = { ...e.data, janorUsed: undefined };
+  log(s, `${why}: ${player(s, e.player!).name} rolls again: ${dice.join(' + ')}${n === 2 ? ` = ${dice[0] + dice[1]}` : ''}.`, pl);
 }
 
 function pickRandom<T>(s: GameState, list: T[], n: number): T[] {
@@ -75,7 +92,7 @@ function doXDay(s: GameState, pl: string, play: PlotPlay) {
 function doApostle(s: GameState, pl: string, play: PlotPlay) {
   let n = 0;
   for (const g of play.targets ?? []) {
-    if (s.cards[g].zone !== 'structure' || s.cards[g].tokens !== 0) continue;
+    if (s.cards[g].zone !== 'structure' || s.cards[g].tokens !== 0 || s.cards[g].heldTokens) continue;
     // giveToken() itself respects any bar on the card getting tokens.
     giveToken(s, g);
     if (s.cards[g].tokens) n++;
@@ -95,6 +112,12 @@ function doSlackfusion(s: GameState, pl: string) {
   log(s, `${player(s, pl).name} plays Slackfusion: Illuminati Action tokens may change hands in deals for the rest of the turn.`, pl);
 }
 
+/**
+ * Sacred Jests: the rival's random Plot must be used at once, in any legal way he chooses (its target,
+ * mode and payment included: every complete legal play is offered, the way the interface offers plays),
+ * or discarded; a Goal is exposed instead. While he decides, the Plot counts as playable right now
+ * whatever its usual moment (`forcedPlay`), as long as nothing but an attack's own timing rules it out.
+ */
 function doSacredJests(s: GameState, pl: string, play: PlotPlay) {
   const r = auditee(s, pl, play);
   if (!r) return;
@@ -104,27 +127,46 @@ function doSacredJests(s: GameState, pl: string, play: PlotPlay) {
   const picked = pickRandom(s, hand, 1)[0];
   if (def(s, picked).subtype === 'Goal') {
     const shown = exposeCards(s, [picked]);
-    if (shown.length) log(s, `${p.name} must expose ${cardName(s, picked)}.`, pl);
+    log(s, shown.length ? `${p.name} must expose ${cardName(s, picked)}.` : `${p.name}'s random Plot is a Goal that cannot be exposed.`, pl);
     return;
   }
-  if (checkPlot(s, r, { card: picked })) {
-    log(s, `${p.name} cannot play ${cardName(s, picked)} right now and must discard it.`, pl);
+  const plays = forcedPlays(s, r, picked);
+  if (!plays.length) {
+    log(s, `${p.name} cannot use ${cardName(s, picked)} right now and must discard it.`, pl);
     discardCard(s, picked);
     return;
   }
   askChoice(s, r, {
-    key: 'sacred-jests', question: `Sacred Jests: play ${cardName(s, picked)} now, or discard it?`,
-    options: [{ id: 'play', label: `Play ${cardName(s, picked)}` }, { id: 'discard', label: 'Discard it' }],
-    min: 1, max: 1, data: { card: picked },
+    key: 'sacred-jests', question: `Sacred Jests: use ${cardName(s, picked)} now, or discard it.`,
+    options: [...plays.map((pp, i) => ({ id: `play:${i}`, label: `Play it: ${describePlay(s, pp)}` })), { id: 'discard', label: 'Discard it' }],
+    min: 1, max: 1, data: { card: picked, plays },
   });
+}
+
+/** Every complete legal way for `r` to use the Plot `card` at once. */
+function forcedPlays(s: GameState, r: string, card: string): PlotPlay[] {
+  const saved = s.forcedPlay;
+  s.forcedPlay = { player: r, card };
+  try {
+    return plotOptions(s, r, card).map((o) => (o.action as { play: PlotPlay }).play);
+  } finally { s.forcedPlay = saved; }
 }
 
 function doPstench(s: GameState, pl: string, play: PlotPlay) {
   const r = auditee(s, pl, play);
   if (!r) return;
   if (play.mode === 'discardGoal') {
-    const goal = player(s, r).hand.find((c) => s.cards[c].exposed && def(s, c).subtype === 'Goal');
-    if (goal) { log(s, `${player(s, r).name} must discard ${cardName(s, goal)}.`, pl); discardCard(s, goal); }
+    // RULING: the player of Psychic Pstench names which exposed Goal goes, if the rival shows more than
+    // one (the card forces that rival to discard "one exposed Goal"; the forcing player picks it).
+    const goals = player(s, r).hand.filter((c) => s.cards[c].exposed && def(s, c).subtype === 'Goal');
+    if (goals.length > 1) {
+      askChoice(s, pl, {
+        key: 'pstench-goal', question: `Psychic Pstench: which of ${player(s, r).name}'s exposed Goals must be discarded?`,
+        options: goals.map((c) => ({ id: c, label: cardName(s, c) })), min: 1, max: 1, data: { rival: r },
+      });
+      return;
+    }
+    if (goals[0]) { log(s, `${player(s, r).name} must discard ${cardName(s, goals[0])}.`, pl); discardCard(s, goals[0]); }
     return;
   }
   const shown = exposeCards(s, exposableHand(s, r, 'Plot'));
@@ -175,13 +217,48 @@ registerChoice('sacred-jests', {
   resolve(s, r, picked, data) {
     const card = data.card as string;
     if (!s.cards[card] || s.cards[card].zone !== 'hand' || !player(s, r).hand.includes(card)) return;
-    if (picked[0] === 'play' && !checkPlot(s, r, { card })) { playPlot(s, r, { card }); return; }
+    const i = picked[0]?.startsWith('play:') ? Number(picked[0].slice(5)) : -1;
+    const chosen = (data.plays as PlotPlay[] | undefined)?.[i];
+    if (chosen) {
+      s.forcedPlay = { player: r, card };
+      try {
+        if (!checkPlot(s, r, chosen)) { playPlot(s, r, chosen); return; }
+      } finally { s.forcedPlay = undefined; }
+      log(s, `${cardName(s, card)} can no longer be played that way.`, r);
+    }
     log(s, `${player(s, r).name} discards ${cardName(s, card)}.`, r);
     discardCard(s, card);
   },
-  ai(s, r, _options, data) {
-    const card = data.card as string;
-    return !checkPlot(s, r, { card }) ? ['play'] : ['discard'];
+  // A computer player uses its own card rather than lose it.
+  ai: (_s, _r, options) => [(options.find((o) => o.id.startsWith('play:')) ?? options[options.length - 1]).id],
+});
+
+registerChoice('pstench-goal', {
+  resolve(s, pl, picked, data) {
+    const r = data.rival as string;
+    const goal = picked[0];
+    if (!goal || !player(s, r).hand.includes(goal) || !s.cards[goal].exposed) return;
+    log(s, `${player(s, r).name} must discard ${cardName(s, goal)}.`, pl);
+    discardCard(s, goal);
+  },
+});
+
+// ---------------------------------------------------------------- Rant! (which arrow of the Personality)
+
+/** Put a Group taken with Rant! under its Personality, and let rivals answer the new control (Comet Hail-"Bob"). */
+function rantPlace(s: GameState, pl: string, t: string, master: string, side: string) {
+  placeGroup(s, t, pl, master, side as never);
+  log(s, `${cardName(s, t)} becomes a puppet of ${cardName(s, master)} at once.`, pl);
+  hooksOf(s, t)?.onEnterPlay?.(s, t);
+  raiseEvent(s, { type: 'gainedControl', player: pl, card: t, data: { how: 'card' } });
+}
+registerChoice('rant-side', {
+  resolve(s, pl, picked, data) {
+    const t = data.card as string, master = data.master as string;
+    const sides = puppetSides(s, pl, t, master);
+    const side = sides.includes(picked[0] as never) ? picked[0] : sides[0];
+    if (!side || !['uncontrolled', 'hand'].includes(s.cards[t].zone) || !canEnterPlay(s, t)) { log(s, `${cardName(s, t)} can no longer be placed there.`, pl); return; }
+    rantPlace(s, pl, t, master, side);
   },
 });
 
@@ -199,8 +276,9 @@ registerChoice('random-jesii', {
 // ---------------------------------------------------------------- the cards
 
 registerPlots({
-  // OverMan: link to a Personality (controlled or uncontrolled) not already a False OverMan; sets its
-  // Power and Global Power to 3 (an increase only: def() gives the printed base, per CARD_SCRIPTING.md).
+  // OverMan: link to a Personality in play (controlled or uncontrolled) that is not already a False
+  // OverMan, and never to OverMan Philo Drummond; raises its Power and Global Power to 3 (an increase
+  // only: def() gives the printed base, per CARD_SCRIPTING.md).
   'overman': {
     timing: ['anytime'],
     linked: true,
@@ -209,7 +287,8 @@ registerPlots({
       if (ctx || s.attack) return 'OverMan cannot be played during an attack.';
       const t = play.target ? s.cards[play.target] : undefined;
       if (!t || (t.zone !== 'structure' && t.zone !== 'uncontrolled') || def(s, play.target!).subtype !== 'Personality') return 'Choose a Personality in play.';
-      const already = Object.values(s.cards).some((c) => c.cardId === 'overman' && c.zone === 'table' && c.linkedTo === play.target && !c.data?.linkInactive);
+      if (t.cardId === 'overman-philo-drummond') return 'OverMan Philo Drummond is unaffected by OverMan.';
+      const already = Object.values(s.cards).some((c) => c.cardId === 'false-overman' && c.zone === 'table' && c.linkedTo === play.target);
       if (already) return `${cardName(s, play.target!)} is already a False OverMan.`;
       return null;
     },
@@ -219,7 +298,8 @@ registerPlots({
       s.cards[play.card].linkedTo = play.target;
       log(s, `${cardName(s, play.target)} becomes a False OverMan.`, pl);
     },
-    linkLegal: (s, _plot, group) => (s.cards[group] && ['structure', 'uncontrolled'].includes(s.cards[group].zone) && def(s, group).subtype === 'Personality' ? 'ok' : 'discard'),
+    linkLegal: (s, _plot, group) => (s.cards[group] && ['structure', 'uncontrolled'].includes(s.cards[group].zone) && def(s, group).subtype === 'Personality'
+      && s.cards[group].cardId !== 'overman-philo-drummond' ? 'ok' : 'discard'),
   },
 
   // Psychic Pstench: a chosen rival exposes all his Plots, or discards one exposed Goal.
@@ -270,8 +350,8 @@ registerPlots({
     },
   },
 
-  // Random Jesii: a chosen rival exposes all but one Plot (his choice which stays hidden). Immune:
-  // whoever controls the Martyr Meter.
+  // Random Jesii: a chosen rival exposes all but one Plot. Immune: whoever controls the Martyr Meter (the
+  // only place this immunity is encoded). RULING: the victim picks which Plot stays hidden.
   'random-jesii': {
     timing: ['anytime'],
     needs: { target: 'rival' },
@@ -296,8 +376,8 @@ registerPlots({
   },
 
   // Rant!: on your turn, after token placement, a Personality with an open control arrow takes
-  // automatic control of a Group or Resource from the uncontrolled area (hand, in standard play).
-  // Your turn ends at once.
+  // automatic control of a Group or Resource from the uncontrolled area (hand, in standard play); a Group
+  // goes on the arrow of that Personality its player picks. Your turn ends at once.
   'rant': {
     timing: ['anytime'],
     check(s, pl, play, ctx) {
@@ -309,22 +389,28 @@ registerPlots({
       const t = play.target;
       if (!t || !pool.includes(t) || (def(s, t).type !== 'Group' && def(s, t).type !== 'Resource')) return sgRules(s) ? 'Choose a Group or Resource in the uncontrolled area.' : 'Choose a Group or Resource card in your hand.';
       if (!canEnterPlay(s, t, pl)) return 'That card is already in play or was destroyed.';
+      if (def(s, t).type === 'Group' && !puppetSides(s, pl, t, play.payWith[0]).length) return `${cardName(s, t)} cannot become a puppet of ${cardName(s, play.payWith[0])}.`;
       return null;
     },
-    apply() {},
+    // Its cost, the Personality's action, is paid as it is played.
+    apply(s, _pl, play) { s.cards[play.payWith![0]].tokens--; },
     resolve(s, pl, play) {
       const master = play.payWith![0];
-      s.cards[master].tokens--;
       const t = play.target!;
       const p = player(s, pl);
-      if (def(s, t).type === 'Resource') {
+      const pool = sgRules(s) ? uncontrolledCards(s) : p.hand;
+      if (!pool.includes(t) || !canEnterPlay(s, t, pl)) log(s, `${cardName(s, t)} is no longer there to take.`, pl);
+      else if (def(s, t).type === 'Resource') {
         playResourceCard(s, t, pl);
         log(s, `${p.name} takes automatic control of ${cardName(s, t)}.`, pl);
       } else {
-        const side = openArrows(s, master)[0];
-        placeGroup(s, t, pl, master, side);
-        log(s, `${cardName(s, t)} becomes a puppet of ${cardName(s, master)} at once.`, pl);
-        hooksOf(s, t)?.onEnterPlay?.(s, t);
+        const sides = puppetSides(s, pl, t, master);
+        if (!sides.length) log(s, `${cardName(s, t)} cannot become a puppet of ${cardName(s, master)} now.`, pl);
+        else if (sides.length === 1) rantPlace(s, pl, t, master, sides[0]);
+        else askChoice(s, pl, {
+          key: 'rant-side', question: `Rant!: on which control arrow of ${cardName(s, master)} does ${cardName(s, t)} go?`,
+          options: sides.map((side) => ({ id: side, label: `${side.toLowerCase()} arrow` })), min: 1, max: 1, data: { card: t, master },
+        });
       }
       log(s, `${p.name}'s turn ends at once.`, pl);
       s.phase = 'endOfTurn';
@@ -371,29 +457,34 @@ registerPlots({
     },
     apply(s, pl, play, ctx) { if (ctx) { s.cards[play.card].linkedTo = play.target; log(s, `Robo "Bob" guards ${cardName(s, play.target!)}.`, pl); } },
     resolve(s, pl, play) { s.cards[play.card].linkedTo = play.target; log(s, `Robo "Bob" guards ${cardName(s, play.target!)}.`, pl); },
-    linkLegal: (s, _plot, group) => (s.cards[group] && s.cards[group].zone === 'structure' ? 'ok' : 'discard'),
+    // Linked for good: it stays with the Place wherever it is in play, the uncontrolled area included
+    // (SubGenius rules, "The Cards Remember"); it goes only when the Place leaves play.
+    linkLegal: (s, _plot, group) => (s.cards[group] && ['structure', 'uncontrolled'].includes(s.cards[group].zone) ? 'ok' : 'discard'),
   },
 
-  // S.C.A.M: right after a rival rolls, the roll is void and made again.
+  // S.C.A.M: right after a rival rolls (an attack roll, or a card's roll outside an attack), the roll is
+  // void and made again. Costs the action of one of your Personalities.
   's-c-a-m': {
-    timing: ['roll'],
+    timing: ['roll', 'event'],
+    events: ['dieRoll'],
     requires: anyOf(groupActions({ subtypes: ['Personality'] })),
     check(s, pl, _play, ctx) {
+      const e = cardRollNow(s);
+      if (!ctx && e) return e.player && e.player !== pl ? null : 'Play this right after a rival makes a die roll.';
       if (!ctx?.roll || ctx.attackerPlayer === pl) return 'Play this right after a rival makes a die roll.';
       return null;
     },
-    apply(s, pl, _play, ctx): PlotEffect {
+    apply(s, pl, _play, ctx): PlotEffect | void {
+      if (!ctx) return;
       const dice = roll2d6(s);
-      log(s, `S.C.A.M: ${player(s, ctx!.attackerPlayer).name} must roll again: ${dice[0]} + ${dice[1]} = ${dice[0] + dice[1]}.`, pl);
+      log(s, `S.C.A.M: ${player(s, ctx.attackerPlayer).name} must roll again: ${dice[0]} + ${dice[1]} = ${dice[0] + dice[1]}.`, pl);
       return { t: 'reroll', dice };
     },
+    resolve(s, pl) { rerollCardRoll(s, pl, 'S.C.A.M'); },
   },
 
-  // Sacred Jests: a chosen rival picks one of his Plots at random and must play it now (if he legally
-  // can) or discard it; a Goal picked is shown instead.
-  // RULING: simulating an arbitrary forced Plot play (with its own target and timing) is beyond one
-  // automated step, so "play it now" is offered only when the Plot is currently legal for its holder to
-  // play with no further target; otherwise it is discarded, the closest faithful outcome.
+  // Sacred Jests: a chosen rival picks one of his Plots at random and must use it at once (any legal
+  // way, his choice) or discard it; a Goal picked is exposed instead (doSacredJests).
   'sacred-jests': {
     timing: ['anytime'],
     needs: { target: 'rival' },
@@ -406,41 +497,48 @@ registerPlots({
     resolve: doSacredJests,
   },
 
-  // Schizm: +10 to your attack on a rival's Group, even one otherwise immune or undestroyable.
-  // RULING: the printed "on success the target becomes uncontrolled" reads most sensibly as replacing
-  // what a successful Attack to Control would otherwise do (capture it); a successful Attack to Destroy
-  // still destroys the target as normal (Schizm's role there is the +10 and the immunity override).
-  // On success the target and every puppet beneath it become uncontrolled (in standard play, the target
-  // is discarded and its puppets return to their owners' hands).
+  // Schizm: played with any attack (Attack to Control or to Destroy, by anyone; not an Instant attack,
+  // which only cards naming Instant attacks affect) on a Group controlled by a rival of its player (card
+  // FAQ): +10 to the attack, which may be made even on a Group otherwise immune, uncontrollable or
+  // undestroyable. If the attack succeeds, instead of the usual result the target and all its puppets
+  // (and theirs) become uncontrolled; with no uncontrolled area, the target is discarded and its puppets
+  // go to their owners' hands (the 'schizm' hooks below).
   'schizm': {
-    timing: ['declare'],
+    timing: ['declare', 'attack'],
     overridesImmunity: true,
     linked: true,
     check(s, pl, _play, ctx) {
-      if (!ctx || ctx.instant || ctx.attackerPlayer !== pl) return 'Play this when you declare your attack.';
-      if (!ctx.target || !s.cards[ctx.target] || def(s, ctx.target).type !== 'Group' || s.cards[ctx.target].controller === pl || !s.cards[ctx.target].controller) return 'Choose an attack on a Group controlled by a rival.';
+      if (!ctx || ctx.instant) return 'Play this with an attack (not an Instant attack).';
+      const t = ctx.target ? s.cards[ctx.target] : undefined;
+      if (!t || def(s, ctx.target).type !== 'Group' || t.zone !== 'structure' || !t.controller || t.controller === pl) return 'Choose an attack on a Group controlled by one of your rivals.';
       return null;
     },
     apply(s, pl, play, ctx) {
       s.cards[play.card].linkedTo = `attack:${ctx!.id}`;
       ctx!.attackBonus.push({ player: pl, plot: play.card, amount: 10, label: 'Schizm' });
-      log(s, `Schizm: +10, and success sends ${cardName(s, ctx!.target)} into the uncontrolled area.`, pl);
+      log(s, `Schizm: +10, and success sends ${cardName(s, ctx!.target)} ${sgRules(s) ? 'into the uncontrolled area' : 'away'}.`, pl);
     },
   },
 
-  // Shordurpersav: right after you roll, ignore it and roll again.
+  // Shordurpersav: right after you roll (an attack roll, or a card's roll outside an attack), ignore it
+  // and roll again. Costs an Illuminati action or two SubGenius actions.
   'shordurpersav': {
-    timing: ['roll'],
+    timing: ['roll', 'event'],
+    events: ['dieRoll'],
     requires: anyOf(illuminatiAction(), groupActions({ attributes: ['SubGenius'] }, { count: 2 })),
     check(s, pl, _play, ctx) {
+      const e = cardRollNow(s);
+      if (!ctx && e) return e.player === pl ? null : 'Play this right after you make a die roll.';
       if (!ctx?.roll || ctx.attackerPlayer !== pl) return 'Play this right after you make a die roll.';
       return null;
     },
-    apply(s, pl, _play, ctx): PlotEffect {
+    apply(s, pl, _play, ctx): PlotEffect | void {
+      if (!ctx) return;
       const dice = roll2d6(s);
       log(s, `Shordurpersav: ${player(s, pl).name} ignores that roll and tries again: ${dice[0]} + ${dice[1]} = ${dice[0] + dice[1]}.`, pl);
       return { t: 'reroll', dice };
     },
+    resolve(s, pl) { rerollCardRoll(s, pl, 'Shordurpersav'); },
   },
 
   // Slackfusion: for the rest of the turn, Illuminati Action tokens may be given or traded in a deal,
@@ -469,21 +567,22 @@ registerPlots({
     },
   },
 
-  // Stark Fist of Removal: your Illuminati keeps only one Action token, and a chosen rival's Illuminati
-  // loses all of its tokens. Your turn ends at once.
+  // Stark Fist of Removal: on your turn, for all your own Illuminati tokens (at least one), a chosen
+  // rival's Illuminati loses all of its tokens. Your turn ends at once.
   'stark-fist-of-removal': {
     timing: ['anytime'],
     needs: { target: 'rival' },
     check(s, pl, play, ctx) {
       if (ctx || s.attack) return 'Stark Fist of Removal cannot be played during an attack.';
       if (!(s.phase === 'main' && activePlayer(s).id === pl)) return 'Play this on your own turn.';
+      if (s.cards[player(s, pl).illuminati].tokens < 1) return 'It costs all your Illuminati tokens, at least one.';
       return auditee(s, pl, play) ? null : 'Choose a rival.';
     },
-    apply() {},
+    // Its cost: every token on your own Illuminati, paid as it is played.
+    apply(s, pl) { s.cards[player(s, pl).illuminati].tokens = 0; },
     resolve(s, pl, play) {
-      const r = auditee(s, pl, play)!;
-      const mine = s.cards[player(s, pl).illuminati];
-      if (mine.tokens > 1) mine.tokens = 1;
+      const r = auditee(s, pl, play);
+      if (!r) return;
       s.cards[player(s, r).illuminati].tokens = 0;
       log(s, `${player(s, pl).name} shows the Stark Fist of Removal to ${player(s, r).name}: their Illuminati loses all Action tokens. The turn ends at once.`, pl);
       s.phase = 'endOfTurn';
@@ -519,18 +618,20 @@ registerPlots({
     apply(_s, _pl, play): PlotEffect { return { t: 'cancelPlot', target: play.target! }; },
   },
 
-  // The 13th Apostle: an Illuminati action gives an Action token to one Personality, or to several
-  // whose Power totals 5 or less; not to one that already has a token or is barred from getting one.
+  // The 13th Apostle: an Illuminati action gives an Action token to any one Personality (anyone's), or
+  // to several whose Power totals 5 or less; not to one that already has a token or is barred from
+  // getting one.
   'the-13th-apostle': {
     timing: ['anytime'],
     needs: { targets: true },
     requires: anyOf(illuminatiAction()),
-    check(s, pl, play) {
+    check(s, _pl, play) {
       const t = play.targets ?? [];
-      const eligible = (g: string) => own(s, pl, g) && isGroup(s, g) && def(s, g).subtype === 'Personality' && s.cards[g].tokens === 0;
+      const eligible = (g: string) => inPlay(s, g) && isGroup(s, g) && def(s, g).subtype === 'Personality' && s.cards[g].tokens === 0
+        && !s.cards[g].heldTokens && !tokenBarred(s, g);
       if (!t.length || new Set(t).size !== t.length) return 'Choose one or more Personalities to give an Action token.';
-      if (!t.every(eligible)) return 'Only your Personalities without an Action token can be given one.';
-      if (t.length > 1 && t.reduce((n, g) => n + (def(s, g).power ?? 0), 0) > 5) return 'Give a token to one Personality, or several with 5 Power or less in total.';
+      if (!t.every(eligible)) return 'Only Personalities in play without an Action token, able to get one, can be given one.';
+      if (t.length > 1 && t.reduce((n, g) => n + power(s, g), 0) > 5) return 'Give a token to one Personality, or several with 5 Power or less in total.';
       return null;
     },
     apply(s, pl, play, ctx) { if (ctx) doApostle(s, pl, play); },
@@ -596,19 +697,15 @@ registerPlots({
   },
 
   // Time Control: on your turn, your Illuminati makes one direct attack at its normal Power without
-  // spending a token; you may spend no other Illuminati token this turn except to buy a Plot.
-  // RULING: fully tracking every possible way an Illuminati token could already have been spent this
-  // turn is impractical; the printed "have not spent" restriction is approximated by requiring the
-  // Illuminati still hold a token when this is played, and going forward its token is locked (below)
-  // for the common ways it could otherwise be spent (buying a Resource, a declared Illuminati-action
-  // cost, moving a Group).
+  // spending a token; its player may not spend, or have spent, any Illuminati token this turn except to
+  // buy Plots. The engine records every Illuminati token spent on anything else (illuminatiSpent) and,
+  // once this is played, refuses any such spending (illuminatiLocked; noteIlluminatiSpending in game.ts).
   'time-control': {
     timing: ['anytime'],
     check(s, pl, _play, ctx) {
       if (ctx || s.attack) return 'Time Control cannot be played during an attack.';
       if (!(s.phase === 'main' && activePlayer(s).id === pl)) return 'Play this on your own turn.';
-      const ill = player(s, pl).illuminati;
-      if (s.cards[ill].tokens < 1) return 'Your Illuminati has no Action token to spend this turn.';
+      if (s.turnFlags.illuminatiSpent?.includes(pl)) return 'Your Illuminati has already spent a token this turn on something other than buying Plots.';
       if (s.turnFlags.illuminatiLocked === pl || s.turnFlags.freeAttack === pl) return 'You have already played Time Control this turn.';
       return null;
     },
@@ -663,6 +760,7 @@ registerPlots({
       const g = play.target;
       if (!g || !own(s, pl, g) || def(s, g).type !== 'Group' || g === player(s, pl).illuminati) return 'Choose a Group you control, other than your Illuminati.';
       if (puppets(s, g).length) return 'Choose a Group with no puppets.';
+      if (HOOKS[s.cards[g].cardId]?.neverDestroyed) return `Nothing but an attack can remove ${cardName(s, g)}.`;
       return null;
     },
     apply() {},
@@ -680,7 +778,7 @@ registerPlots({
         log(s, `${p.name} replaces ${oldName} with ${cardName(s, drawn)}, a Resource.`, pl);
         return;
       }
-      const canPlace = canEnterPlay(s, drawn) && s.cards[master]?.zone === 'structure' && s.cards[master].controller === pl && openArrows(s, master).includes(side);
+      const canPlace = canEnterPlay(s, drawn) && puppetSides(s, pl, drawn, master).includes(side);
       if (!canPlace) {
         discardCard(s, drawn);
         drawPlot(s, p);
@@ -712,9 +810,12 @@ registerHooks({
   },
   'schizm': {
     onAttackEnd(s, self, ctx) {
-      if (s.cards[self].linkedTo !== `attack:${ctx.id}` || s.cards[self].zone !== 'table') return;
-      discardCard(s, self);
-      if (ctx.type !== 'control' || ctx.result !== 'success' || !s.cards[ctx.target] || s.cards[ctx.target].zone !== 'structure') return;
+      if (s.cards[self].linkedTo === `attack:${ctx.id}` && s.cards[self].zone === 'table') discardCard(s, self);
+    },
+    // A successful attack with a live Schizm: the target scatters instead of being captured or destroyed.
+    replaceAttackResult(s, self, ctx) {
+      if (s.cards[self].linkedTo !== `attack:${ctx.id}` || isCancelled(ctx.plays, self)) return false;
+      if (!s.cards[ctx.target] || s.cards[ctx.target].zone !== 'structure') return false;
       const tree = subtree(s, ctx.target);
       if (sgRules(s)) {
         for (const iid of tree) putUncontrolled(s, iid, ctx.attackerPlayer);
@@ -728,9 +829,20 @@ registerHooks({
         }
       }
       log(s, `Schizm: ${cardName(s, ctx.target)}${tree.length > 1 ? ' and its puppets' : ''} ${sgRules(s) ? 'become uncontrolled' : 'scatter'}.`, ctx.attackerPlayer);
+      return true;
     },
   },
   'robo-bob': {
+    forbidIsImmunity: true,
+    // Carried off with a captured master, the Place leaves the capturer's Power Structure at once (with
+    // its own puppets): it may never be controlled by another player.
+    onCapture(s, self, _victim, by) {
+      const place = s.cards[self].linkedTo;
+      const owner = controllerOf2(s, self);
+      if (!place || !owner || by === owner || s.cards[place]?.zone !== 'structure' || s.cards[place].controller !== by) return;
+      log(s, `Robo "Bob": ${cardName(s, place)} will not serve ${player(s, by).name} and leaves the Power Structure.`, owner);
+      for (const g of [...subtree(s, place)].reverse()) putUncontrolled(s, g, owner);
+    },
     forbidAttack(s, self, _attacker, target, type, attackerPlayer) {
       const c = s.cards[self];
       if (c.linkedTo !== target || (type !== 'control' && type !== 'takeover')) return null;

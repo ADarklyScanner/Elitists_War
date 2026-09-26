@@ -80,6 +80,11 @@ export interface CardHooks {
   powerMod?: (s: GameState, self: string, iid: string) => number;
   resistanceMod?: (s: GameState, self: string, iid: string) => number;
   globalMod?: (s: GameState, self: string, iid: string) => number;
+  /**
+   * `iid`'s Global Power equals its Power ('current') or its Permanent Power ('permanent') while this
+   * card is in play (Three-Fisted Tales of "Bob"; Nental Ife, Head Launching). Still capped at Power.
+   */
+  globalEqualsPower?: (s: GameState, self: string, iid: string) => 'current' | 'permanent' | undefined;
   /** Extra Action tokens `iid` receives when tokens are refreshed. */
   extraTokens?: (s: GameState, self: string, iid: string) => number;
   /** Added to the attack or defense total of an attack in progress. */
@@ -110,6 +115,22 @@ export interface CardHooks {
   attributeMod?: (s: GameState, self: string, iid: string, current: string[]) => string[];
   /** Forbid an attack (return a reason). Also consulted for automatic takeovers (type 'takeover'). */
   forbidAttack?: (s: GameState, self: string, attacker: string | undefined, target: string, type: 'control' | 'destroy' | 'takeover', attackerPlayer: string) => string | null;
+  /**
+   * Static: this card's `forbidAttack` only says "immune", "cannot be controlled" or "cannot be
+   * destroyed", so a card declared with the attack that overrides immunity (Schizm) sets it aside.
+   */
+  forbidIsImmunity?: boolean;
+  /**
+   * Static: this card's own `forbidAttack` and `forbidPuppet` also protect it while it waits outside a
+   * Power Structure (in a hand, or in the uncontrolled area), as the target of an attack or a takeover.
+   */
+  rulesOffTable?: boolean;
+  /**
+   * Forbid `group` from becoming a puppet of `master` (a Group of `player`), however it would get there:
+   * an automatic takeover, a capture, a move, or a card putting it there (Citizens for Normalcy, the
+   * Secret FisTemple). Return a reason.
+   */
+  forbidPuppet?: (s: GameState, self: string, group: string, master: string, player: string) => string | null;
   /** Forbid a Group from aiding or opposing this attack. */
   forbidJoin?: (s: GameState, self: string, ctx: AttackCtx, group: string, as: 'aid' | 'oppose') => boolean;
   /** Let `attacker` ignore `target`'s immunities (e.g. Deprogrammers vs Discordian protection). */
@@ -152,6 +173,13 @@ export interface CardHooks {
   multipleCopies?: boolean;
   /** Static: destroying this Group gives no destruction credit for Goals (Media Sensation). */
   noDestroyCredit?: boolean;
+  /**
+   * Static: this Group is never destroyed, and never moved by its controller; a successful attack on it
+   * is handled by its own `replaceAttackResult` ("Bobbies", by errata: only an attack on them or the
+   * loss of their master removes them).
+   */
+  neverDestroyed?: boolean;
+  cannotMove?: boolean;
   /** Static: a "destroyed" Group goes to the uncontrolled area (or its destroyer's hand) instead of the destroyed pile (Xists). */
   survivesDestruction?: boolean;
   /**
@@ -165,6 +193,17 @@ export interface CardHooks {
    * again so players can respond to the change; a card must not do so twice in one attack.
    */
   beforeAttackResult?: (s: GameState, self: string, ctx: AttackCtx) => boolean | void;
+  /** Called the moment an attack's dice are first rolled, before anyone may respond to the roll. */
+  onDiceRolled?: (s: GameState, self: string, ctx: AttackCtx) => void;
+  /**
+   * A successful attack is about to take effect: return true if this card has already dealt with the
+   * target instead (Schizm: it becomes uncontrolled rather than captured or destroyed).
+   */
+  replaceAttackResult?: (s: GameState, self: string, ctx: AttackCtx) => boolean;
+  /** A card's roll outside an attack (cardRoll, a 'dieRoll' event) has its final result and has been used. */
+  afterCardRoll?: (s: GameState, self: string, e: GameEvent) => void;
+  /** Extra Group cards the controller may draw at the start of his turn (SubGenius rules: www.subgenius.com). */
+  extraGroupDraws?: (s: GameState, self: string) => number;
   /** A Unique Resource that another copy may replace once this one is destroyed (Hidden City). */
   replaceableWhenDestroyed?: boolean;
   /**
@@ -201,6 +240,11 @@ export interface CardHooks {
 
   // ---- triggers
   onTurnStart?: (s: GameState, self: string) => void;
+  /**
+   * Fired for every active card right after the active player's Groups got their Action tokens (the
+   * token placement phase), whoever controls the card (Martyr Meter, Dokstok, S.L.A.K.).
+   */
+  onTokensPlaced?: (s: GameState, self: string, activePlayer: string) => void;
   onDestroy?: (s: GameState, self: string, victim: string, by: string) => void;
   onCapture?: (s: GameState, self: string, victim: string, by: string, from: string | undefined) => void;
   onAttackEnd?: (s: GameState, self: string, ctx: AttackCtx) => void;
