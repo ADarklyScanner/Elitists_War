@@ -12,7 +12,7 @@ import {
 } from './geometry';
 import { abilitiesOf, attackingGroups, matches } from './abilities';
 import { alignmentPairs, alignments, attributes, globalPower, power, resistance } from './stats';
-import { NWO_EFFECTS } from './nwo';
+import { NWO_EFFECTS, interestingTimesMode } from './nwo';
 import { PLOTS, GOALS } from './plotTypes';
 import { HOOKS, CHOICES, EVENT_ABILITY_CARDS, isCancelled, linkedPlotLive, paralyzedGroups, abilitiesDisabled, activeHookCards, anyHook, fireHooks, goalCheck, hooksOf, registerChoice, sumHooks, type AbilityParams, type ActivatedAbility, type CardHooks } from './hooks';
 import type { AiLevel, AnnouncedKind, Choice, GameEvent, PlotEffect } from './types';
@@ -549,7 +549,7 @@ function resolveAction(s: GameState, e: GameEvent) {
     case 'useAbility': {
       const c = s.cards[a.card];
       const ab = HOOKS[c.cardId]?.actions?.find((x) => x.id === a.ability);
-      if (!ab || (c.zone !== 'structure' && c.zone !== 'resources') || c.controller !== pl || abilitiesDisabled(s, a.card)) {
+      if (!ab || (c.zone !== 'structure' && c.zone !== 'resources' && !isLinkedAbilityCard(s, c)) || c.controller !== pl || abilitiesDisabled(s, a.card)) {
         log(s, `${cardName(s, a.card)} is no longer able to use that ability.`, pl);
         break;
       }
@@ -1153,6 +1153,8 @@ export function goalNeeded(s: GameState, playerId: string): number {
   let n = s.settings.basicGoal;
   const ill = illuminatiOf(s, playerId);
   if (abilitiesOf(s, ill).some((a) => a.kind === 'specialGoal' && a.goal === 'destroyCount')) n -= player(s, playerId).destroyedCredit.length;
+  // Interesting Times (Assassins), "harder" mode: the Basic Goal needs two more Groups, for everyone.
+  if (interestingTimesMode(s) === 'harder') n += 2;
   return n;
 }
 
@@ -1184,6 +1186,8 @@ export function goalOptions(s: GameState, playerId: string): GoalOption[] {
     const need = goalNeeded(s, playerId);
     const basic = goalCount(s, playerId) >= need;
     out.push({ id: 'basic', label: `Basic Goal (${need} Groups)`, met: basic, why: basic ? 'controls enough Groups' : undefined });
+    // Interesting Times (Assassins), "basic only" mode: nobody may win by a Goal card or a Special Goal.
+    if (interestingTimesMode(s) === 'basic') return out;
     for (const g of goalsInHand(s, playerId)) {
       const why = GOALS[s.cards[g].cardId]?.(s, playerId) ?? null;
       out.push({ id: g, card: g, label: `Goal card: ${cardName(s, g)}`, met: !!why, why: why ? `${cardName(s, g)}: ${why}` : undefined });
@@ -3117,11 +3121,15 @@ function doTakeover(s: GameState, playerId: string, action: Extract<Action, { ty
   raiseEvent(s, { type: 'takeover', player: playerId, card: action.card }, 'finishBeginning');
 }
 
-/** Use an activated ability of a Group or Resource you control. */
+/** A linked Plot on the table (Backmasquerade) that grants its own activated ability, currently live. */
+const isLinkedAbilityCard = (s: GameState, c: CardInstance) =>
+  c.zone === 'table' && !!c.linkedTo && !!HOOKS[c.cardId]?.actions?.length && linkedPlotLive(s, c.iid);
+
+/** Use an activated ability of a Group or Resource you control (or a linked Plot that grants one, e.g. Backmasquerade). */
 export function checkAbility(s: GameState, playerId: string, card: string, abilityId: string, params: AbilityParams): string | null {
   if (activePlayer(s).id === playerId && s.turnFlags.restricted) return 'This turn you may only draw cards and place Action tokens.';
   const c = s.cards[card];
-  if (!c || (c.zone !== 'structure' && c.zone !== 'resources') || c.controller !== playerId) return 'You can only use your own cards in play.';
+  if (!c || (c.zone !== 'structure' && c.zone !== 'resources' && !isLinkedAbilityCard(s, c)) || c.controller !== playerId) return 'You can only use your own cards in play.';
   if (c.hiddenUnder) return `${cardName(s, card)} is face down under ${cardName(s, c.hiddenUnder)}: turn it face up before using it.`;
   const ab = HOOKS[c.cardId]?.actions?.find((a) => a.id === abilityId);
   if (!ab) return 'That card has no such ability.';

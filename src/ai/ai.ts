@@ -13,9 +13,23 @@ import {
 } from '../engine';
 import { OPPOSITE } from '../engine/cards';
 import { matches } from '../engine/abilities';
-import { abilityOptions, attackOptions, responseOptions } from '../engine/moves';
+import { abilityOptions, attackOptions, responseOptions as engineResponseOptions } from '../engine/moves';
 import { BASE_STYLE, clampStyle, styleOf, type Style } from './personas';
 import { attackChance, attackOutcomeScore, bestBySimulation, evaluate, goalProgress, hideDice, rollout, spread, standing, successChance } from './evaluate';
+
+/**
+ * The legal responses right now, minus any activated ability marked `ai: 'never'` (too fiddly for the
+ * computer to weigh, e.g. George Bush's Conservative toggle): those stay legal for a person in
+ * `abilityOptions`/`responseOptions` (moves.ts, shared with the UI), but offering them here as an
+ * always-available, no-cost, no-effect move can make the computer pick one over passing and leave an
+ * end-of-turn or other response window reopening forever instead of closing.
+ */
+function responseOptions(s: GameState, pl: string) {
+  return engineResponseOptions(s, pl).filter((o) => {
+    const a = o.action;
+    return a.type !== 'useAbility' || HOOKS[s.cards[a.card]?.cardId]?.actions?.find((x) => x.id === a.ability)?.ai !== 'never';
+  });
+}
 
 /** Activated abilities of our cards with a given AI hint, tried against a few likely targets. */
 function abilityMoves(s: GameState, pl: string, hint: string, targets: (string | undefined)[]): Action[] {
