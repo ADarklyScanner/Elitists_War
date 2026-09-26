@@ -351,7 +351,7 @@ function botsEditor(humans: number, minBots: number): string {
     const [title, what] = SECTION_INFO[sec];
     const cards = sec === 'wild'
       ? WILD_CARDS.map((w) => card(`wild:${w.id}`, w.name, 'Wild card', 'random moves')).join('')
-      : mirrorCard(sec) + STYLES.map((st) => card(pickId(st, sec), st.names[sec], st.style, st.blurb)).join('');
+      : (ready ? mirrorCard(sec) : '') + STYLES.map((st) => card(pickId(st, sec), st.names[sec], st.style, st.blurb)).join('');
     const picked = l.picked.filter((id) => (sec === 'wild' ? id.startsWith('wild:') : id.endsWith(`:${sec}`))).length;
     return `<details class="lv-sec lv-${sec}" ${picked || l.random[sec] ? 'open' : ''}><summary><b>${title}</b> <span class="muted small">${esc(what)}</span>
         ${picked + l.random[sec] ? `<span class="lv-count">${picked + l.random[sec]} at the table</span>` : ''}</summary>
@@ -1899,61 +1899,102 @@ function renderLog(s: GameState): string {
   return `<div class="panel log"><div class="label">Log</div><ol>${lines.map((l) => `<li class="${l.player === ui.me ? 'me' : l.player ? 'them' : ''} ${l.text.startsWith('—') ? 'turnline' : ''}">${esc(you(l.text))}</li>`).join('')}</ol></div>`;
 }
 
+/** Which home page is showing: the menu, the new-game setup, or settings. */
+let homeScreen: 'home' | 'new' | 'settings' = 'home';
+function goHome(screen: typeof homeScreen) { homeScreen = screen; window.scrollTo({ top: 0 }); render(); }
+
+/** The top bar of a sub-page (new game, settings): back to the menu, and the page's name. */
+const subBar = (title: string) => `<header class="bar sub-bar"><button class="linkish" data-home="home">‹ Menu</button><div class="brand">${esc(title)}</div></header>`;
+
+/** The Illuminati picker, shared by the offline and online new-game pages. */
+function illPicker(pick: string): string {
+  return `<div class="ills">${ILLUMINATI.map((c) => `
+    <button class="ill-pick ${pick === c.id ? 'on' : ''}" data-pick="${c.id}">${ART.has(c.id) ? `<span class="pick-art art-${c.id}"></span>` : ''}
+      <b>${esc(c.name)}</b><span class="pw">${c.power}/${c.globalPower}</span>
+      <span class="small">${esc(illPickText(c.id, c.text))}</span>
+    </button>`).join('')}</div>`;
+}
+
+/** The main menu's secondary buttons: cards, rulebook, settings. */
+const menuLinks = () => `<nav class="menu-links" aria-label="More">
+  <button class="menu-link" data-cards=""><span aria-hidden="true">🂠</span>Cards</button>
+  <button class="menu-link" data-rulebook=""><span aria-hidden="true">📜</span>Rulebook</button>
+  <button class="menu-link" data-home="settings"><span aria-hidden="true">⚙</span>Settings</button>
+</nav>`;
+
+/** A short note on the menu once your mirror computer exists (it stays out of the way until then). */
+function mirrorNote(): string {
+  const games = mirrorGames();
+  if (games < MIN_GAMES) return '';
+  return `<p class="mirror-note">✦ Your mirror is ready: a computer that plays like you, built from ${games} of your games. Add it when you set up a new game.</p>`;
+}
+
+/** Settings: how the game looks, your mirror, and (online) text alerts. */
+function settingsHtml(): string {
+  const games = mirrorGames();
+  return `${subBar('Settings')}
+    <section class="panel">${styleHtml()}</section>
+    <section class="panel"><h2>Your mirror</h2>
+      <p>${games >= MIN_GAMES ? `A computer player that plays like you, built from ${games} finished game${games === 1 ? '' : 's'}. Add it when you set up a new game.`
+        : `After you finish ${MIN_GAMES} games, the game builds a computer player that plays like you (${games} so far).`}</p>
+      ${online?.profile?.traits.length ? `<p class="muted small">Your habits so far: ${esc(online.profile.traits.join('; '))}.</p>` : ''}</section>
+    ${online ? alertsPanel() : ''}`;
+}
+function bindHome() {
+  app.querySelectorAll<HTMLElement>('[data-home]').forEach((b) => b.onclick = () => goHome(b.dataset.home as typeof homeScreen));
+  app.querySelectorAll<HTMLElement>('[data-style-backs]').forEach((b) => b.onclick = () => { saveBacks(b.dataset.styleBacks!); render(); });
+}
+
 function renderStart() {
   if (online) { renderOnline(); return; }
   const saves = Object.values(loadSaves()).sort((a, b) => b.updated - a.updated);
   const pick = (ui as Ui & { pick?: string }).pick ?? 'bavarian-illuminati';
   const quick = (ui as Ui & { quick?: boolean }).quick ?? false;
   const agreed = (ui as Ui & { goal?: number }).goal;
-  app.innerHTML = `
-    <div class="start">
-      <header class="hero">
-        <h1>Elitists War</h1>
-        <p>Build a secret Power Structure, take over the world's Groups one arrow at a time, and stop your rival doing the same.</p>
-        <button class="rb-home-btn" data-rulebook="">Read the rulebook</button><button class="rb-home-btn cl-home-btn" data-cards="">Browse the cards</button>
-      </header>
-      ${saves.length ? `<section><div class="label">Continue a game</div><div class="saves">${saves.map((sv) => `
-        <div class="save"><button data-load="${sv.id}"><b>${esc(sv.summary)}</b><span class="muted">${new Date(sv.updated).toLocaleString()}</span></button>
-        <button class="linkish" data-del="${sv.id}" aria-label="Delete saved game">Delete</button></div>`).join('')}</div></section>` : ''}
-      <section><details class="fold" data-fold="" ${newGameOpen ? 'open' : ''}>
-        <summary class="label">New game against the computer — choose your Illuminati</summary>
-        <div class="ills">${ILLUMINATI.map((c) => `
-          <button class="ill-pick ${pick === c.id ? 'on' : ''}" data-pick="${c.id}">${ART.has(c.id) ? `<span class="pick-art art-${c.id}"></span>` : ''}
-            <b>${esc(c.name)}</b><span class="pw">${c.power}/${c.globalPower}</span>
-            <span class="small">${esc(illPickText(c.id, c.text))}</span>
-          </button>`).join('')}</div>
-        <div class="label">Computer players</div>
-        ${botsEditor(1, 1)}
+  if (homeScreen === 'settings') { app.innerHTML = `<div class="start">${settingsHtml()}</div>`; bindHome(); return; }
+  if (homeScreen === 'new') {
+    app.innerHTML = `<div class="start">${subBar('New game')}
+      <section><div class="label">Choose your Illuminati</div>${illPicker(pick)}</section>
+      <section><div class="label">Computer players</div>${botsEditor(1, 1)}</section>
+      <section class="panel start-panel">
         <div class="row">
           ${goalInput('goal', 1 + Math.max(1, lineupSize(loadLineup())), agreed)}
           <label class="toggle"><input type="checkbox" id="quick" ${quick ? 'checked' : ''}> Quick game: first to 8 Groups (house rule; the official goal is ${goalFor(1 + Math.max(1, lineupSize(loadLineup())))})</label>
-          <button class="primary" data-act="start">Start game</button>
         </div>
+        <button class="primary big" data-act="start">Start game</button>
         <p class="muted small">Games are saved in this browser after every move, so you can stop and pick up later.</p>
-      </details></section>
+      </section></div>`;
+    bindHome();
+    app.querySelectorAll<HTMLElement>('[data-pick]').forEach((b) => b.onclick = () => { (ui as Ui & { pick?: string }).pick = b.dataset.pick; renderStart(); });
+    bindBots(renderStart);
+    app.querySelector<HTMLInputElement>('#quick')!.onchange = (e) => { (ui as Ui & { quick?: boolean }).quick = (e.target as HTMLInputElement).checked; };
+    bindGoalInput('goal');
+    app.querySelector<HTMLElement>('[data-act="start"]')!.onclick = () => { homeScreen = 'home'; newGame(pick, (ui as Ui & { quick?: boolean }).quick ?? false, (ui as Ui & { goal?: number }).goal); };
+    return;
+  }
+  app.innerHTML = `
+    <div class="start menu">
+      <header class="hero">
+        <h1>Elitists War</h1>
+        <p>Build a secret Power Structure, take over the world's Groups one arrow at a time, and stop your rivals doing the same.</p>
+      </header>
+      <div class="menu-main">
+        ${saves.length ? `<button class="primary big" data-load="${saves[0].id}">Continue<span class="small">${esc(saves[0].summary)}</span></button>` : ''}
+        <button class="${saves.length ? 'big' : 'primary big'}" data-home="new">New game</button>
+      </div>
+      ${mirrorNote()}
+      ${saves.length > 1 ? `<section><div class="label">Other saved games</div><div class="saves">${saves.slice(1).map((sv) => `
+        <div class="save"><button data-load="${sv.id}"><b>${esc(sv.summary)}</b><span class="muted">${new Date(sv.updated).toLocaleString()}</span></button>
+        <button class="linkish" data-del="${sv.id}" aria-label="Delete saved game">Delete</button></div>`).join('')}</div></section>` : ''}
+      ${saves.length === 1 ? `<p class="muted small center"><button class="linkish" data-del="${saves[0].id}">Delete the saved game</button></p>` : ''}
+      ${menuLinks()}
     </div>`;
-  app.querySelectorAll<HTMLElement>('[data-pick]').forEach((b) => b.onclick = () => { (ui as Ui & { pick?: string }).pick = b.dataset.pick; renderStart(); });
-  bindBots(renderStart);
-  bindFold();
-  app.querySelector<HTMLInputElement>('#quick')!.onchange = (e) => { (ui as Ui & { quick?: boolean }).quick = (e.target as HTMLInputElement).checked; };
-  bindGoalInput('goal');
-  app.querySelector<HTMLElement>('[data-act="start"]')!.onclick = () => newGame(pick, (ui as Ui & { quick?: boolean }).quick ?? false, (ui as Ui & { goal?: number }).goal);
+  bindHome();
   app.querySelectorAll<HTMLElement>('[data-load]').forEach((b) => b.onclick = () => {
     const sv = loadSaves()[b.dataset.load!];
     if (sv) { ui.game = sv.state; ui.sel = { kind: 'none' }; ui.inspect = undefined; foldFinished(sv.state); render(); schedule(); }
   });
-  app.querySelectorAll<HTMLElement>('[data-del]').forEach((b) => b.onclick = () => { deleteSave(b.dataset.del!); renderStart(); });
-}
-
-// ------------------------------------------------------------------ collapsible "new game" section (home page)
-
-/** Whether the home page's new-game section is open; remembered in this browser. */
-let newGameOpen = (() => { try { return localStorage.getItem('ew-newgame-open') !== '0'; } catch { return true; } })();
-function bindFold() {
-  app.querySelectorAll<HTMLDetailsElement>('details[data-fold]').forEach((d) => d.ontoggle = () => {
-    newGameOpen = d.open;
-    try { localStorage.setItem('ew-newgame-open', d.open ? '1' : '0'); } catch { /* storage unavailable */ }
-  });
+  app.querySelectorAll<HTMLElement>('[data-del]').forEach((b) => b.onclick = () => { if (confirm('Delete this saved game?')) { deleteSave(b.dataset.del!); renderStart(); } });
 }
 
 // ------------------------------------------------------------------ interaction
@@ -2132,7 +2173,7 @@ function bind() {
   app.querySelectorAll<HTMLElement>('[data-act]').forEach((b) => b.onclick = () => {
     const sel = ui.sel;
     switch (b.dataset.act) {
-      case 'home': clearTimeout(timer); ui.game = null; ui.view = undefined; ui.inspect = undefined; ui.showLog = false; if (online) { online.gameId = undefined; online.channel?.unsubscribe(); loadGames(); } render(); break;
+      case 'home': clearTimeout(timer); homeScreen = 'home'; ui.game = null; ui.view = undefined; ui.inspect = undefined; ui.showLog = false; if (online) { online.gameId = undefined; online.channel?.unsubscribe(); loadGames(); } render(); break;
       case 'clear': ui.sel = { kind: 'none' }; ui.error = undefined; render(); break;
       case 'sheet': ui.sheetMin = !ui.sheetMin; render(); break;
       case 'dice': if (ui.dice) ui.dice.start = 0; render(); schedule(); break;
@@ -2376,66 +2417,66 @@ function renderOnline() {
   }
   const pick = (ui as Ui & { pick?: string }).pick ?? 'bavarian-illuminati';
   const friends = (ui as Ui & { friends?: number }).friends ?? 1;
-  app.innerHTML = `<div class="start">
-    <header class="bar"><div class="brand">Elitists War</div><button class="rb-bar-btn" data-rulebook="">Rulebook</button><button class="rb-bar-btn" data-cards="">Cards</button><div class="turn">${esc(o.name)} · <button class="linkish" data-o="signout">Sign out</button></div></header>
+  if (homeScreen === 'settings') {
+    app.innerHTML = `<div class="start">${msg}${settingsHtml()}</div>`;
+    bindHome(); bindAlerts();
+    return;
+  }
+  if (homeScreen === 'new') {
+    app.innerHTML = `<div class="start">${subBar('New game')}${msg}
+      <section><div class="label">Choose your Illuminati</div>${illPicker(pick)}</section>
+      <form id="new">
+        <section><div class="label">Players</div><div class="row">
+          <label>Friends to invite <select id="n-friends">${[0, 1, 2, 3, 4, 5, 6, 7].map((n) => `<option ${n === friends ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
+        </div></section>
+        <section><div class="label">Computer players</div>
+        ${friends >= 7 ? '<p class="muted small">The table is full: 8 players.</p>' : botsEditor(1 + friends, friends ? 0 : 1)}</section>
+        <section class="panel start-panel"><div class="row">
+          ${goalInput('n-goal', 1 + friends + Math.max(friends ? 0 : 1, lineupSize(loadLineup())), (ui as Ui & { goal?: number }).goal)}
+          <label class="toggle"><input type="checkbox" id="n-quick"> Quick game (8 Groups, house rule)</label></div>
+          <button class="primary big" type="submit">Create game</button>
+          <p class="muted small">With friends invited you get an invite code to send them. Everyone moves when they like; the game waits (up to 24 hours per response, 3 days per turn).</p></section>
+      </form></div>`;
+    bindHome();
+    app.querySelectorAll<HTMLElement>('[data-pick]').forEach((b) => b.onclick = () => { (ui as Ui & { pick?: string }).pick = b.dataset.pick; render(); });
+    bindBots(render);
+    bindGoalInput('n-goal');
+    app.querySelector<HTMLSelectElement>('#n-friends')!.onchange = (e) => { (ui as Ui & { friends?: number }).friends = Number((e.target as HTMLSelectElement).value); render(); };
+    app.querySelector<HTMLFormElement>('#new')!.onsubmit = async (e) => {
+      e.preventDefault();
+      const bots = friends >= 7 ? [] : botsForGame(Math.floor(Math.random() * 1e9), friends ? 0 : 1, 7 - friends);
+      const quick = (app.querySelector('#n-quick') as HTMLInputElement).checked;
+      const basicGoal = (ui as Ui & { goal?: number }).goal;
+      try { applyReply(await api({ op: 'new', seats: 1 + friends + bots.length, computerSeats: bots.length, bots, quick, illuminati: pick, ...(basicGoal ? { basicGoal } : {}) })); homeScreen = 'home'; await openGame(online!.gameId!); } catch (err) { o.msg = (err as Error).message; render(); }
+    };
+    return;
+  }
+  const yourMove = o.games.filter((g) => g.yourMove && !g.finished).length;
+  app.innerHTML = `<div class="start menu">
+    <header class="bar"><div class="brand">Elitists War</div><div class="turn">${esc(o.name)} · <button class="linkish" data-o="signout">Sign out</button></div></header>
     ${msg}
-    <section><div class="label">Your games</div><div class="saves">${o.games.map((g) => `
+    <div class="menu-main">
+      <button class="primary big" data-home="new">New game</button>
+      <form id="join" class="join-row"><label class="sr-only" for="j-code">Invite code</label><input id="j-code" required maxlength="6" autocapitalize="characters" placeholder="Invite code"><button type="submit">Join a friend</button></form>
+    </div>
+    ${mirrorNote()}
+    <section><div class="label">Your games${yourMove ? ` · <span class="your-move">${yourMove} waiting for you</span>` : ''}</div><div class="saves">${o.games.map((g) => `
       <div class="save"><button data-open="${g.id}"><b>${g.yourMove ? '● Your move — ' : g.offers ? '● An offer for you — ' : ''}${esc(g.seats.map((x) => x.name || 'Open seat').join(' vs '))}</b>
-      <span class="muted">${g.finished ? 'Finished' : g.started ? `${esc(g.illuminati ?? '')} · ${esc(g.progress)}` : `Waiting for players · invite ${esc(g.invite)}`}</span></button>${g.host || !g.finished ? `<button class="del" data-del="${g.id}" data-host="${g.host ? 1 : ''}" data-started="${g.started ? 1 : ''}" aria-label="${g.host ? 'Delete game' : 'Leave game'}">${g.host ? 'Delete' : 'Leave'}</button>` : ''}</div>`).join('') || '<p class="muted">No games yet.</p>'}</div></section>
-    ${alertsPanel()}
-    ${mirrorPanel()}
-    <section class="panel"><h2>Join a friend's game</h2>
-      <form id="join" class="row"><label>Invite code <input id="j-code" required maxlength="6" autocapitalize="characters"></label><button class="primary" type="submit">Join</button></form></section>
-    <section><details class="fold" data-fold="" ${newGameOpen ? 'open' : ''}><summary class="label">Start a new game — choose your Illuminati</summary>
-      <div class="ills">${ILLUMINATI.map((c) => `<button class="ill-pick ${pick === c.id ? 'on' : ''}" data-pick="${c.id}">${ART.has(c.id) ? `<span class="pick-art art-${c.id}"></span>` : ''}<b>${esc(c.name)}</b><span class="pw">${c.power}/${c.globalPower}</span><span class="small">${esc(illPickText(c.id, c.text))}</span></button>`).join('')}</div>
-      <form id="new" class="panel"><div class="row">
-        <label>Friends to invite <select id="n-friends">${[0, 1, 2, 3, 4, 5, 6, 7].map((n) => `<option ${n === friends ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
-      </div>
-      <div class="label">Computer players</div>
-      ${friends >= 7 ? '<p class="muted small">The table is full: 8 players.</p>' : botsEditor(1 + friends, friends ? 0 : 1)}
-      <div class="row">
-        ${goalInput('n-goal', 1 + friends + Math.max(friends ? 0 : 1, lineupSize(loadLineup())), (ui as Ui & { goal?: number }).goal)}
-        <label class="toggle"><input type="checkbox" id="n-quick"> Quick game (8 Groups, house rule)</label>
-        <button class="primary" type="submit">Create game</button></div>
-        <p class="muted small">With friends invited you get an invite code to send them. Everyone moves when they like; the game waits (up to 24 hours per response, 3 days per turn).</p></form>
-    </details></section></div>`;
+      <span class="muted">${g.finished ? 'Finished' : g.started ? `${esc(g.illuminati ?? '')} · ${esc(g.progress)}` : `Waiting for players · invite ${esc(g.invite)}`}</span></button>${g.host || !g.finished ? `<button class="del" data-del="${g.id}" data-host="${g.host ? 1 : ''}" data-started="${g.started ? 1 : ''}" aria-label="${g.host ? 'Delete game' : 'Leave game'}">${g.host ? 'Delete' : 'Leave'}</button>` : ''}</div>`).join('') || '<p class="muted">No games yet. Start one, or join a friend with their invite code.</p>'}</div></section>
+    ${menuLinks()}
+    ${alertsAsk()}</div>`;
   bindOnline();
-  bindFold();
-  app.querySelectorAll<HTMLElement>('[data-pick]').forEach((b) => b.onclick = () => { (ui as Ui & { pick?: string }).pick = b.dataset.pick; render(); });
-  const af = app.querySelector<HTMLFormElement>('#alerts');
-  if (af) af.onsubmit = async (e) => {
-    e.preventDefault();
-    const phone = (app.querySelector('#a-phone') as HTMLInputElement).value.trim();
-    const optIn = (app.querySelector('#a-opt') as HTMLInputElement).checked;
-    try { o.alerts = { ...(await api({ op: 'alerts', alerts: { phone, optIn } })), msg: optIn ? 'Text alerts are on.' : 'Text alerts are off.' }; }
-    catch (err) { o.alerts = { ...o.alerts!, msg: (err as Error).message }; }
-    render();
-  };
+  bindHome();
+  bindAlerts();
+  app.querySelectorAll<HTMLElement>('[data-ask]').forEach((b) => b.onclick = () => {
+    try { localStorage.setItem(ASK_KEY, '1'); } catch { /* storage unavailable */ }
+    if (b.dataset.ask === 'yes') goHome('settings'); else render();
+  });
   app.querySelector<HTMLFormElement>('#join')!.onsubmit = async (e) => {
     e.preventDefault();
     const code = (app.querySelector('#j-code') as HTMLInputElement).value.trim().toUpperCase();
     try { applyReply(await api({ op: 'join', code, illuminati: pick })); await openGame(online!.gameId!); } catch (err) { o.msg = (err as Error).message; render(); }
   };
-  bindBots(render);
-  bindGoalInput('n-goal');
-  app.querySelector<HTMLSelectElement>('#n-friends')!.onchange = (e) => { (ui as Ui & { friends?: number }).friends = Number((e.target as HTMLSelectElement).value); render(); };
-  app.querySelector<HTMLFormElement>('#new')!.onsubmit = async (e) => {
-    e.preventDefault();
-    const bots = friends >= 7 ? [] : botsForGame(Math.floor(Math.random() * 1e9), friends ? 0 : 1, 7 - friends);
-    const quick = (app.querySelector('#n-quick') as HTMLInputElement).checked;
-    const basicGoal = (ui as Ui & { goal?: number }).goal;
-    try { applyReply(await api({ op: 'new', seats: 1 + friends + bots.length, computerSeats: bots.length, bots, quick, illuminati: pick, ...(basicGoal ? { basicGoal } : {}) })); await openGame(online!.gameId!); } catch (err) { o.msg = (err as Error).message; render(); }
-  };
-}
-
-/** Your mirror: how many games it has learned from and its strongest habits. */
-function mirrorPanel(): string {
-  const p = online?.profile;
-  if (!p) return '';
-  return `<section class="panel"><h2>Your mirror</h2>
-    <p>${p.ready ? `A computer player that plays like you, based on ${p.games} finished game${p.games === 1 ? '' : 's'}.` : `Finish ${p.minGames} games and the game makes a computer player that plays like you (${p.games} so far).`}</p>
-    ${p.traits.length ? `<p class="muted small">Your habits so far: ${esc(p.traits.join('; '))}.</p>` : ''}
-    <p class="muted small">Pick it in any difficulty below. Random seats can also draw the mirror of anyone at the table.</p></section>`;
 }
 
 /** Opt-in text alerts: only for a game starting, your turn, or an Attack to Destroy on you. */
@@ -2449,6 +2490,32 @@ function alertsPanel(): string {
       <button type="submit">Save</button></form>
     <p class="muted small">At most one text every 5 minutes. Message and data rates may apply. Reply STOP to any text to opt out.${a.available ? '' : ' Texting is not switched on for this server yet, so no messages will be sent.'}</p>
     ${a.msg ? `<p class="small">${esc(a.msg)}</p>` : ''}</section>`;
+}
+
+function bindAlerts() {
+  const o = online!;
+  const af = app.querySelector<HTMLFormElement>('#alerts');
+  if (af) af.onsubmit = async (e) => {
+    e.preventDefault();
+    const phone = (app.querySelector('#a-phone') as HTMLInputElement).value.trim();
+    const optIn = (app.querySelector('#a-opt') as HTMLInputElement).checked;
+    try { o.alerts = { ...(await api({ op: 'alerts', alerts: { phone, optIn } })), msg: optIn ? 'Text alerts are on.' : 'Text alerts are off.' }; }
+    catch (err) { o.alerts = { ...o.alerts!, msg: (err as Error).message }; }
+    render();
+  };
+}
+
+/** Asked once, after you have a game going: would you like a text when it's your turn? */
+const ASK_KEY = 'elitists-war.alerts-asked';
+function alertsAsk(): string {
+  const o = online!;
+  if (!o.alerts || o.alerts.optIn || !o.games.some((g) => g.started && !g.finished)) return '';
+  try { if (localStorage.getItem(ASK_KEY)) return ''; } catch { return ''; }
+  return `<div class="modal-back"></div><div class="modal ask" role="dialog" aria-label="Text alerts">
+    <h2>Get a text when it's your turn?</h2>
+    <p>Games move a step at a time, whenever each player is free. A text lets you know when your turn comes round, when a game starts, or when one of your Groups is under attack.</p>
+    <div class="btns"><button class="primary" data-ask="yes">Set up texts</button><button data-ask="no">Not now</button></div>
+    <p class="muted small">You can turn texts on or off any time in Settings.</p></div>`;
 }
 
 function bindOnline() {
