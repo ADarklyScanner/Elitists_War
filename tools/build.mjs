@@ -1,18 +1,22 @@
 // Builds dist/elitists-war.html: one self-contained page (engine + card data + UI).
 import { build } from 'esbuild';
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, readdirSync } from 'node:fs';
 
 // Offline build (play the computer, saves in the browser) for the Artifact, and an online build
 // (Supabase sign-in, games on the server) for the website.
 const online = process.argv.includes('--online');
 const cfg = online ? JSON.parse(readFileSync('supabase/config.json', 'utf8')) : { url: '', key: '' };
+// Card art: src/ui/assets/art-<card id>.webp. Each file gets a CSS class (.art-<card id>) setting --art,
+// and the list of card ids that have art is passed to the page as __ART__.
+const artIds = readdirSync('src/ui/assets').filter((f) => /^art-[\w-]+\.webp$/.test(f)).map((f) => f.slice(4, -5));
+const artCss = artIds.map((id) => `.art-${id} { --art: url("assets/art-${id}.webp"); }`).join('\n');
 const out = await build({
   entryPoints: ['src/ui/main.ts'], bundle: true, format: 'iife', minify: !process.env.NOMINIFY, write: false, target: 'es2020',
-  define: { __ONLINE__: String(online), __SB_URL__: JSON.stringify(cfg.url), __SB_KEY__: JSON.stringify(cfg.key) },
+  define: { __ONLINE__: String(online), __SB_URL__: JSON.stringify(cfg.url), __SB_KEY__: JSON.stringify(cfg.key), __ART__: JSON.stringify(artIds) },
 });
 const js = out.outputFiles[0].text.replace(/<\/script/g, '<\\/script');
-// Pictures the stylesheet points at (card backs) are embedded, so the page stays a single file.
-const css = readFileSync('src/ui/style.css', 'utf8').replace(/url\("assets\/([\w.-]+)"\)/g, (_, f) =>
+// Pictures the stylesheet points at (card backs, card art) are embedded, so the page stays a single file.
+const css = `${readFileSync('src/ui/style.css', 'utf8')}\n${artCss}`.replace(/url\("assets\/([\w.-]+)"\)/g, (_, f) =>
   `url("data:image/${f.split('.').pop()};base64,${readFileSync(`src/ui/assets/${f}`).toString('base64')}")`);
 const html = `<title>Elitists War</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">

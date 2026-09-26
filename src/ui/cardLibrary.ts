@@ -4,6 +4,9 @@ import { ALL_CARDS } from '../engine/cards';
 import type { CardDef, Side } from '../engine/types';
 import { cardFace } from './cardFace';
 
+declare const __ART__: string[];
+const ART = new Set<string>(typeof __ART__ === 'undefined' ? [] : __ART__);
+
 let root: HTMLElement | null = null;
 let lastFocus: Element | null = null;
 
@@ -69,7 +72,7 @@ const stats = (d: CardDef) => d.type === 'Illuminati'
 
 function tile(d: CardDef): string {
   const k = kindOf(d).id;
-  return `<button class="cl-card k-${k}" data-cl-open="${d.id}" aria-label="${esc(d.name)}, ${esc(kindLabel(d))}">
+  return `<button class="cl-card k-${k}${ART.has(d.id) ? ` has-art art-${d.id}` : ''}" data-cl-open="${d.id}" aria-label="${esc(d.name)}, ${esc(kindLabel(d))}">
     ${arrows(d)}
     <span class="cl-kind">${esc(kindLabel(d))}</span>
     <b class="cl-name">${esc(d.name)}</b>
@@ -99,7 +102,7 @@ function detailHtml(d: CardDef): string {
       <button class="cl-x" data-cl-shut aria-label="Close card">✕</button>
     </div>
     <div class="cl-detail">
-      <div class="cl-big">${tile(d).replace('<button', '<div').replace('</button>', '</div>').replace(/ data-cl-open="[^"]*"/, '')}</div>
+      <div class="cl-big">${ART.has(d.id) ? `<div class="cl-art art-${d.id}" role="img" aria-label="${esc(d.name)}"></div>` : tile(d).replace('<button', '<div').replace('</button>', '</div>').replace(/ data-cl-open="[^"]*"/, '')}</div>
       <div class="cl-info">
         <div class="cl-kicker">${esc(kindLabel(d))}${d.rarity && !/fixed/i.test(d.rarity) ? ` · ${esc(d.rarity)}` : ''}</div>
         <h2>${esc(d.name)}</h2>

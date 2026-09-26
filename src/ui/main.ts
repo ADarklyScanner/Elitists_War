@@ -996,7 +996,7 @@ function tableCard(s: GameState, iid: string): string {
   const p = power(s, iid), g = globalPower(s, iid);
   const partial = !ill && !isImplemented(d.id) && (GROUP_ABILITIES[d.id]?.length ?? 0) > 0;
   return `
-    <button class="card ${ill ? 'ill' : ''} ${c.devastated ? 'devastated' : ''} ${highlightFor(s, iid)} ${gcls(iid)}" data-card="${iid}" title="${esc(`${d.name}: Power ${p}${ill ? '' : `, Global Power ${g}, Resistance ${resistance(s, iid)}`}`)}">
+    <button class="card ${ill ? 'ill' : ''} ${artCls(d.id)} ${c.devastated ? 'devastated' : ''} ${highlightFor(s, iid)} ${gcls(iid)}" data-card="${iid}" title="${esc(`${d.name}: Power ${p}${ill ? '' : `, Global Power ${g}, Resistance ${resistance(s, iid)}`}`)}">
       ${arrows}
       <span class="name">${esc(d.name)}</span>
       <span class="aligns">${alignments(s, iid).map(chip).join('')}</span>
@@ -1018,7 +1018,7 @@ function handCard(s: GameState, iid: string): string {
   const selected = (sel.kind === 'plot' && sel.card === iid) || (sel.kind === 'takeover' && sel.card === iid) || (sel.kind === 'discard' && sel.cards.includes(iid));
   const targetable = sel.kind === 'attack' && sel.type === 'control' && attackOptions(s, ui.me, sel.attacker).some((o) => o.target === iid);
   return `
-    <button class="hcard ${isPlot ? 'plot' : 'group'} ${selected ? 'selected' : ''} ${targetable ? 'targetable' : ''} ${isPlot && !playable ? 'inactive' : ''} ${gcls(iid)}" data-hand="${iid}">
+    <button class="hcard ${isPlot ? 'plot' : 'group'} ${artCls(d.id)} ${selected ? 'selected' : ''} ${targetable ? 'targetable' : ''} ${isPlot && !playable ? 'inactive' : ''} ${gcls(iid)}" data-hand="${iid}">
       <span class="kind">${spare ? 'Spare Illuminati' : isPlot ? esc(d.subtype === 'Plot' ? 'Plot' : d.subtype) : d.type === 'Resource' ? 'Resource' : esc(d.subtype)}</span>
       <span class="name">${esc(d.name)}</span>
       ${tutorial() && isPlot && !spare && plotTiming(d.id, d.subtype, true) ? `<span class="timing">${esc(plotTiming(d.id, d.subtype, true))}</span>` : ''}
@@ -1644,6 +1644,10 @@ function illPickText(cardId: string, engineText: string): string {
   return goalLine(cardId) ? `${f.rules} Special Goal: ${goalLine(cardId)}` : f.rules;
 }
 
+/** Cards with a picture (src/ui/assets/art-<id>.webp): the class that shows it, or '' when there is none. */
+const ART = new Set<string>(typeof __ART__ === 'undefined' ? [] : __ART__);
+const artCls = (cardId: string) => (ART.has(cardId) ? `has-art art-${cardId}` : '');
+
 function faceBlock(cardId: string, engineText: string): string {
   const f = cardFace(cardId);
   if (!f) return `<p class="small">${esc(engineText)}</p>`;
@@ -1670,6 +1674,7 @@ function renderInspect(s: GameState): string {
     ? Object.values(s.cards).filter((c) => c.zone === 'resources' && c.linkedTo === iid && !c.hiddenUnder).map((c) => c.iid) : [];
   return `<div class="panel inspect popover">
     <button class="close" data-act="closeInspect" aria-label="Close">×</button>
+    ${ART.has(d.id) ? `<div class="art-hero art-${d.id}" role="img" aria-label="${esc(d.name)}"></div>` : ''}
     <div class="label">${esc(d.subtype)}</div><h3>${esc(d.name)}</h3>${stats}
     ${faceBlock(d.id, d.text)}
     ${d.type === 'Plot' ? `<p class="small"><span class="timing">${esc(plotTiming(d.id, d.subtype))}</span></p>` : ''}
@@ -1910,10 +1915,10 @@ function renderStart() {
       ${saves.length ? `<section><div class="label">Continue a game</div><div class="saves">${saves.map((sv) => `
         <div class="save"><button data-load="${sv.id}"><b>${esc(sv.summary)}</b><span class="muted">${new Date(sv.updated).toLocaleString()}</span></button>
         <button class="linkish" data-del="${sv.id}" aria-label="Delete saved game">Delete</button></div>`).join('')}</div></section>` : ''}
-      <section>
-        <div class="label">New game against the computer — choose your Illuminati</div>
+      <section><details class="fold" data-fold="" ${newGameOpen ? 'open' : ''}>
+        <summary class="label">New game against the computer — choose your Illuminati</summary>
         <div class="ills">${ILLUMINATI.map((c) => `
-          <button class="ill-pick ${pick === c.id ? 'on' : ''}" data-pick="${c.id}">
+          <button class="ill-pick ${pick === c.id ? 'on' : ''}" data-pick="${c.id}">${ART.has(c.id) ? `<span class="pick-art art-${c.id}"></span>` : ''}
             <b>${esc(c.name)}</b><span class="pw">${c.power}/${c.globalPower}</span>
             <span class="small">${esc(illPickText(c.id, c.text))}</span>
           </button>`).join('')}</div>
@@ -1925,10 +1930,11 @@ function renderStart() {
           <button class="primary" data-act="start">Start game</button>
         </div>
         <p class="muted small">Games are saved in this browser after every move, so you can stop and pick up later.</p>
-      </section>
+      </details></section>
     </div>`;
   app.querySelectorAll<HTMLElement>('[data-pick]').forEach((b) => b.onclick = () => { (ui as Ui & { pick?: string }).pick = b.dataset.pick; renderStart(); });
   bindBots(renderStart);
+  bindFold();
   app.querySelector<HTMLInputElement>('#quick')!.onchange = (e) => { (ui as Ui & { quick?: boolean }).quick = (e.target as HTMLInputElement).checked; };
   bindGoalInput('goal');
   app.querySelector<HTMLElement>('[data-act="start"]')!.onclick = () => newGame(pick, (ui as Ui & { quick?: boolean }).quick ?? false, (ui as Ui & { goal?: number }).goal);
@@ -1937,6 +1943,17 @@ function renderStart() {
     if (sv) { ui.game = sv.state; ui.sel = { kind: 'none' }; ui.inspect = undefined; foldFinished(sv.state); render(); schedule(); }
   });
   app.querySelectorAll<HTMLElement>('[data-del]').forEach((b) => b.onclick = () => { deleteSave(b.dataset.del!); renderStart(); });
+}
+
+// ------------------------------------------------------------------ collapsible "new game" section (home page)
+
+/** Whether the home page's new-game section is open; remembered in this browser. */
+let newGameOpen = (() => { try { return localStorage.getItem('ew-newgame-open') !== '0'; } catch { return true; } })();
+function bindFold() {
+  app.querySelectorAll<HTMLDetailsElement>('details[data-fold]').forEach((d) => d.ontoggle = () => {
+    newGameOpen = d.open;
+    try { localStorage.setItem('ew-newgame-open', d.open ? '1' : '0'); } catch { /* storage unavailable */ }
+  });
 }
 
 // ------------------------------------------------------------------ interaction
@@ -2226,6 +2243,7 @@ function start(data: { game?: GameState | null }) {
 // ------------------------------------------------------------------ online play (Supabase)
 
 declare const __ONLINE__: boolean;
+declare const __ART__: string[];
 declare const __SB_URL__: string;
 declare const __SB_KEY__: string;
 
@@ -2368,8 +2386,8 @@ function renderOnline() {
     ${mirrorPanel()}
     <section class="panel"><h2>Join a friend's game</h2>
       <form id="join" class="row"><label>Invite code <input id="j-code" required maxlength="6" autocapitalize="characters"></label><button class="primary" type="submit">Join</button></form></section>
-    <section><div class="label">Start a new game — choose your Illuminati</div>
-      <div class="ills">${ILLUMINATI.map((c) => `<button class="ill-pick ${pick === c.id ? 'on' : ''}" data-pick="${c.id}"><b>${esc(c.name)}</b><span class="pw">${c.power}/${c.globalPower}</span><span class="small">${esc(illPickText(c.id, c.text))}</span></button>`).join('')}</div>
+    <section><details class="fold" data-fold="" ${newGameOpen ? 'open' : ''}><summary class="label">Start a new game — choose your Illuminati</summary>
+      <div class="ills">${ILLUMINATI.map((c) => `<button class="ill-pick ${pick === c.id ? 'on' : ''}" data-pick="${c.id}">${ART.has(c.id) ? `<span class="pick-art art-${c.id}"></span>` : ''}<b>${esc(c.name)}</b><span class="pw">${c.power}/${c.globalPower}</span><span class="small">${esc(illPickText(c.id, c.text))}</span></button>`).join('')}</div>
       <form id="new" class="panel"><div class="row">
         <label>Friends to invite <select id="n-friends">${[0, 1, 2, 3, 4, 5, 6, 7].map((n) => `<option ${n === friends ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
       </div>
@@ -2380,8 +2398,9 @@ function renderOnline() {
         <label class="toggle"><input type="checkbox" id="n-quick"> Quick game (8 Groups, house rule)</label>
         <button class="primary" type="submit">Create game</button></div>
         <p class="muted small">With friends invited you get an invite code to send them. Everyone moves when they like; the game waits (up to 24 hours per response, 3 days per turn).</p></form>
-    </section></div>`;
+    </details></section></div>`;
   bindOnline();
+  bindFold();
   app.querySelectorAll<HTMLElement>('[data-pick]').forEach((b) => b.onclick = () => { (ui as Ui & { pick?: string }).pick = b.dataset.pick; render(); });
   const af = app.querySelector<HTMLFormElement>('#alerts');
   if (af) af.onsubmit = async (e) => {

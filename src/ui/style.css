@@ -805,3 +805,23 @@ html.rb-open, html.rb-open body { overflow: hidden; }
   .cl-big { width: 150px; margin-inline: auto; }
   .cl-sheet { top: auto; bottom: 0; transform: translateX(-50%); width: 100%; max-height: 92%; border-radius: 14px 14px 0 0; }
 }
+
+/* ---------- card art (src/ui/assets/art-<id>.webp; the build sets --art per card) ---------- */
+.card.has-art, .card.ill.has-art, .hcard.has-art, .hcard.plot.has-art {
+  background: linear-gradient(to bottom, #000d 0%, #0006 30%, #0000 50%, #0008 75%, #000e 100%), var(--art) center / cover !important;
+}
+.card.has-art .name, .card.has-art .stats, .hcard.has-art .name, .hcard.has-art .kind, .hcard.has-art .txt, .hcard.has-art .stats { text-shadow: 0 1px 2px #000, 0 0 6px #000; }
+.hcard.has-art .txt { color: var(--ink); }
+.art-hero { flex-shrink: 0; height: 220px; margin: 6px -4px 8px; border-radius: 6px; background: var(--art) center / cover; border: 1px solid #5a4630; }
+.ill-pick .pick-art { grid-column: 1 / -1; height: 120px; border-radius: 6px; background: var(--art) center 35% / cover; }
+.cl-card.has-art { background: linear-gradient(to bottom, #000d 0%, #0005 28%, #0000 48%, #0007 72%, #000e 100%), var(--art) center / cover; }
+.cl-card.has-art .cl-name, .cl-card.has-art .cl-kind, .cl-card.has-art .cl-stats, .cl-card.has-art .cl-al { text-shadow: 0 1px 2px #000, 0 0 6px #000; }
+.cl-art { width: 100%; aspect-ratio: 384 / 514; border-radius: 10px; background: var(--art) center / cover; border: 1px solid #6b5230; box-shadow: 0 4px 14px #000a; }
+
+/* ---------- collapsible home-page section ---------- */
+.fold { display: flex; flex-direction: column; gap: 12px; }
+.fold > summary { cursor: pointer; list-style: none; display: flex; align-items: center; gap: 8px; padding-block: 4px; }
+.fold > summary::-webkit-details-marker { display: none; }
+.fold > summary::before { content: '▸'; font-size: 13px; color: var(--brass); transition: transform .15s; }
+.fold[open] > summary::before { transform: rotate(90deg); }
+@media (max-width: 480px) { .art-hero { height: 130px; } .ill-pick .pick-art { height: 100px; } }
