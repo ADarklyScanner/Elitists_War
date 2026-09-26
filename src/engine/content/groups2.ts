@@ -680,6 +680,8 @@ registerHooks({
   },
 
   'center-for-disease-control': {
+    // Assassins expansion: The Irish Flu says the C.D.C. makes its whole Power Structure immune to it.
+    immune: (s, self, target, source) => s.cards[source]?.cardId === 'the-irish-flu' && ownGroup(s, self, target),
     onAttackEnd(s, self, ctx) {
       if (ctx.attacker !== self || ctx.instant || ctx.type !== 'destroy' || ctx.result !== 'failure' || attackCancelled(ctx)) return;
       if (def(s, ctx.target).subtype !== 'Place' || !inStructure(s, self)) return;

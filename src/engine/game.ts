@@ -1735,6 +1735,9 @@ export function attackIllegal(s: GameState, ctx: AttackCtx): string | null {
   if (!ctx.attacker) {
     const card = ctx.instantCard;
     if (card && s.cards[card] && s.cards[tgt].zone === 'structure' && anyHook(s, (h, self) => !!h.immune?.(s, self, tgt, card))) return `${cardName(s, tgt)} is now immune to ${cardName(s, card)}.`;
+    // A card stopped this specific Instant attack outright (This Was Only A Test, Assassins): it goes
+    // back to its owner's hand, exposed, like any Instant attack made illegal.
+    if (card && s.cards[card]?.data?.attackStopped) return `${cardName(s, card)} was stopped.`;
     return null;
   }
   const att = ctx.attacker;
@@ -2082,7 +2085,7 @@ function finishAttack(s: GameState) {
     } else {
       log(s, `${cardName(s, tgt)} is destroyed!`);
       if (ctx.assassination && def(s, tgt).subtype === 'Personality') s.cards[tgt].killed = true;
-      destroyGroup(s, tgt, ctx.attackerPlayer);
+      destroyGroup(s, tgt, ctx.attackerPlayer, ctx.attacker);
     }
   } else {
     log(s, 'The attack fails.');
@@ -2289,7 +2292,8 @@ function subtreeFromLayout(layout: Record<string, { child: string }[]>, iid: str
   return out;
 }
 
-export function destroyGroup(s: GameState, iid: string, by: string) {
+/** `attacker`: the Group (not the Illuminati) that did the destroying, when there was one (You Are What You Eat, Assassins). */
+export function destroyGroup(s: GameState, iid: string, by: string, attacker?: string) {
   const c = s.cards[iid];
   const prev = c.controller ?? c.owner;
   // Where the Group and its puppets were, for cards that bring it back (Head in a Jar).
@@ -2310,7 +2314,7 @@ export function destroyGroup(s: GameState, iid: string, by: string) {
     }
   }
   fireHooks(s, (h, self) => h.onDestroy?.(s, self, iid, by));
-  raiseEvent(s, { type: 'destroyed', card: iid, by, player: prev, data: { layout } });
+  raiseEvent(s, { type: 'destroyed', card: iid, by, player: prev, data: { layout, attacker } });
   // Linked Plots are discarded; linked Resources are destroyed with the Group (R041).
   for (const other of Object.values(s.cards)) {
     if (other.linkedTo !== iid) continue;
@@ -2366,6 +2370,10 @@ export function checkPlot(s: GameState, playerId: string, play: PlotPlay, declar
   if (d.type !== 'Plot') return 'Only Plot cards can be played this way.';
   const h = PLOTS[d.id];
   if (!h) return `${d.name} is not available in this version yet.`;
+  // A card temporarily benched after being stopped (This Was Only A Test, Assassins): unusable until its
+  // owner has completed that many more of their own turns.
+  const bench = s.cards[play.card].data?.unusableUntilOwnerTurns;
+  if (typeof bench === 'number' && p.turnsTaken < bench) return `${d.name} cannot be used again so soon.`;
   const ctxKind = plotContext(s);
   const ctx = s.attack;
   const isActiveMain = ctxKind === 'main' && activePlayer(s).id === playerId;
@@ -2706,6 +2714,14 @@ export function applyAction(state: GameState, playerId: string, action: Action):
 
     case 'freeGroup':
       freeGroup(s, p, action.group, action.payWith);
+      break;
+
+    case 'nameSlip':
+      reportNameSlip(s, p, action.card, action.discard);
+      break;
+
+    case 'catchNameSlip':
+      catchNameSlip(s, p, action.card);
       break;
 
     case 'removeToken': {
@@ -3394,6 +3410,50 @@ function freeGroup(s: GameState, p: PlayerState, group: string, payWith: string)
   discardCard(s, holds[0]);
   log(s, `${p.name} spends the action of ${cardName(s, payWith)} to free ${cardName(s, group)} from ${cardName(s, holds[0])}.`, p.id);
   syncConditions(s);
+  if (s.window) s.window.passed = s.window.kind === 'plot' ? [p.id] : [];
+}
+
+/** A card in play still linked to a Regi$tered Trademark (Assassins). */
+function trademarked(s: GameState, card: string) {
+  const c = s.cards[card];
+  if (!c || c.zone !== 'table' || c.cardId !== 'regi-tered-trademark' || !c.linkedTo) throw new RuleError('Choose a Regi$tered Trademark in play.');
+  return c;
+}
+
+/**
+ * Admit a naming slip against a Regi$tered Trademark (Assassins). The engine cannot police table talk,
+ * so any player may report their own slip at any time: discard the named Plot from hand, or (with no
+ * `discard`) the top card of your own Plot deck.
+ */
+function reportNameSlip(s: GameState, p: PlayerState, card: string, discard?: string) {
+  const c = trademarked(s, card);
+  if (!anyTime(s, p.id)) throw new RuleError('You can admit a naming slip whenever you may act, but not right now.');
+  if (discard !== undefined) {
+    if (!p.hand.includes(discard) || def(s, discard).type !== 'Plot') throw new RuleError('Discard one of your own Plot cards from hand.');
+    discardCard(s, discard);
+  } else {
+    const top = p.plotDeck.shift();
+    if (!top) throw new RuleError('You have no Plot card to discard.');
+    s.cards[top].zone = 'hand'; p.hand.push(top); discardCard(s, top);
+  }
+  log(s, `${p.name} slips up naming ${cardName(s, c.linkedTo!)} and discards a Plot, as ${cardName(s, card)} requires.`, p.id);
+  if (s.window) s.window.passed = s.window.kind === 'plot' ? [p.id] : [];
+}
+
+/**
+ * Catch the Regi$tered Trademark's Group's owner slipping first (Assassins): the owner hands the
+ * catching rival their top undrawn Plot.
+ */
+function catchNameSlip(s: GameState, p: PlayerState, card: string) {
+  const c = trademarked(s, card);
+  const g = s.cards[c.linkedTo!];
+  const owner = g && g.zone === 'structure' && g.controller ? player(s, g.controller) : undefined;
+  if (!owner) throw new RuleError('The linked Group is no longer in play.');
+  if (owner.id === p.id) throw new RuleError('You cannot catch your own slip this way.');
+  if (!anyTime(s, p.id)) throw new RuleError('You can call out a slip whenever you may act, but not right now.');
+  const top = owner.plotDeck.shift();
+  if (top) { s.cards[top].zone = 'hand'; s.cards[top].owner = p.id; p.hand.push(top); }
+  log(s, `${p.name} catches ${owner.name} misnaming ${cardName(s, c.linkedTo!)}: ${owner.name} hands over ${top ? `the top card of their Plot deck` : 'nothing (their deck is empty)'}.`, p.id);
   if (s.window) s.window.passed = s.window.kind === 'plot' ? [p.id] : [];
 }
 
