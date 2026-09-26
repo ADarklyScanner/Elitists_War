@@ -219,6 +219,11 @@ export interface AttackCtx {
   illegal?: string;
   /** Aiding or opposing Groups whose action has become illegal (a new immunity): they no longer count. */
   illegalGroups?: string[];
+  /**
+   * A successful Attack to Control strips this alignment from the target for good instead of capturing
+   * it (the Drug Companies): set once the attack starts, read when it resolves.
+   */
+  stripAlignment?: Alignment;
 }
 
 /** An open response window: everyone may act; closes when all players have passed in a row. */

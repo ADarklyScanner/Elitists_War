@@ -1,16 +1,19 @@
 // Card scripting: behaviour that is too specific for the declarative Ability list.
 // A card's hooks are active while the card is in play: a Group in a Power Structure, a Resource
 // beside it, or a Plot that stays on the table linked to something.
-import type { Alignment, AttackCtx, GameState, GameEvent, PlayedPlot, PlotEffect } from './types';
+import type { Alignment, AttackCtx, GameState, GameEvent, PlayedPlot, PlotEffect, PlotPlay } from './types';
 import { PLOTS } from './plotTypes';
 
 export type Side2 = 'attack' | 'defense';
 
 export interface AbilityParams {
   target?: string;          // a card instance (Group, Resource or Plot)
+  targets?: string[];       // several cards (Arms Dealers: Plots given away; Copy Shops: the Plot discarded)
   mode?: string;            // a named option, e.g. 'cancel' | 'bonus'
   payWith?: string[];       // extra Groups spending tokens
   alignment?: string;
+  /** Copy Shops: the copied Plot's own play parameters (its own target, mode, payWith, …). */
+  copyPlay?: Omit<PlotPlay, 'card'>;
 }
 
 /** "Spend this card's action to …" and other things a player chooses to do with a card. */
@@ -38,7 +41,9 @@ export interface ActivatedAbility {
   /** What the UI needs to ask for. */
   needs?: { target?: 'group' | 'ownGroup' | 'rivalGroup' | 'place' | 'personality' | 'resource' | 'plot' | 'actingGroup' | 'handCard' | 'handGroup' | 'handPlot' | 'destroyed' | 'discardPile' | 'rival' | 'rivalHand' | 'nwo'; modes?: string[]; alignment?: boolean;
     /** Offers `payWith`: other Groups of the player's own, with tokens, that can add their Power (e.g. Relief). */
-    helpers?: boolean };
+    helpers?: boolean;
+    /** Offers `params.targets`: several cards of this kind from the player's own hand (Arms Dealers, Copy Shops). */
+    targetsOf?: 'handPlot' | 'handGroup' | 'handCard' };
   check: (s: GameState, pl: string, self: string, p: AbilityParams, ctx?: AttackCtx) => string | null;
   /** Do it. During an attack, return a live effect or push onto ctx.attackBonus / ctx.defenseBonus. */
   apply: (s: GameState, pl: string, self: string, p: AbilityParams, ctx?: AttackCtx) => PlotEffect | void;
@@ -151,6 +156,13 @@ export interface CardHooks {
   /** This card makes the attack in progress Magic, so defenses against Magic apply (Spear of Longinus). */
   magicAttack?: (s: GameState, self: string, ctx: AttackCtx) => boolean;
 
+  /**
+   * A destroyed card comes back at the end of the turn it was destroyed, unless someone has already won
+   * (General Disorder): the card sets `data.reviveAtEndOfTurn = s.turn` from `onDestroy` (while its own
+   * hooks are still active) and this runs once, from the destroyed pile, if the game is still going.
+   */
+  delayedRevive?: (s: GameState, self: string) => void;
+
   // ---- triggers
   onTurnStart?: (s: GameState, self: string) => void;
   onDestroy?: (s: GameState, self: string, victim: string, by: string) => void;
@@ -208,13 +220,16 @@ export function activeHookCards(s: GameState): string[] {
   return [...live, ...table];
 }
 
-/** Is `iid`'s special ability switched off by a card on the table (or by a Paralysis)? */
+/** Is `iid`'s special ability switched off by a card on the table (or by a Paralysis), or by another
+ *  Group's own effect (the EPA on the Nuclear Power Companies)? */
 export function abilitiesDisabled(s: GameState, iid: string): boolean {
   for (const c of Object.values(s.cards)) {
     if (c.zone !== 'table' || !c.linkedTo) continue;
     if (c.linkedTo === iid && PLOTS[c.cardId]?.condition === 'paralysis' && linkedPlotLive(s, c.iid)) return true;
-    const h = HOOKS[c.cardId];
-    if (h?.disablesAbilities?.(s, c.iid, iid)) return true;
+  }
+  for (const self of activeHookCards(s)) {
+    if (self === iid) continue;
+    if (HOOKS[s.cards[self].cardId]?.disablesAbilities?.(s, self, iid)) return true;
   }
   return false;
 }
