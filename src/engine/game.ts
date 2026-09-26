@@ -1885,6 +1885,8 @@ export function attackStrength(s: GameState, ctx: AttackCtx): StrengthBreakdown 
   } else {
     const att = ctx.attacker!;
     add('a', power(s, att), `${cardName(s, att)} Power`);
+    // Partition (Assassins): a split Place has +10 attacking the other half of itself.
+    if (s.cards[att].data?.partitionPair === tgt) add('a', 10, 'Partition: attacking its other half');
     for (const c of aid) add('a', contributionPower(s, c), `${cardName(s, c.iid!)} aids${(c as { useGlobal?: boolean }).useGlobal ? ' (Global)' : ''}`);
     // Alignment modifier for the leading attacker only.
     const pairs = alignmentPairs(s, att, tgt);
@@ -2102,6 +2104,12 @@ function finishAttack(s: GameState) {
   }
   fireHooks(s, (h, self) => h.onAttackEnd?.(s, self, ctx));
   for (const c of Object.values(s.cards)) c.mods = c.mods.filter((m) => m.until !== 'attack');
+  // Don't Touch That Dial! (Assassins): a failed attack on a Media Group ends the attacker's turn at once.
+  if (ctx.result === 'failure' && ctx.endsAttackerTurn && s.phase === 'main' && activePlayer(s).id === ctx.attackerPlayer) {
+    log(s, `${player(s, ctx.attackerPlayer).name}'s turn ends at once.`, ctx.attackerPlayer);
+    s.phase = 'endOfTurn';
+    s.turnFlags.endedAtOnce = true;
+  }
   s.attack = undefined;
   // Instant attacks can be launched during the end-of-turn window: return to it.
   if (s.phase === 'endOfTurn') openWindow(s, 'endOfTurn');
@@ -2510,6 +2518,8 @@ export function playPlot(s: GameState, playerId: string, play: PlotPlay, declari
   s.cards[play.card].controller = playerId;
   // The engine pays a declared cost ("Requires ... Action") before the card does anything.
   if (h.requires) payCost(s, play, discardCard);
+  // Go, Lemmings, Go! (Assassins): Plot cards discarded from hand to pay a declared cost.
+  if (h.requires && play.discards?.length) raiseEvent(s, { type: 'costDiscard', player: playerId, cards: [...play.discards], data: { kind: 'plot', place: 'hand' } });
   const pp: PlayedPlot = { iid: play.card, player: playerId, play, effect: { t: 'none' } };
   log(s, `${player(s, playerId).name} plays ${d.name}${play.target && s.cards[play.target] ? ` on ${cardName(s, play.target)}` : ''}.`, playerId);
   const ctx = s.attack;
@@ -2706,6 +2716,10 @@ export function applyAction(state: GameState, playerId: string, action: Action):
 
     case 'freeGroup':
       freeGroup(s, p, action.group, action.payWith);
+      break;
+
+    case 'reunitePartition':
+      reunitePartition(s, p, action.group);
       break;
 
     case 'removeToken': {
@@ -3395,6 +3409,31 @@ function freeGroup(s: GameState, p: PlayerState, group: string, payWith: string)
   log(s, `${p.name} spends the action of ${cardName(s, payWith)} to free ${cardName(s, group)} from ${cardName(s, holds[0])}.`, p.id);
   syncConditions(s);
   if (s.window) s.window.passed = s.window.kind === 'plot' ? [p.id] : [];
+}
+
+/**
+ * Reunite the two halves of a Place split by Partition (Assassins): both must be this player's.
+ * RULING: the half being folded away must currently have no puppets of its own (the printed card lets
+ * the owner choose which of its links to keep; asking to clear its puppets first is a close, simpler
+ * stand-in for that choice).
+ */
+function reunitePartition(s: GameState, p: PlayerState, group: string) {
+  if (!anyTime(s, p.id)) throw new RuleError('You can reunite a Place split by Partition whenever you may act, but not right now.');
+  const g = s.cards[group];
+  const otherId = g?.data?.partitionPair as string | undefined;
+  const o = otherId ? s.cards[otherId] : undefined;
+  if (!g || !o || g.zone !== 'structure' || o.zone !== 'structure' || g.controller !== p.id || o.controller !== p.id) {
+    throw new RuleError('You must control both halves of a Place split by Partition to reunite them.');
+  }
+  if (puppets(s, otherId!).length) throw new RuleError('Move that half\'s puppets away before you can reunite it.');
+  for (const other of Object.values(s.cards)) {
+    if ((other.zone === 'resources' || other.zone === 'table') && other.linkedTo === otherId) other.linkedTo = group;
+  }
+  g.mods = g.mods.filter((m) => m.source !== 'partition');
+  g.data = { ...g.data, partitionPair: undefined };
+  Object.assign(o, { zone: 'discard', controller: undefined, master: undefined, x: undefined, y: undefined, side: undefined, tokens: 0, mods: [], data: undefined });
+  player(s, p.id).discard.push(otherId!);
+  log(s, `${p.name} reunites ${cardName(s, group)}: it is whole again.`, p.id);
 }
 
 /** SubGenius rules: spend 1 Illuminati token or 2 tokens of other Groups to draw a Group into the uncontrolled area, at any time. */

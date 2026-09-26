@@ -219,6 +219,8 @@ export interface AttackCtx {
   illegal?: string;
   /** Aiding or opposing Groups whose action has become illegal (a new immunity): they no longer count. */
   illegalGroups?: string[];
+  /** Don't Touch That Dial! (Assassins): if this attack ends in failure, the attacker's turn ends at once. */
+  endsAttackerTurn?: boolean;
 }
 
 /** An open response window: everyone may act; closes when all players have passed in a row. */
@@ -278,6 +280,7 @@ export interface Choice {
 export interface GameEvent {
   type: 'turnStart' | 'drawn' | 'takeover' | 'destroyed' | 'devastated' | 'discarded' | 'plotResolved' | 'relief'
     | 'failedTakeover' // a Group played from hand failed to be taken over (Opportunity Knocks)
+    | 'costDiscard'    // cards were discarded from a hand or deck to pay a Plot's cost (Go, Lemmings, Go!)
     | 'action';       // an action outside an attack was announced and waits for responses before it happens
   player?: string;         // whose turn / who did it
   card?: string;           // card involved
@@ -494,6 +497,8 @@ export type Action =
   | { type: 'removeZaps'; player: string }
   /** Free a Paralyzed Group: pay with its master (if you control it) or with your Illuminati (Assassins). */
   | { type: 'freeGroup'; group: string; payWith: string }
+  /** Reunite the two halves of a Place split by Partition (Assassins): both must be yours. */
+  | { type: 'reunitePartition'; group: string }
   /** Rearranging Groups a capture or move brought in: put `group` on `side` of `onto` (its own master). */
   | { type: 'placeCaptured'; group: string; onto: string; side: Side }
   | { type: 'placeCapturedDone' }
