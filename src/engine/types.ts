@@ -358,6 +358,7 @@ export interface GameState {
     redoTakeover?: boolean;     // the automatic takeover was undone: offer it again (Botched Contact)
     endedAtOnce?: boolean;      // a card ended the turn at once: nobody can win at the end of it (R016)
     dealOffers?: string[];      // players who made a deal offer this turn (computer players make one at most)
+    noActionsExcept?: string[]; // these players may take no action or free move for the rest of this turn, other than opposing an attack (SubGenius: . . . Or Kill Me!)
   };
   events?: GameEvent[];       // queued events waiting for their response window
   continuation?: string;      // what to do when the current event window closes

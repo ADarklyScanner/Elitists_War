@@ -2641,6 +2641,17 @@ export function waitingFor(s: GameState): string[] {
 /** Main-phase steps that end a one-step reorganization (anything but moving Groups). */
 const REORG_ENDERS = new Set<Action['type']>(['attack', 'playPlot', 'useAbility', 'playResource', 'link', 'buyPlot', 'drawGroup', 'relief']);
 
+/**
+ * What `turnFlags.noActionsExcept` still allows (SubGenius: . . . Or Kill Me!): answering a prompt,
+ * passing, ending your own turn, required discards and start-of-turn draws, claiming a win, opposing an
+ * attack (self-defense), leaving the game, negotiating, and showing a card. Everything else is an
+ * action or a free move, and is barred for the rest of the turn.
+ */
+const NO_ACTIONS_EXCEPT_ALLOWED = new Set<Action['type']>([
+  'choose', 'pass', 'endTurn', 'discard', 'draw', 'skipDraw', 'declareVictory', 'oppose', 'resign',
+  'setAutoPass', 'skipTakeover', 'offerDeal', 'respondDeal', 'cancelDeal', 'showCard',
+]);
+
 export function applyAction(state: GameState, playerId: string, action: Action): GameState {
   const s: GameState = structuredClone(state);
   ensureLayout(s); // games saved before cards had real shapes
@@ -2649,6 +2660,9 @@ export function applyAction(state: GameState, playerId: string, action: Action):
   if (isDealAction(action) || action.type === 'pledgeRelief' || action.type === 'resign') { if (s.phase === 'gameOver') throw new RuleError('The game is over.'); }
   else assertPriority(s, playerId);
   const p = player(s, playerId);
+  if (s.turnFlags.noActionsExcept?.includes(playerId) && !NO_ACTIONS_EXCEPT_ALLOWED.has(action.type)) {
+    throw new RuleError('You played . . . Or Kill Me!: you may take no actions or free moves for the rest of this turn, other than to defend yourself.');
+  }
   if (p.eliminated) throw new RuleError('You have been eliminated.');
   // A one-step reorganization (Elders of Zion) is over once its player does anything but move Groups.
   if (s.turnFlags.freeMovesOnce && s.turnFlags.freeMoves === playerId && !s.window && !s.attack && REORG_ENDERS.has(action.type)) {
