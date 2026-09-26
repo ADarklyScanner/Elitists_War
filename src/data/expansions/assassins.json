@@ -475,7 +475,7 @@
    "Fanatic"
   ],
   "attributes": [],
-  "arrowIn": "TOP",
+  "arrowIn": "BOTTOM",
   "arrowsOut": [],
   "uniqueness": "One copy in play at a time (base rule)"
  },
@@ -594,7 +594,7 @@
    "Green",
    "Science"
   ],
-  "arrowIn": "TOP",
+  "arrowIn": "BOTTOM",
   "arrowsOut": [
    "RIGHT"
   ],
@@ -717,7 +717,9 @@
    "Science"
   ],
   "arrowIn": "TOP",
-  "arrowsOut": [],
+  "arrowsOut": [
+   "BOTTOM"
+  ],
   "uniqueness": "One copy in play at a time (base rule)",
   "notes": "The scan shows only the incoming arrow (its lower edge is hidden), so no outgoing arrow is assumed."
  },
@@ -792,7 +794,7 @@
    "Science",
    "Magic"
   ],
-  "arrowIn": "TOP",
+  "arrowIn": "BOTTOM",
   "arrowsOut": [
    "LEFT"
   ],
@@ -1013,7 +1015,7 @@
    "Space",
    "Science"
   ],
-  "arrowIn": "TOP",
+  "arrowIn": "BOTTOM",
   "arrowsOut": [
    "LEFT",
    "RIGHT"
@@ -1273,7 +1275,9 @@
    "Media"
   ],
   "arrowIn": "TOP",
-  "arrowsOut": [],
+  "arrowsOut": [
+   "BOTTOM"
+  ],
   "uniqueness": "One copy in play at a time (base rule)"
  },
  {
@@ -1467,7 +1471,8 @@
   "attributes": [],
   "arrowIn": "TOP",
   "arrowsOut": [
-   "RIGHT"
+   "RIGHT",
+   "BOTTOM"
   ],
   "uniqueness": "One copy in play at a time (base rule)"
  },
