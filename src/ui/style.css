@@ -734,3 +734,74 @@ html.rb-open, html.rb-open body { overflow: hidden; }
 .face-goal { font-size: 14px; margin: 4px 0; color: var(--gilt-hi); }
 .face-flavor { font-style: italic; color: var(--muted); font-size: 14px; margin: 4px 0 6px; }
 .face-exact summary { cursor: pointer; font-size: 12.5px; color: var(--brass); }
+/* ---------- the card library: every card, full screen ---------- */
+.cl-wrap { max-width: 1180px; margin-inline: auto; padding: 16px 16px 80px; }
+.cl-filters { display: flex; flex-direction: column; gap: 10px; }
+.cl-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.cl-chip { border: 1px solid #4a3a2a; background: #1b1319; color: var(--muted); border-radius: 999px; padding: 5px 12px; font-family: var(--display); font-size: 12px; letter-spacing: .05em; }
+.cl-chip.on { border-color: var(--brass); background: var(--brass); color: #1a1210; }
+.cl-selects { display: flex; flex-wrap: wrap; gap: 8px 16px; font-size: 14px; color: var(--muted); }
+.cl-selects select { margin-left: 6px; background: #1b1319; color: var(--ink); border: 1px solid #4a3a2a; border-radius: 6px; padding: 4px 6px; font: inherit; }
+.cl-count { margin: 12px 0 8px; font-style: italic; color: var(--muted); }
+.cl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+.cl-none { grid-column: 1 / -1; font-style: italic; color: var(--muted); }
+.cl-card { box-sizing: border-box; min-width: 0; position: relative; display: flex; flex-direction: column; gap: 4px; aspect-ratio: 5 / 7; padding: 12px 11px 10px; border-radius: 10px; text-align: left; overflow: visible;
+  border: 1px solid #0006; box-shadow: inset 0 0 0 2px #0003, inset 0 0 0 3px #f3d89a33, 0 2px 8px #0008; color: #fff4dd; }
+.cl-card:hover, .cl-card:focus-visible { transform: translateY(-2px); box-shadow: inset 0 0 0 2px #0003, inset 0 0 0 3px var(--brass), 0 6px 16px #000a; }
+.cl-card.k-group { background: linear-gradient(160deg, #8e2a2a, #4e1216); }
+.cl-card.k-ill { background: linear-gradient(160deg, #2b2b33, #0c0c10); color: var(--gilt-hi); }
+.cl-card.k-res { background: linear-gradient(160deg, #6a3d8c, #33184a); }
+.cl-card.k-plot { background: linear-gradient(160deg, #2d4e86, #152645); }
+.cl-card.k-goal { background: linear-gradient(160deg, #2f6b4e, #143324); }
+.cl-card.k-nwo { background: linear-gradient(160deg, #3c3f8e, #1b1c45); }
+.cl-card.k-hit { background: linear-gradient(160deg, #8a5a1c, #3f2608); }
+.cl-kind { font-family: var(--display); font-size: 10px; letter-spacing: .12em; text-transform: uppercase; opacity: .8; }
+.cl-name { font-family: var(--display); font-weight: 700; font-size: 15px; line-height: 1.15; text-wrap: balance; }
+.cl-al { font-size: 12px; opacity: .85; line-height: 1.25; }
+.cl-stats { margin-top: auto; display: flex; justify-content: space-between; align-items: baseline; font-family: var(--display); font-weight: 700; }
+.cl-pw { font-size: 22px; color: var(--gilt-hi); }
+.cl-rs { font-size: 22px; color: #f7e3b0; }
+.cl-pw::before { content: 'P '; font-size: 10px; letter-spacing: .1em; opacity: .7; }
+.cl-rs::before { content: 'R '; font-size: 10px; letter-spacing: .1em; opacity: .7; }
+.cl-ar { position: absolute; width: 0; height: 0; border: 7px solid transparent; }
+.cl-ar.top { top: -1px; left: calc(50% - 7px); } .cl-ar.bottom { bottom: -1px; left: calc(50% - 7px); }
+.cl-ar.left { left: -1px; top: calc(50% - 7px); } .cl-ar.right { right: -1px; top: calc(50% - 7px); }
+.cl-ar.out.top { border-bottom-color: var(--brass); border-top-width: 0; }
+.cl-ar.out.bottom { border-top-color: var(--brass); border-bottom-width: 0; }
+.cl-ar.out.left { border-right-color: var(--brass); border-left-width: 0; }
+.cl-ar.out.right { border-left-color: var(--brass); border-right-width: 0; }
+.cl-ar.in.top { border-top-color: #f3d89a88; border-bottom-width: 0; }
+.cl-ar.in.bottom { border-bottom-color: #f3d89a88; border-top-width: 0; }
+.cl-scrim { position: fixed; inset: 0; z-index: 4; background: #000a; }
+.cl-sheet { position: fixed; z-index: 5; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(760px, calc(100% - 24px)); max-height: calc(100% - 32px); overflow-y: auto; overscroll-behavior: contain;
+  background: var(--panel); border: 1px solid #6b5230; border-radius: 12px; box-shadow: 0 20px 60px #000c; }
+.cl-sheet-top { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: 8px; padding: 8px 10px; background: #1b1319; border-bottom: 1px solid #4a3a2a; }
+.cl-nav, .cl-x { border: 1px solid #4a3a2a; background: #241922; color: var(--gilt-hi); border-radius: 999px; min-width: 36px; height: 34px; font-size: 18px; }
+.cl-x { margin-left: auto; font-size: 15px; }
+.cl-pos { font-size: 13px; color: var(--muted); font-style: italic; }
+.cl-detail { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 20px; padding: 18px; }
+.cl-big { min-width: 0; }
+.cl-snip { font-size: 11.5px; line-height: 1.3; opacity: .88; display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; overflow: hidden; }
+.cl-big .cl-snip { -webkit-line-clamp: 12; font-size: 12.5px; }
+.cl-big .cl-card { width: 100%; cursor: default; transform: none; }
+.cl-big .cl-name { font-size: 19px; }
+.cl-kicker { font-family: var(--display); font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--brass); }
+.cl-info h2 { color: var(--gilt-hi); margin: 2px 0 10px; font-size: 24px; }
+.cl-info .face-rules { font-size: 16.5px; line-height: 1.5; }
+.cl-info .face-goal, .cl-info .face-flavor { margin-top: 10px; }
+.cl-table { margin-top: 14px; border-collapse: collapse; font-size: 14.5px; width: 100%; }
+.cl-table th { text-align: left; font-family: var(--display); font-weight: 600; font-size: 12px; letter-spacing: .05em; color: var(--brass); padding: 4px 12px 4px 0; white-space: nowrap; vertical-align: top; }
+.cl-table td { padding: 4px 0; border-bottom: 1px solid #2e2228; }
+.cl .face-exact { margin-top: 14px; }
+.cl-home-btn { margin-left: 8px; }
+@media (max-width: 560px) {
+  .cl-grid { grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 9px; }
+  .cl-card { padding: 9px 8px 7px; border-radius: 8px; }
+  .cl-name { font-size: 12.5px; }
+  .cl-al { font-size: 10.5px; }
+  .cl-snip { font-size: 10px; -webkit-line-clamp: 5; }
+  .cl-pw, .cl-rs { font-size: 17px; }
+  .cl-detail { grid-template-columns: minmax(0, 1fr); padding: 14px; }
+  .cl-big { width: 150px; margin-inline: auto; }
+  .cl-sheet { top: auto; bottom: 0; transform: translateX(-50%); width: 100%; max-height: 92%; border-radius: 14px 14px 0 0; }
+}
