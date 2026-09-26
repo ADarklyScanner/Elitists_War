@@ -782,6 +782,7 @@ function beginTurn(s: GameState, extraTurn = false) {
   const p = activePlayer(s);
   // Expire "until the start of your next turn" effects of this player.
   for (const c of Object.values(s.cards)) c.mods = c.mods.filter((m) => !(m.until === 'startOfOwnerTurn' && c.controller === p.id));
+  if (s.sultanOfSlack?.by === p.id) s.sultanOfSlack = undefined;
   log(s, `— Turn ${s.turn} (round ${s.round}): ${p.name}${extraTurn ? ' (extra turn)' : ''} —`, p.id);
   // Cards played "at the start of a turn" (Unlucky 13, Seize the Time …) get their window first.
   raiseEvent(s, { type: 'turnStart', player: p.id }, 'draws');
@@ -1298,6 +1299,9 @@ function specialGoal(s: GameState, playerId: string): GoalOption | undefined {
     const peaceful = inPlay.filter((iid) => alignments(s, iid).includes('Peaceful')).reduce((n, iid) => n + power(s, iid, { goals: true }), 0);
     if (peaceful >= a.value) why = `has ${a.value} Peaceful Power`;
   }
+  // The Sultan of Slack (SubGenius): nobody may win by their Special Goal without as many Illuminati
+  // Action tokens as the Sultan currently holds.
+  if (why && s.sultanOfSlack && s.cards[ill].tokens < s.sultanOfSlack.tokens) why = null;
   return { id: 'special', label, met: !!why, why: why ?? undefined };
 }
 
@@ -1723,7 +1727,9 @@ export function validateAttack(s: GameState, playerId: string, a: Extract<Action
   const tgt = s.cards[a.target];
   if (!att || !tgt) return 'Unknown card.';
   if (att.zone !== 'structure' || att.controller !== playerId) return 'The attacker must be in your Power Structure.';
-  if (att.tokens < 1) return `${cardName(s, a.attacker)} has no Action token.`;
+  // Time Control (SubGenius): the Illuminati may make one direct attack this turn without a token.
+  const freeIlluminatiAttack = a.attacker === illuminatiOf(s, playerId) && s.turnFlags.freeAttack === playerId;
+  if (att.tokens < 1 && !freeIlluminatiAttack) return `${cardName(s, a.attacker)} has no Action token.`;
   if (a.attacker === a.target) return 'A Group cannot attack itself.';
   const td = def(s, a.target);
   if (td.type !== 'Group') return 'Only Groups can be attacked.';
@@ -1751,8 +1757,10 @@ export function validateAttack(s: GameState, playerId: string, a: Extract<Action
     if (why) return why;
   }
   if (isSecret(s, a.target) && !isSecret(s, a.attacker) && def(s, a.attacker).type !== 'Illuminati' && !anyHook(s, (h, self) => !!h.secretOverride?.(s, self, a.attacker, a.target))) return `${cardName(s, a.target)} is Secret: only Illuminati and Secret Groups can attack it.`;
-  if (immuneTo(s, a.target, [a.attacker])) return `${cardName(s, a.target)} is immune to attacks from ${cardName(s, a.attacker)}.`;
-  if (a.attackType === 'destroy' && abilitiesOf(s, a.target).some((x) => x.kind === 'cannotBeDestroyed')) return `${cardName(s, a.target)} cannot be destroyed.`;
+  // A card declared with the attack (Schizm) may let it ignore immunity and "cannot be destroyed".
+  const overridesImmunity = (a.plots ?? []).some((pl) => PLOTS[s.cards[pl.card]?.cardId]?.overridesImmunity);
+  if (!overridesImmunity && immuneTo(s, a.target, [a.attacker])) return `${cardName(s, a.target)} is immune to attacks from ${cardName(s, a.attacker)}.`;
+  if (!overridesImmunity && a.attackType === 'destroy' && abilitiesOf(s, a.target).some((x) => x.kind === 'cannotBeDestroyed')) return `${cardName(s, a.target)} cannot be destroyed.`;
   const ill = illuminatiOf(s, playerId);
   for (const ab of abilitiesOf(s, ill)) {
     if (a.attackType === 'destroy' && ab.kind === 'canOnlyDestroy' && !matches(s, a.target, ab.match)) return 'Your Illuminati may only destroy Violent Groups.';
@@ -1768,7 +1776,9 @@ export function startAttack(s: GameState, playerId: string, a: Extract<Action, {
   const tgt = s.cards[a.target];
   const fromHand = tgt.zone === 'hand' || (!!opts.anyHand && tgt.zone === 'discard');
   const fromArea = tgt.zone === 'uncontrolled';
-  s.cards[a.attacker].tokens--;
+  // Time Control (SubGenius): this one direct attack by the Illuminati costs no token.
+  if (a.attacker === illuminatiOf(s, playerId) && s.turnFlags.freeAttack === playerId) s.turnFlags.freeAttack = undefined;
+  else s.cards[a.attacker].tokens--;
   const ctx: AttackCtx = {
     id: ++s.attackCounter, type: a.attackType, instant: false, attacker: a.attacker, attackerPlayer: playerId,
     target: a.target, targetPlayer: fromHand || fromArea ? undefined : tgt.controller, fromHand, ...(fromArea ? { fromArea } : {}),
@@ -1828,16 +1838,20 @@ export function attackIllegal(s: GameState, ctx: AttackCtx): string | null {
   if (s.cards[att].zone !== 'structure' || s.cards[att].controller !== ctx.attackerPlayer) return null; // gone: the card that removed it decides
   if (!['structure', 'hand', 'discard', 'uncontrolled'].includes(s.cards[tgt].zone)) return null;
 
+  // A card declared with the attack (Schizm) may let it ignore immunity and forbidAttack.
+  const overridesImmunity = ctx.plays.some((p) => PLOTS[s.cards[p.iid]?.cardId]?.overridesImmunity && !isCancelled(ctx.plays, p.iid));
   // Immunities and restrictions are judged as they would be for a fresh announcement (no attack under way).
   const saved = s.attack;
   s.attack = undefined;
   try {
-    for (const self of activeHookCards(s)) {
-      const why = HOOKS[s.cards[self].cardId].forbidAttack?.(s, self, att, tgt, ctx.type, ctx.attackerPlayer);
-      if (why) return why;
+    if (!overridesImmunity) {
+      for (const self of activeHookCards(s)) {
+        const why = HOOKS[s.cards[self].cardId].forbidAttack?.(s, self, att, tgt, ctx.type, ctx.attackerPlayer);
+        if (why) return why;
+      }
     }
     if (isSecret(s, tgt) && !isSecret(s, att) && def(s, att).type !== 'Illuminati' && !anyHook(s, (h, self) => !!h.secretOverride?.(s, self, att, tgt))) return `${cardName(s, tgt)} is now Secret: ${cardName(s, att)} may not attack it.`;
-    if (immuneTo(s, tgt, [att])) return `${cardName(s, tgt)} is now immune to ${cardName(s, att)}.`;
+    if (!overridesImmunity && immuneTo(s, tgt, [att])) return `${cardName(s, tgt)} is now immune to ${cardName(s, att)}.`;
     for (const ab of abilitiesOf(s, illuminatiOf(s, ctx.attackerPlayer))) {
       if (ctx.type === 'destroy' && ab.kind === 'canOnlyDestroy' && !matches(s, tgt, ab.match)) return `${cardName(s, tgt)} is no longer a Group your Illuminati may destroy.`;
     }
@@ -3008,6 +3022,7 @@ export function applyAction(state: GameState, playerId: string, action: Action):
 
       const payers = [action.group, g.master, action.onto, p.illuminati];
       if (!free && (!action.payWith || !payers.includes(action.payWith) || s.cards[action.payWith].tokens < 1)) throw new RuleError('Pay with a token from the Group, its old or new master, or your Illuminati.');
+      if (!free && action.payWith === p.illuminati && s.turnFlags.illuminatiLocked === playerId) throw new RuleError('Your Illuminati\'s token cannot be spent this turn except to buy a Plot card.');
       if (!free) s.cards[action.payWith!].tokens--;
       announce(s, playerId, 'move', action, free ? [] : [action.payWith!], action.group);
       break;
@@ -3233,6 +3248,7 @@ function startPlayResource(s: GameState, playerId: string, card: string, decided
     if (why) throw new RuleError(why);
   }
   if (s.cards[p.illuminati].tokens < 1) throw new RuleError('Your Illuminati needs an Action token.');
+  if (s.turnFlags.illuminatiLocked === playerId) throw new RuleError('Your Illuminati\'s token cannot be spent this turn except to buy a Plot card.');
   // A rival's hidden copy must be shown (the play fails before anything is paid) or given up.
   const rival = decided ? undefined : hiddenUniqueCopy(s, card, playerId);
   if (rival) { askShowdown(s, rival, { mode: 'playResource', card, player: playerId }); return; }

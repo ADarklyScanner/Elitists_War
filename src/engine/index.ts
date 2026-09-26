@@ -22,6 +22,7 @@ import './content/subgenius';
 import './content/subgenius3';
 import './content/subgenius1';
 import './content/subgenius2';
+import './content/subgenius4';
 
 export * from './types';
 export * from './game';

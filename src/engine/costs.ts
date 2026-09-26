@@ -72,7 +72,8 @@ function pays(s: GameState, pl: string, play: PlotPlay, o: CostOption): boolean 
   const me = s.players.find((p) => p.id === pl);
   if (!me || new Set(pay).size !== pay.length || new Set(disc).size !== disc.length) return false;
   switch (o.kind) {
-    case 'illuminati': return !disc.length && pay.length === 1 && pay[0] === me.illuminati && ownReady(s, pl, me.illuminati);
+    // Time Control (SubGenius) locks the Illuminati's token for the rest of the turn.
+    case 'illuminati': return !disc.length && pay.length === 1 && pay[0] === me.illuminati && ownReady(s, pl, me.illuminati) && s.turnFlags.illuminatiLocked !== pl;
     case 'target': return !disc.length && pay.length === 1 && pay[0] === play.target && ownReady(s, pl, pay[0]);
     case 'discards': return !pay.length && disc.length === o.count && disc.every((c) => c !== play.card && me.hand.includes(c) && def(s, c).type === 'Plot');
     case 'groups': {

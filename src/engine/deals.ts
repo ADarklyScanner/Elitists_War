@@ -52,7 +52,7 @@ export function offersFrom(s: GameState, pl: string): Deal[] {
 }
 
 export function sideEmpty(d: DealSide): boolean {
-  return !d.cards?.length && !d.resources?.length && !d.groups?.length && !d.anyPlots && !d.anyCards;
+  return !d.cards?.length && !d.resources?.length && !d.groups?.length && !d.anyPlots && !d.anyCards && !d.illuminatiTokens;
 }
 const inPlayParts = (d: DealSide) => !!(d.resources?.length || d.groups?.length);
 const handParts = (d: DealSide) => !!(d.cards?.length || d.anyPlots || d.anyCards);
@@ -143,6 +143,7 @@ function describe(s: GameState, side: DealSide, full: boolean): string {
   }
   if (side.anyPlots) parts.push(`${side.anyPlots} Plot${side.anyPlots === 1 ? '' : 's'} of their choice`);
   if (side.anyCards) parts.push(`${side.anyCards} Group or Resource card${side.anyCards === 1 ? '' : 's'} of their choice`);
+  if (side.illuminatiTokens) parts.push(`${side.illuminatiTokens} Illuminati Action token${side.illuminatiTokens === 1 ? '' : 's'}`);
   return parts.length ? parts.join(', ') : 'nothing';
 }
 
@@ -178,6 +179,15 @@ function deliver(s: GameState, giver: string, receiver: string, side: DealSide, 
     log(s, `Left out of the deal: ${why}`);
   };
   const gp = player(s, giver), rp = player(s, receiver);
+  if (side.illuminatiTokens) {
+    if (!s.turnFlags.slackfusion) skip('Illuminati Action tokens can no longer change hands this turn.');
+    else if (s.cards[gp.illuminati].tokens < side.illuminatiTokens) skip('That Illuminati no longer has enough Action tokens to give.');
+    else {
+      s.cards[gp.illuminati].tokens -= side.illuminatiTokens;
+      s.cards[rp.illuminati].tokens += side.illuminatiTokens;
+      done.illuminatiTokens = side.illuminatiTokens;
+    }
+  }
   if (side.cards?.length) {
     const why = handTiming(s, giver, receiver);
     if (why) skip(why);
@@ -317,6 +327,7 @@ function clean(d: DealSide | undefined): DealSide {
   if (groups.length) out.groups = groups;
   if (n(d?.anyPlots)) out.anyPlots = n(d?.anyPlots);
   if (n(d?.anyCards)) out.anyCards = n(d?.anyCards);
+  if (Number.isInteger(d?.illuminatiTokens) && d!.illuminatiTokens! > 0) out.illuminatiTokens = d!.illuminatiTokens;
   return out;
 }
 
@@ -351,6 +362,11 @@ function offer(s: GameState, pl: string, a: Extract<Action, { type: 'offerDeal' 
     throw new RuleError('Groups and Resources in play change hands only in the main phase of one of the two players\' turns.');
   }
   const me = player(s, pl), them = player(s, a.to);
+  // Slackfusion: Illuminati Action tokens may change hands this turn, Illuminati to Illuminati only.
+  if (give.illuminatiTokens || get.illuminatiTokens) {
+    if (!s.turnFlags.slackfusion) throw new RuleError('Illuminati Action tokens can change hands in a deal only after Slackfusion is played this turn.');
+    if (give.illuminatiTokens && s.cards[me.illuminati].tokens < give.illuminatiTokens) throw new RuleError('Your Illuminati does not have that many Action tokens to give.');
+  }
   // What you give.
   for (const c of give.cards ?? []) { const e = handCardProblem(s, pl, c); if (e) throw new RuleError(e); }
   for (const r of give.resources ?? []) { const e = resourceProblem(s, pl, a.to, r); if (e) throw new RuleError(e); }

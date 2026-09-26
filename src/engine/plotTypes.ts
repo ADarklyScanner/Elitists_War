@@ -64,6 +64,12 @@ export interface PlotHandler {
    * player's hand instead of it being discarded; Oil Spill: every Green Group gets an extra token).
    */
   onDisasterSuccess?: (s: GameState, ctx: AttackCtx, destroyed: boolean) => void;
+  /**
+   * Declared with the attack (`a.plots`, timing 'declare'): lets this one attack ignore the target's
+   * immunity and "cannot be destroyed" (Schizm). Checked by `validateAttack` before the attack exists,
+   * so an immunity that would otherwise block the attack from being declared at all does not.
+   */
+  overridesImmunity?: boolean;
   /** Short hint for the UI about what the play needs (target, mode, payWith). */
   needs?: {
     /** What `play.target` is: a Group in play, a Resource, a card in your hand, a destroyed Group, a card

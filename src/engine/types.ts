@@ -369,6 +369,9 @@ export interface GameState {
     endedAtOnce?: boolean;      // a card ended the turn at once: nobody can win at the end of it (R016)
     dealOffers?: string[];      // players who made a deal offer this turn (computer players make one at most)
     noActionsExcept?: string[]; // these players may take no action or free move for the rest of this turn, other than opposing an attack (SubGenius: . . . Or Kill Me!)
+    freeAttack?: string;        // this player's Illuminati may make one direct attack without spending a token (Time Control)
+    illuminatiLocked?: string;  // this player's Illuminati token may not be spent this turn except to buy a Plot (Time Control)
+    slackfusion?: boolean;      // Illuminati Action tokens may change hands in a deal, Illuminati to Illuminati only (Slackfusion)
   };
   events?: GameEvent[];       // queued events waiting for their response window
   continuation?: string;      // what to do when the current event window closes
@@ -401,6 +404,11 @@ export interface GameState {
   habits?: Record<string, Record<string, unknown>>;
   /** SubGenius: players spared from R049 elimination this turn by showing Arise!, awaiting the end of turn. */
   ariseWatch?: string[];
+  /**
+   * The Sultan of Slack (SubGenius): until the start of `by`'s next turn, nobody may win by their
+   * Illuminati's Special Goal unless their Illuminati holds at least `tokens` Action tokens.
+   */
+  sultanOfSlack?: { by: string; tokens: number };
 }
 
 /** The shared piles of the stand-alone SubGenius game. */
@@ -444,6 +452,8 @@ export interface DealSide {
   groups?: DealGroup[];    // Groups in play
   anyPlots?: number;       // asked for only: Plots from hand of the giver's choice
   anyCards?: number;       // asked for only: Group or Resource cards from hand of the giver's choice
+  /** Illuminati Action tokens, one Illuminati to another only (Slackfusion, for the rest of that turn). */
+  illuminatiTokens?: number;
 }
 
 export interface Deal {
