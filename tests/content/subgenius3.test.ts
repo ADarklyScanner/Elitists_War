@@ -416,9 +416,24 @@ describe('Kill "Bob"!', () => {
     s = toRoll(s);
     s.attack!.roll = [2, 2];
     s = act(s, 'p1', { type: 'playPlot', play: { card } });
-    expect(s.cards[ill(s, 'p1')].tokens).toBe(1);
+    // It pays out once the attack is over, with the dice as they finally stand.
+    expect(s.cards[ill(s, 'p1')].tokens).toBe(0);
     s = resolveAttack(s);
     expect(s.cards[tgt].zone).toBe('destroyed');
+    expect(s.cards[ill(s, 'p1')].tokens).toBe(1);
+  });
+  it('may be played before the roll too, and gives nothing on a failure to a player whose Group it was not', () => {
+    const s0 = scenario();
+    const att = give(s0, 'p1', 'loan-sharks', { under: ill(s0, 'p1'), side: 'BOTTOM' });
+    const tgt = give(s0, 'p2', 'drs-for-bob', { under: ill(s0, 'p2'), side: 'BOTTOM' });
+    const card = give(s0, 'p1', 'kill-bob', { hand: true });
+    s0.cards[ill(s0, 'p1')].tokens = 0;
+    let s = act(s0, 'p1', { type: 'attack', attackType: 'destroy', attacker: att, target: tgt });
+    s.attack!.strengthLock = { attack: 20, defense: 0, by: 'test-lock' };
+    s = act(s, 'p1', { type: 'playPlot', play: { card } });
+    s = resolveAttack(s, [6, 6]);
+    expect(s.cards[tgt].zone).toBe('structure');
+    expect(s.cards[ill(s, 'p1')].tokens).toBe(0);
   });
   it('rewards the owner of the destroyed SubGenius Group even on a failed attack', () => {
     const s0 = scenario();
@@ -429,8 +444,10 @@ describe('Kill "Bob"!', () => {
     let s = act(s0, 'p1', { type: 'attack', attackType: 'destroy', attacker: att, target: tgt });
     s.attack!.strengthLock = { attack: 20, defense: 0, by: 'test-lock' };
     s = toRoll(s);
-    s.attack!.roll = [12, 12];
+    s.attack!.roll = [6, 6];
     s = act(s, 'p2', { type: 'playPlot', play: { card } });
+    s = resolveAttack(s);
+    expect(s.cards[tgt].zone).toBe('structure');
     expect(s.cards[ill(s, 'p2')].tokens).toBe(1);
   });
 });
@@ -483,14 +500,16 @@ describe('Miraculous Manifestation', () => {
 });
 
 describe('More Slack', () => {
-  it('spends one Slack and exposes every hand, once per game', () => {
+  it("spends one Slack and exposes all its player's own Plots (not a rival's), once per game", () => {
     const s0 = scenario();
     give(s0, 'p2', 'anti-slack', { hand: true });
+    const mine = give(s0, 'p1', 'anti-slack', { hand: true });
     s0.cards[ill(s0, 'p1')].tokens = 1;
     const card = give(s0, 'p1', 'more-slack', { hand: true });
     let s = playAndResolve(s0, 'p1', { card });
     expect(s.cards[ill(s, 'p1')].tokens).toBe(0);
-    expect(s.players[1].hand.every((c) => s.cards[c].exposed)).toBe(true);
+    expect(s.cards[mine].exposed).toBe(true);
+    expect(s.players[1].hand.some((c) => s.cards[c].exposed)).toBe(false);
     const card2 = give(s, 'p1', 'more-slack', { hand: true });
     s.cards[ill(s, 'p1')].tokens = 1;
     expect(() => act(s, 'p1', { type: 'playPlot', play: { card: card2 } })).toThrow(/once per game/);

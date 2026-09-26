@@ -72,30 +72,25 @@ describe('www.subgenius.com', () => {
     s.common = { plotDeck: [], groupDeck: [], plotDiscard: [], groupDiscard: [], uncontrolled: [] };
     expect(() => use(s, 'p1', g, 'draw-group')).toThrow(/uncontrolled area/);
   });
-  it('draws an extra Group into the uncontrolled area at the start of the turn there', () => {
-    let s = scenario();
+  it('adds one Group draw into the uncontrolled area at the start of the turn there (none in a mixed game)', () => {
+    const s = scenario();
     const g = give(s, 'p1', 'www-subgenius-com', { under: ill(s, 0), side: 'LEFT' });
+    expect(HOOKS['www-subgenius-com'].extraGroupDraws!(s, g)).toBe(0);
     s.settings.subgeniusRules = true;
-    s.common = { plotDeck: [], groupDeck: [...s.players[0].groupDeck], plotDiscard: [], groupDiscard: [], uncontrolled: [] };
-    const before = s.common.groupDeck.length;
-    HOOKS['www-subgenius-com'].onTurnStart!(s, g);
-    expect(s.common.uncontrolled.length).toBe(1);
-    expect(s.common.groupDeck.length).toBe(before - 1);
+    expect(HOOKS['www-subgenius-com'].extraGroupDraws!(s, g)).toBe(1);
   });
 });
 
 describe('Connie Dobbs', () => {
-  it('cannot be destroyed, and neither can her own puppets, while Straight and SubGenius', () => {
-    let s = scenario();
+  it('cannot be destroyed, and neither can her own puppets, while Straight and SubGenius: no Attack to Destroy may be made on them', () => {
+    const s = scenario();
     const connie = give(s, 'p1', 'connie-dobbs', { under: ill(s, 0), side: 'LEFT' });
     const puppet = give(s, 'p1', 'b-a-t-f', { under: connie, side: 'BOTTOM' });
     const attacker = give(s, 'p2', 'the-mafia', { under: ill(s, 1), side: 'TOP' });
     s.active = 1;
-    s = resolve(boost(attack(s, 'p2', attacker, connie, 'destroy'), 'p2', 40), [1, 1]);
-    expect(s.cards[connie].zone).toBe('structure');
-    s.cards[attacker].tokens = 1;
-    s = resolve(boost(attack(s, 'p2', attacker, puppet, 'destroy'), 'p2', 40), [1, 1]);
-    expect(s.cards[puppet].zone).toBe('structure');
+    expect(() => attack(s, 'p2', attacker, connie, 'destroy')).toThrow(/cannot be destroyed/);
+    expect(() => attack(s, 'p2', attacker, puppet, 'destroy')).toThrow(/cannot be destroyed/);
+    expect(() => attack(s, 'p2', attacker, puppet, 'control')).not.toThrow();
   });
   it('loses the protection once she is no longer SubGenius', () => {
     let s = scenario();
@@ -266,10 +261,16 @@ describe('Dobbstown', () => {
 });
 
 describe('Dokstok', () => {
-  it('gives its controller one extra Illuminati token at token placement', () => {
+  it('its extra token at token placement must go to a rival or be thrown away', () => {
     let s = scenario();
     const g = give(s, 'p1', 'dokstok', { under: ill(s, 0), side: 'RIGHT' });
-    expect(abilitiesOf(s, g)).toContainEqual({ kind: 'extraIlluminatiToken', value: 1 });
+    expect(abilitiesOf(s, g)).toEqual([]);
+    const mine = s.cards[ill(s, 0)].tokens, theirs = s.cards[ill(s, 1)].tokens;
+    HOOKS['dokstok'].onTokensPlaced!(s, g, 'p1');
+    expect(s.prompt?.choice?.key).toBe('dokstok-token');
+    s = act(s, 'p1', { type: 'choose', ids: ['p2'] });
+    expect(s.cards[ill(s, 0)].tokens).toBe(mine);
+    expect(s.cards[ill(s, 1)].tokens).toBe(theirs + 1);
   });
 });
 
@@ -312,18 +313,25 @@ describe('Janor Device', () => {
 });
 
 describe('Martyr Meter', () => {
-  it("gives an extra Action token to the Personality it's linked to", () => {
+  it('at token placement, one Personality of its holder (his choice) gets an extra Action token', () => {
     let s = scenario();
     const meter = give(s, 'p1', 'martyr-meter', { resource: true });
-    const person = give(s, 'p1', 'jesus-b', { under: ill(s, 0), side: 'TOP' });
-    s = act(s, 'p1', { type: 'link', resource: meter, to: person });
-    expect(HOOKS['martyr-meter'].extraTokens!(s, meter, person)).toBe(1);
+    const a = give(s, 'p1', 'jesus-b', { under: ill(s, 0), side: 'TOP' });
+    const b = give(s, 'p1', 'connie-dobbs', { under: ill(s, 0), side: 'LEFT' });
+    give(s, 'p1', 'b-a-t-f', { under: ill(s, 0), side: 'RIGHT' });
+    HOOKS['martyr-meter'].onTokensPlaced!(s, meter, 'p1');
+    expect(s.prompt?.choice?.options.map((o) => o.id).sort()).toEqual([a, b].sort());
+    s = act(s, 'p1', { type: 'choose', ids: [b] });
+    expect(s.cards[b].tokens).toBe(2);
+    expect(s.cards[a].tokens).toBe(1);
   });
-  it('cannot link to a non-Personality', () => {
-    let s = scenario();
+  it('does nothing on a rival\'s turn', () => {
+    const s = scenario();
     const meter = give(s, 'p1', 'martyr-meter', { resource: true });
-    const place = give(s, 'p1', 'b-a-t-f', { under: ill(s, 0), side: 'TOP' });
-    expect(() => act(s, 'p1', { type: 'link', resource: meter, to: place })).toThrow(/cannot be linked/);
+    const a = give(s, 'p1', 'jesus-b', { under: ill(s, 0), side: 'TOP' });
+    HOOKS['martyr-meter'].onTokensPlaced!(s, meter, 'p2');
+    expect(s.prompt).toBeUndefined();
+    expect(s.cards[a].tokens).toBe(1);
   });
 });
 
@@ -459,14 +467,28 @@ describe('Cast Out False Prophets!', () => {
     s.players[1].eliminatedBy = 'p1';
     expect(GOALS['cast-out-false-prophets'](s, 'p1')).toBeTruthy();
   });
-  it('boosts an Attack to Destroy on a rival, played as a Plot', () => {
+  it('boosts an Attack to Destroy on the False Prophets, played as a Plot', () => {
     let s = scenario();
     const plot = give(s, 'p1', 'cast-out-false-prophets', { hand: true });
     const attacker = give(s, 'p1', 'b-a-t-f', { under: ill(s, 0), side: 'TOP' });
-    const target = give(s, 'p2', 'loan-sharks', { under: ill(s, 1), side: 'TOP' });
+    const target = give(s, 'p2', 'false-prophets', { under: ill(s, 1), side: 'TOP' });
     s = attack(s, 'p1', attacker, target, 'destroy');
     s = act(s, 'p1', { type: 'playPlot', play: { card: plot } });
     expect(s.attack!.attackBonus.some((c) => c.amount === 10)).toBe(true);
+  });
+  it('also on a puppet of the False Prophets, or their master unless it is the Illuminati', () => {
+    const s0 = scenario();
+    const plot = give(s0, 'p1', 'cast-out-false-prophets', { hand: true });
+    const attacker = give(s0, 'p1', 'b-a-t-f', { under: ill(s0, 0), side: 'TOP' });
+    const master = give(s0, 'p2', 'loan-sharks', { under: ill(s0, 1), side: 'TOP' });
+    const fp = give(s0, 'p2', 'false-prophets', { under: master, side: 'TOP' });
+    const puppet = give(s0, 'p2', 'church-of-elvis', { under: fp, side: outSides(s0, fp)[0] });
+    const other = give(s0, 'p2', 'the-mafia', { under: ill(s0, 1), side: 'LEFT' });
+    for (const [t, ok] of [[master, true], [puppet, true], [other, false]] as const) {
+      const s = attack(structuredClone(s0), 'p1', attacker, t, 'destroy');
+      if (ok) expect(act(s, 'p1', { type: 'playPlot', play: { card: plot } }).attack!.attackBonus.some((c) => c.amount === 10)).toBe(true);
+      else expect(() => act(s, 'p1', { type: 'playPlot', play: { card: plot } })).toThrow(/False Prophets/);
+    }
   });
   it('cannot boost an attack on your own Group', () => {
     let s = scenario();
@@ -562,6 +584,9 @@ describe('Dallas Catacombs', () => {
     s = settle(act(s, 'p1', { type: 'move', group: g, onto: philo, side: fake, payWith: ill(s, 0) }));
     expect(s.cards[g].side).toBe(fake);
     destroyGroup(s, cat, 'p2');
+    // Its controller picks the real arrow.
+    expect(s.prompt?.choice?.key).toBe('catacombs-untangle');
+    s = act(s, 'p1', { type: 'choose', ids: [s.prompt!.choice!.options[s.prompt!.choice!.options.length - 1].id] });
     const backOnRealArrow = s.cards[g].zone === 'structure' && outSides(s, s.cards[g].master!).includes(s.cards[g].side!);
     expect(s.cards[g].zone === 'discard' || backOnRealArrow).toBe(true);
   });

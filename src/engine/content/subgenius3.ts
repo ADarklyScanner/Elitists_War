@@ -3,14 +3,15 @@ import { noteCostDiscard } from '../game';
 import type { Alignment, AttackCtx, GameState, PlotPlay } from '../types';
 import type { PlotHandler } from '../plotTypes';
 import { registerPlots } from '../plotTypes';
-import { registerChoice, registerHooks } from '../hooks';
+import { HOOKS, anyHook, isCancelled, registerChoice, registerHooks } from '../hooks';
+import { abilitiesOf } from '../abilities';
 import { cardName, def, OPPOSITE } from '../cards';
 import { alignments, attributes, power } from '../stats';
 import { structureCards, puppets, subtree } from '../geometry';
 import { anyOf, groupActions, illuminatiAction, plotDiscards, targetAction } from '../costs';
 import {
-  activePlayer, announcedAction, announcedActors, askChoice, currentOutcome, destroyGroup, discardCard,
-  drawGroup, drawPlot, exposeCards, giveToken, log, player, plotContext, plotsInHand, respondToAction,
+  activePlayer, announcedAction, announcedActors, askChoice, attackCancelled, changeRoll, destroyGroup, discardCard,
+  drawGroup, drawPlot, eventAnswered, exposeCards, giveToken, log, player, plotsInHand, respondToAction,
   revealTo, tokenBarred,
 } from '../game';
 import { sgRules } from '../expansions';
@@ -83,7 +84,8 @@ function orKillMeAct(s: GameState, pl: string, play: PlotPlay) {
   const victim = s.cards[victimIll].controller!;
   (s.turnFlags.noActionsExcept ??= []).push(pl);
   log(s, `${player(s, pl).name} demands Slack from ${player(s, victim).name}: ". . . Or Kill Me!"`, pl);
-  const groups = structureCards(s, victim).filter((g) => g !== victimIll);
+  // Groups nothing but an attack may remove ("Bobbies") cannot be chosen.
+  const groups = structureCards(s, victim).filter((g) => g !== victimIll && !HOOKS[s.cards[g].cardId]?.neverDestroyed);
   const options = [
     { id: 'give', label: 'Give up an Illuminati token' },
     ...groups.map((g) => ({ id: `discard:${g}`, label: cardName(s, g) })),
@@ -119,12 +121,16 @@ registerChoice('jhvh-1-discard', {
 
 // ---------------------------------------------------------------- Attitude Mutation
 
-function attitudeMutationAct(s: GameState, pl: string, play: PlotPlay) {
+/** Its cost, paid as it is played: nothing for a Group the Illuminati controls directly, else its master's action. */
+function attitudeMutationPay(s: GameState, pl: string, play: PlotPlay) {
   const ill = player(s, pl).illuminati;
   s.cards[ill].data = { ...s.cards[ill].data, attitudeMutationTurn: s.turn };
-  const t = play.target!;
-  const master = s.cards[t].master!;
+  const master = s.cards[play.target!].master!;
   if (master !== ill) s.cards[master].tokens--;
+}
+function attitudeMutationAct(s: GameState, pl: string, play: PlotPlay) {
+  const t = play.target!;
+  if (s.cards[t].zone !== 'structure') return;
   const al = play.alignment as Alignment;
   const mode = (play.mode ?? 'add') as 'add' | 'remove' | 'reverse';
   if (mode === 'remove') s.cards[t].mods.push({ source: play.card, kind: 'removeAlign', align: al, until: 'endOfTurn' });
@@ -140,22 +146,27 @@ const excremeditationEligible = (s: GameState, g: string) =>
 
 // ---------------------------------------------------------------- Kill "Bob"!
 
-function killBobAct(s: GameState, pl: string, ctx: AttackCtx) {
-  const ill = player(s, pl).illuminati;
-  s.cards[ill].data = { ...s.cards[ill].data, killBobTurn: s.turn };
-  const owner = s.cards[ctx.target].controller;
-  // RULING: "after the dice are rolled" is evaluated with the roll and modifiers in effect right now,
-  // when the card is played (as it is in ordinary play), rather than waiting for a final resolved
-  // outcome that a later Plot could still change.
-  const succeeded = currentOutcome(s, ctx) === 'success';
+/**
+ * RULING: "every player who participated on the attacking side" is the attacker and every player whose
+ * aiding Group still counted at the end (Plots alone do not make a participant).
+ * Kill "Bob"! stays with its attack (linked to it) and pays out once the attack is over, with the dice as
+ * they finally stood: on a success every player on the attacking side (the attacker, and every player
+ * whose Group aided and still counted) gets an Illuminati token; the player whose SubGenius Group it was
+ * gets one whatever the dice said, if he is the one who played it. A cancelled Kill "Bob"!, or an attack
+ * that never came to its dice, gives nothing.
+ */
+function killBobPayout(s: GameState, self: string, ctx: AttackCtx) {
+  const pl = s.cards[self].controller!;
+  if (isCancelled(ctx.plays, self) || attackCancelled(ctx) || ctx.illegal) return;
   const winners = new Set<string>();
-  if (owner === pl) winners.add(pl);
-  if (succeeded) {
+  if (s.cards[self].data?.killBobOwner === pl) winners.add(pl);
+  if (ctx.result === 'success') {
     winners.add(ctx.attackerPlayer);
-    for (const a of ctx.aid) winners.add(a.player);
+    const gone = new Set(ctx.illegalGroups ?? []);
+    for (const a of ctx.aid) if (a.iid && !gone.has(a.iid) && !ctx.plays.some((p) => !isCancelled(ctx.plays, p.iid) && p.effect.t === 'cancelGroup' && p.effect.group === a.iid)) winners.add(a.player);
   }
-  for (const w of winners) s.cards[player(s, w).illuminati].tokens++;
-  log(s, `Kill "Bob"! gives Slack to ${[...winners].map((w) => player(s, w).name).join(', ') || 'no one'}.`, pl);
+  for (const w of winners) if (!player(s, w).eliminated) s.cards[player(s, w).illuminati].tokens++;
+  log(s, `Kill "Bob"! gives an Illuminati token to ${[...winners].map((w) => player(s, w).name).join(', ') || 'no one'}.`, pl);
 }
 
 // ---------------------------------------------------------------- Comet Hail-"Bob"
@@ -164,6 +175,12 @@ function cometHailBobAct(s: GameState, pl: string, play: PlotPlay) {
   const ill = player(s, pl).illuminati;
   s.cards[ill].data = { ...s.cards[ill].data, cometHailBobUsed: true };
   const g = play.target!;
+  if (s.cards[g].zone !== 'structure') return;
+  // A Group that cannot be destroyed survives it.
+  if (abilitiesOf(s, g).some((a) => a.kind === 'cannotBeDestroyed') || anyHook(s, (h, self) => !!h.preventDestroy?.(s, self, g))) {
+    log(s, `${cardName(s, g)} cannot be destroyed.`, pl);
+    return;
+  }
   log(s, `Comet Hail-"Bob" destroys ${cardName(s, g)}, but not for any Goal.`, pl);
   destroyGroup(s, g, pl);
   const credit = player(s, pl).destroyedCredit;
@@ -259,35 +276,39 @@ registerPlots({
       if (master !== ill && !ready(s, master)) return `${cardName(s, master)} (its master) needs an available action to pay for this.`;
       return null;
     },
-    apply(s, pl, play, ctx) { if (ctx) attitudeMutationAct(s, pl, play); },
+    apply(s, pl, play, ctx) { attitudeMutationPay(s, pl, play); if (ctx) attitudeMutationAct(s, pl, play); },
     resolve: attitudeMutationAct,
   },
 
-  // "Play this card immediately after any die roll (by any player). That roll is immediately changed,
-  // retroactively, to a 12. You must discard three other Plot cards."
+  // Right after any die roll by anyone (an attack roll, or a card's roll outside an attack, announced as
+  // a 'dieRoll' event): that roll becomes a 12. Three other Plots are discarded.
+  // RULING: a card rolling in the middle of an attack (OPEC, Bill Clinton, Imelda Marcos, some Assassins
+  // cards) rolls at once, since no response window can wait inside an attack; every other roll is reached.
   bulldada: {
-    timing: ['roll'],
+    timing: ['roll', 'event'],
+    events: ['dieRoll'],
     requires: anyOf(plotDiscards(3)),
-    check(s, _pl, _play, ctx) { return ctx?.roll ? null : 'Play this right after any die roll.'; },
-    apply(s, _pl, _play, ctx) { if (ctx) return { t: 'reroll', dice: [6, 6] }; },
+    check(s, _pl, _play, ctx) { return ctx?.roll || cardRollNow(s) ? null : 'Play this right after any die roll.'; },
+    // The roll counts as 12; the natural roll (SubGenius glossary) stays what the dice showed.
+    apply(s, _pl, _play, ctx) { if (ctx) return { t: 'set', value: 12 }; },
+    resolve(s) { setCardRoll(s, 12); },
   },
 
-  // "Play this card immediately after a rival takes control of a group from his hand or the uncontrolled
-  // area into play. . . . they are destroyed, but this destruction does not count toward any Goal. This
-  // requires an action from your Illuminati or two Church groups."
-  // RULING: the engine raises a response window only for an automatic takeover (the way Groups usually
-  // enter play from the uncontrolled area in the stand-alone SubGenius game), not for every successful
-  // Attack to Control; Comet Hail-"Bob" answers that window.
+  // Right after a rival takes control of a Group from his hand or the uncontrolled area, however he does
+  // it: an automatic takeover ('takeover' event), a successful Attack to Control on it, or a card putting
+  // it into play (both 'gainedControl'). That Group is destroyed, and the destruction counts for no Goal.
+  // Costs an Illuminati action or two Church actions; once per game for each player (errata).
   'comet-hail-bob': {
     timing: ['event'],
-    events: ['takeover'],
+    events: ['takeover', 'gainedControl'],
     needs: { target: 'anyGroup' },
     requires: anyOf(illuminatiAction(), groupActions({ attributes: ['Church'] }, { count: 2 })),
     check(s, pl, play) {
-      if (s.window?.kind !== 'event' || s.window.event?.type !== 'takeover') return 'Play this right after a rival takes over a Group.';
-      const ev = s.window.event;
+      const ev = s.window?.kind === 'event' ? s.window.event : undefined;
+      if (!ev || (ev.type !== 'takeover' && ev.type !== 'gainedControl')) return 'Play this right after a rival takes control of a Group from his hand or the uncontrolled area.';
       if (!ev.player || ev.player === pl) return "Only against a rival's takeover.";
-      if (play.target !== ev.card) return 'Choose the Group that was just taken over.';
+      if (play.target !== ev.card || def(s, ev.card!).type !== 'Group') return 'Choose the Group that was just taken over.';
+      if (s.cards[ev.card!].zone !== 'structure' || s.cards[ev.card!].controller !== ev.player) return 'That Group is no longer in its new Power Structure.';
       const ill = player(s, pl).illuminati;
       if (s.cards[ill].data?.cometHailBobUsed) return 'You may only play Comet Hail-"Bob" once per game.';
       return null;
@@ -295,7 +316,8 @@ registerPlots({
     ...effectNow(cometHailBobAct),
   },
 
-  // "Play this card to cancel any action taken by or aided by a rival's Weird group."
+  // Cancel any action taken by a rival's Weird Group, or aided by one: the whole action is cancelled (an
+  // attack with a rival's Weird Group attacking or aiding, or an announced action it takes).
   'decency-is-ok': {
     timing: ['attack', 'event'],
     events: ['action'],
@@ -314,15 +336,19 @@ registerPlots({
       }
       return null;
     },
-    apply(s, _pl, play, ctx) { if (ctx) return { t: 'cancelGroup', group: play.target! }; },
-    resolve(s, pl, play) { respondToAction(s, pl, play.card, { t: 'cancelGroup', group: play.target! }); },
+    apply(s, _pl, play, ctx) {
+      if (!ctx) return;
+      // The whole attack is cancelled: cancelling its attacking Group (or, with none, the attack) does that.
+      return ctx.attacker ? { t: 'cancelGroup', group: ctx.attacker } : { t: 'fail' };
+    },
+    resolve(s, pl, play) { respondToAction(s, pl, play.card, { t: 'fail' }); void play; },
   },
 
-  // "Play this card at any time to give +10 Power or Resistance (your choice) to any SubGenius group you
-  // control. If used with an action, it must be played when that action is first declared, and counts
-  // only for that action. If used for defense, the bonus lasts until the end of the current turn and
-  // does not count toward Goals. This card may only count once in any action or defense." (The "only
-  // once" limit is the base game's own rule against using two copies of the same Plot in one attack.)
+  // +10 Power or Resistance (player's choice) to a SubGenius Group he controls. With an action (leading an
+  // attack as it is declared, or aiding one) it counts for that action only. For defense (the Group being
+  // attacked, or one opposing an attack; or played outside an attack, ready for one) it lasts until the end
+  // of the turn and never counts for Goals. It counts once per action or defense: one Devival on a Group
+  // at a time (and, in an attack, the base rule against two copies of one Plot).
   devival: {
     timing: ['anytime', 'declare', 'attack'],
     needs: { target: 'ownGroup', mode: ['power', 'resistance'] },
@@ -330,28 +356,32 @@ registerPlots({
       if (!own(s, pl, play.target) || !isGroup(s, play.target) || !attributes(s, play.target!).includes('SubGenius')) {
         return 'Choose a SubGenius Group you control.';
       }
-      if (!ctx) return null;
-      if ((play.mode ?? 'power') === 'power') {
-        const leading = ctx.attacker === play.target && !s.window;
-        const aiding = ctx.aid.some((a) => a.iid === play.target);
-        if (!leading && !aiding) return 'A Power boost must go on the attacker when the attack is declared, or on a Group aiding it.';
-      } else {
-        if (ctx.instant) return "Too late: an Instant attack uses the target's Power at the moment it was played.";
-        if (ctx.target !== play.target && !ctx.oppose.some((o) => o.iid === play.target)) return 'Use it defensively on the Group being attacked or a Group opposing.';
+      const t = play.target!;
+      const mode = play.mode ?? 'power';
+      if (s.cards[t].mods.some((m) => m.until === 'endOfTurn' && s.cards[m.source]?.cardId === 'devival' && m.kind === (mode === 'power' ? 'power' : 'resistance'))) {
+        return `${cardName(s, t)} already has a Devival bonus of that kind this turn.`;
       }
+      if (!ctx) return null;
+      if (ctx.instant) return "Too late: an Instant attack uses the target's Power at the moment it was played.";
+      if (mode === 'power') {
+        const leading = ctx.attacker === t && !s.window;
+        const aiding = ctx.aid.some((a) => a.iid === t);
+        const opposing = ctx.oppose.some((o) => o.iid === t && t !== ctx.target);
+        if (!leading && !aiding && !opposing) return 'A Power boost goes on the attacker as the attack is declared, on a Group aiding it, or on a Group opposing it.';
+      } else if (ctx.target !== t) return 'A Resistance boost goes on the Group being attacked.';
       return null;
     },
     apply(s, pl, play, ctx) {
       if (!ctx) return;
-      const entry = { player: pl, plot: play.card, forGroup: play.target, amount: 10, label: def(s, play.card).name };
-      ((play.mode ?? 'power') === 'power' ? ctx.attackBonus : ctx.defenseBonus).push(entry);
+      const t = play.target!;
+      const mode = play.mode ?? 'power';
+      if (mode === 'power' && (ctx.attacker === t || ctx.aid.some((a) => a.iid === t))) {
+        ctx.attackBonus.push({ player: pl, plot: play.card, forGroup: t, amount: 10, label: def(s, play.card).name });
+        return;
+      }
+      devivalDefense(s, play);
     },
-    resolve(s, _pl, play) {
-      s.cards[play.target!].mods.push({
-        source: play.card, kind: play.mode === 'power' ? 'power' : 'resistance', value: 10,
-        defenseOnly: true, until: 'endOfTurn', countsForGoals: false,
-      });
-    },
+    resolve(s, _pl, play) { devivalDefense(s, play); },
   },
 
   // "Play this card at any time. Draw enough new Plots to fill your hand out to 5. You may only play
@@ -397,7 +427,7 @@ registerPlots({
     timing: ['anytime'],
     needs: { target: 'anyGroup' },
     check(s, pl, play) {
-      if (plotContext(s) !== 'main' || activePlayer(s).id !== pl) return 'Only during your own main phase.';
+      if (s.phase !== 'main' || activePlayer(s).id !== pl) return 'Only on your own turn.';
       const t = play.target;
       const c = t ? s.cards[t] : undefined;
       if (!c || !isGroup(s, t)) return 'Choose a Group in the uncontrolled area or in your hand.';
@@ -422,11 +452,12 @@ registerPlots({
       const t = play.target;
       if (!inPlay(s, t) || def(s, t!).subtype !== 'Personality') return 'Choose a Personality in play.';
       if (s.cards[t!].cardId === 'overman-philo-drummond') return 'OverMan Philo Drummond cannot become a False OverMan.';
-      if (Object.values(s.cards).some((c) => c.zone === 'table' && c.linkedTo === t && (c.cardId === 'overman' || c.cardId === 'false-overman'))) {
+      if (Object.values(s.cards).some((c) => c.zone === 'table' && c.linkedTo === t && c.cardId === 'overman')) {
         return `${cardName(s, t!)} is already an OverMan.`;
       }
       return null;
     },
+    // Adding Violent and Straight takes away Peaceful and Weird (an alignment and its opposite never coexist).
     ...effectNow((s, _pl, play) => {
       const t = play.target!;
       s.cards[t].mods.push({ source: play.card, kind: 'setPower', value: 3, until: 'permanent' });
@@ -446,12 +477,14 @@ registerPlots({
     check(s, pl, play) {
       const t = play.target;
       if (!t || !isGroup(s, t) || s.cards[t].zone !== 'structure' || s.cards[t].controller === pl) return "Choose a rival's Group.";
-      if (s.cards[t].data?.falseSlackTurn === s.turn) return `${cardName(s, t)} was already hit by False Slack this turn.`;
+      const victim = s.cards[t].controller!;
+      if (s.cards[player(s, victim).illuminati].data?.falseSlackTurn === s.turn) return `${player(s, victim).name} was already hit by False Slack this turn.`;
       return null;
     },
     ...effectNow((s, pl, play) => {
       const t = play.target!;
-      s.cards[t].data = { ...s.cards[t].data, falseSlackTurn: s.turn };
+      const ill = s.cards[player(s, s.cards[t].controller!).illuminati];
+      ill.data = { ...ill.data, falseSlackTurn: s.turn };
       for (const iid of subtree(s, t)) s.cards[iid].tokens = 0;
       log(s, `False Slack empties the Action tokens of ${cardName(s, t)} and its puppets.`, pl);
     }),
@@ -551,29 +584,39 @@ registerPlots({
     }),
   },
 
-  // "Play this card during an Attack to Destroy against any SubGenius group. After the dice are rolled,
-  // every player who participated on the attacking side, if it succeeded, gets an Illuminati token. If
-  // the SubGenius group was yours, you get an Illuminati token regardless of the results of the dice!
-  // You may not play this card more than once per turn."
+  // Played during an Attack to Destroy on a SubGenius Group (not an Instant attack, which only cards
+  // naming Instant attacks affect), before or after the roll; it pays out after the dice, once the attack
+  // is over (killBobPayout). Once per turn for each player.
   'kill-bob': {
-    timing: ['roll'],
+    timing: ['attack', 'roll'],
+    linked: true,
     check(s, pl, _play, ctx) {
-      if (!ctx || ctx.type !== 'destroy') return 'Play this right after the dice are rolled in an Attack to Destroy.';
+      if (!ctx || ctx.type !== 'destroy' || ctx.instant) return 'Play this during an Attack to Destroy.';
       if (!attributes(s, ctx.target).includes('SubGenius')) return 'The target must be a SubGenius Group.';
       const ill = player(s, pl).illuminati;
       if (s.cards[ill].data?.killBobTurn === s.turn) return 'You may only play Kill "Bob"! once per turn.';
       return null;
     },
-    apply(s, pl, _play, ctx) { if (ctx) killBobAct(s, pl, ctx); },
+    apply(s, pl, play, ctx) {
+      if (!ctx) return;
+      const ill = player(s, pl).illuminati;
+      s.cards[ill].data = { ...s.cards[ill].data, killBobTurn: s.turn };
+      // Whose SubGenius Group it was when the card was played.
+      s.cards[play.card].data = { ...s.cards[play.card].data, killBobOwner: ctx.targetPlayer };
+      s.cards[play.card].linkedTo = `attack:${ctx.id}`;
+    },
   },
 
-  // "Play this card immediately after any die roll (by any player). That roll is immediately changed,
-  // retroactively, to a 2. . . . You must discard three other Plot cards."
+  // Right after any die roll by anyone (an attack roll, or a card's roll outside an attack): that roll
+  // becomes a 2. An attack of strength below 2 is never rolled, so it cannot help one.
+  // Three other Plots are discarded.
   'luck-plane': {
-    timing: ['roll'],
+    timing: ['roll', 'event'],
+    events: ['dieRoll'],
     requires: anyOf(plotDiscards(3)),
-    check(s, _pl, _play, ctx) { return ctx?.roll ? null : 'Play this right after any die roll.'; },
-    apply(s, _pl, _play, ctx) { if (ctx) return { t: 'reroll', dice: [1, 1] }; },
+    check(s, _pl, _play, ctx) { return ctx?.roll || cardRollNow(s) ? null : 'Play this right after any die roll.'; },
+    apply(s, _pl, _play, ctx) { if (ctx) return { t: 'set', value: 2 }; },
+    resolve(s) { setCardRoll(s, 2); },
   },
 
   // "Play this card at any time on any SubGenius group to remove that attribute until the end of the
@@ -606,9 +649,8 @@ registerPlots({
     }),
   },
 
-  // "Play this card at any time in exchange for one Slack (Illuminati) token. . . . Expose all your
-  // Plots. No player may play this card more than once per game." (Every player's hand is exposed:
-  // "While you are absorbed in your search for Slack, your plans become apparent to your enemies.")
+  // At any time, for one Slack (Illuminati token): its player exposes all his own Plots. Once per game
+  // for each player.
   'more-slack': {
     timing: ['anytime'],
     check(s, pl) {
@@ -617,13 +659,14 @@ registerPlots({
       if (s.cards[ill].data?.moreSlackUsed) return 'You may only play More Slack once per game.';
       return null;
     },
-    ...effectNow((s, pl) => {
+    // Its price, one Slack, is paid as it is played.
+    apply(s, pl, play, ctx) {
       const ill = player(s, pl).illuminati;
       s.cards[ill].tokens--;
       s.cards[ill].data = { ...s.cards[ill].data, moreSlackUsed: true };
-      for (const p of s.players) if (!p.eliminated) exposeCards(s, plotsInHand(s, p.id));
-      log(s, 'More Slack exposes every hand.', pl);
-    }),
+      if (ctx) moreSlackAct(s, pl, play);
+    },
+    resolve: (s, pl, play) => moreSlackAct(s, pl, play),
   },
 
   // "Play this card at any time. Link it to any SubGenius Personality. It gains Global Power equal to
@@ -657,9 +700,40 @@ registerPlots({
   },
 });
 
-// nental-ife and head-launching: Global Power equal to the linked Group's current Power (the same
-// "very large globalMod, capped at Power" pattern as the base game's own Global Power cards).
+// nental-ife and head-launching: Global Power equal to the linked Group's Permanent Power (its Power
+// without changes that last only for a turn or an attack; stats.ts, globalEqualsPower).
 registerHooks({
-  'nental-ife': { globalMod: (s, self, iid) => (s.cards[self].linkedTo === iid ? 1000 : 0) },
-  'head-launching': { globalMod: (s, self, iid) => (s.cards[self].linkedTo === iid ? 1000 : 0) },
+  'nental-ife': { globalEqualsPower: (s, self, iid) => (s.cards[self].linkedTo === iid ? 'permanent' : undefined) },
+  'head-launching': { globalEqualsPower: (s, self, iid) => (s.cards[self].linkedTo === iid ? 'permanent' : undefined) },
+  'kill-bob': {
+    onAttackEnd(s, self, ctx) {
+      if (s.cards[self].linkedTo !== `attack:${ctx.id}` || s.cards[self].zone !== 'table') return;
+      killBobPayout(s, self, ctx);
+      discardCard(s, self);
+    },
+  },
 });
+
+function moreSlackAct(s: GameState, pl: string, play: PlotPlay) {
+  const shown = exposeCards(s, plotsInHand(s, pl).filter((c) => c !== play.card));
+  log(s, `${player(s, pl).name} exposes ${shown.map((c) => cardName(s, c)).join(', ') || 'no Plots'}.`, pl);
+}
+
+/** Devival used for defense: +10 Power or Resistance until the end of the turn, for defense only, never for Goals. */
+function devivalDefense(s: GameState, play: PlotPlay) {
+  s.cards[play.target!].mods.push({
+    source: play.card, kind: play.mode === 'resistance' ? 'resistance' : 'power', value: 10,
+    defenseOnly: true, until: 'endOfTurn', countsForGoals: false, ...(play.mode === 'resistance' ? {} : { forOpposing: true }),
+  });
+}
+
+/** A card's roll outside an attack waiting for answers (a 'dieRoll' event), if there is one right now. */
+function cardRollNow(s: GameState) {
+  const e = eventAnswered(s);
+  return e?.type === 'dieRoll' ? e : undefined;
+}
+/** That roll now counts as `total` (its natural roll, the dice shown, is unchanged). */
+function setCardRoll(s: GameState, total: 2 | 12) {
+  const e = cardRollNow(s);
+  if (e) changeRoll(e, { set: total });
+}

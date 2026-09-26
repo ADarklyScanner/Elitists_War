@@ -11,7 +11,7 @@ import {
   discardCard, drawGroup, drawPlot, isCancelled,
   isPrivileged, livePlayers, log, moveSubtree, player, protectedPlayer, raiseEvent, revealTo, tokenBarred,
 } from '../game';
-import { exposableHand, exposeCards } from '../game';
+import { cardRoll, exposableHand, exposeCards, registerRollResult } from '../game';
 import { magicByCard } from '../hooks';
 
 registerAbilities({
@@ -432,11 +432,10 @@ registerHooks({
   },
 
   'nephews-of-god': {
+    // The roll is announced (cardRoll), so cards that change any die roll may answer it.
     onTurnStart(s, self) {
-      const dice = roll2d6(s);
-      const lucky = dice[0] + dice[1] <= 6;
-      s.cards[self].data = { ...s.cards[self].data, extraDrawTurn: lucky ? s.turn : undefined };
-      log(s, `Nephews of God roll ${dice[0]} + ${dice[1]}${lucky ? ': draw one extra card from either deck' : ''}.`, controllerOf2(s, self));
+      const pl = controllerOf2(s, self);
+      if (pl) cardRoll(s, pl, 2, 'nephews-of-god', { self }, { quiet: true });
     },
     actions: [{
       id: 'extraDraw', label: 'Draw the extra card (Plot or Group deck)', timing: ['main'], usesToken: false, oncePerTurn: true, ai: 'draw',
@@ -1013,5 +1012,15 @@ registerHooks({
       s.cards[victim].data = { ...s.cards[victim].data, removedFromGame: true };
       log(s, `${cardName(s, victim)} is gone for good.`, by);
     },
+  },
+});
+
+registerRollResult({
+  'nephews-of-god'(s, pl, total, dice, data) {
+    const self = data.self as string;
+    if (!s.cards[self] || s.cards[self].zone !== 'structure') return;
+    const lucky = total <= 6;
+    s.cards[self].data = { ...s.cards[self].data, extraDrawTurn: lucky ? s.turn : undefined };
+    log(s, `Nephews of God roll ${dice[0]} + ${dice[1]}${total !== dice[0] + dice[1] ? ` (counting as ${total})` : ''}${lucky ? ': draw one extra card from either deck' : ''}.`, pl);
   },
 });

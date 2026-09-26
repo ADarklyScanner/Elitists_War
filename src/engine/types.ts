@@ -63,6 +63,7 @@ export interface Modifier {
   side?: Side; // addArrow: a new outgoing arrow on this (printed, unrotated) side
   align?: Alignment;
   defenseOnly?: boolean;   // +10 Plots used defensively, Good Polls
+  forOpposing?: boolean;   // a defenseOnly Power bonus that also counts while the Group opposes an attack on another Group (Devival)
   lower?: boolean;         // setPower / setResistance that reduces the value to `value` instead of raising it (Angst)
   until: 'permanent' | 'endOfTurn' | 'startOfOwnerTurn' | 'attack'; // 'attack' = current attack only
   countsForGoals?: boolean;
@@ -306,6 +307,8 @@ export interface GameEvent {
     | 'failedTakeover' // a Group played from hand failed to be taken over (Opportunity Knocks)
     | 'costDiscard'    // cards were discarded from a hand or deck to pay a Plot's cost (Go, Lemmings, Go!)
     | 'tokenPlacement' // the active player's Action tokens are about to be placed (Strange Bedfellows)
+    | 'gainedControl'  // a player took control of a Group from a hand or the uncontrolled area other than by automatic takeover
+    | 'dieRoll'        // a card rolled dice outside an attack (cardRoll): cards changing "any die roll" answer it
     | 'action';       // an action outside an attack was announced and waits for responses before it happens
   player?: string;         // whose turn / who did it
   card?: string;           // card involved
@@ -389,6 +392,8 @@ export interface GameState {
     noActionsExcept?: string[]; // these players may take no action or free move for the rest of this turn, other than opposing an attack (SubGenius: . . . Or Kill Me!)
     freeAttack?: string;        // this player's Illuminati may make one direct attack without spending a token (Time Control)
     illuminatiLocked?: string;  // this player's Illuminati token may not be spent this turn except to buy a Plot (Time Control)
+    endPending?: boolean;       // a card ended the turn at once: open the end-of-turn window when the game is free
+    illuminatiSpent?: string[]; // players whose Illuminati spent a token this turn on anything but buying Plots (Time Control)
     slackfusion?: boolean;      // Illuminati Action tokens may change hands in a deal, Illuminati to Illuminati only (Slackfusion)
   };
   events?: GameEvent[];       // queued events waiting for their response window
@@ -427,6 +432,8 @@ export interface GameState {
    * Illuminati's Special Goal unless their Illuminati holds at least `tokens` Action tokens.
    */
   sultanOfSlack?: { by: string; tokens: number };
+  /** A card makes this player use this Plot at once (SubGenius: Sacred Jests): it may be played now whatever its usual moment. */
+  forcedPlay?: { player: string; card: string };
 }
 
 /** The shared piles of the stand-alone SubGenius game. */

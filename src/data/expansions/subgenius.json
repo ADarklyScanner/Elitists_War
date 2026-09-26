@@ -108,7 +108,7 @@
   "type": "Plot",
   "subtype": "Goal",
   "rarity": "Uncommon",
-  "text": "Goal: eliminate a player with the same Illuminati as yours by taking their last Group. Or play it as a Plot: +10 to destroy the False Prophets, one of their puppets, or their master unless the Illuminati controls them directly."
+  "text": "Goal: eliminate a player with the same Illuminati as yours by removing their last Group. Or play it as a Plot: +10 to an Attack to Destroy on the False Prophets, one of their puppets, or their master unless that master is an Illuminati."
  },
  {
   "id": "church-of-middle-america",
@@ -188,7 +188,7 @@
   "type": "Plot",
   "subtype": "Plot",
   "rarity": "Uncommon",
-  "text": "Right after a rival takes a Group from hand or the uncontrolled area into play: that Group is destroyed, not counting for any Goal. Costs an Illuminati action or two Church actions. Once per game per player.",
+  "text": "Right after a rival takes control of a Group from hand or the uncontrolled area (automatic takeover, attack or card): that Group is destroyed, not counting for any Goal. Costs an Illuminati action or two Church actions. Once per game per player.",
   "playRequirement": "Requires an Illuminati action, or actions from two Church groups",
   "notes": "Follows the official errata."
  },
@@ -199,7 +199,7 @@
   "type": "Group",
   "subtype": "Personality",
   "rarity": "Uncommon",
-  "text": "While she is both Straight and SubGenius, neither she nor any Group she controls can be destroyed.",
+  "text": "While she is both Straight and SubGenius, neither she nor any Group she controls can be destroyed (no Attack to Destroy may be made on them).",
   "power": 2,
   "globalPower": 2,
   "resistance": 4,
@@ -534,7 +534,7 @@
   "type": "Group",
   "subtype": "Organization",
   "rarity": "Dirt",
-  "text": "Rivals' attempts to control a Weird Group it controls get -2.",
+  "text": "Every rival of its controller gets -2 on any attempt to control a Weird Group.",
   "power": 1,
   "globalPower": 0,
   "resistance": 3,
@@ -578,7 +578,7 @@
   "type": "Resource",
   "subtype": "Resource",
   "rarity": "Dirt",
-  "text": "Unique. Its holder may change any die roll by 1 up or down. A natural 11 or 12 rolled by the holder ends their turn and the Device goes to a rival: every rival rolls two dice and the highest takes it. One per player.",
+  "text": "Unique. Its holder may change any die roll he makes by 1 up or down. A natural 11 or 12 rolled by the holder ends their turn if it is his, and the Device goes to a rival: every rival rolls two dice and the highest takes it.",
   "uniqueness": "Unique Gadget"
  },
  {
@@ -623,7 +623,7 @@
   "type": "Plot",
   "subtype": "Plot",
   "rarity": "Uncommon",
-  "text": "During an Attack to Destroy a SubGenius Group, after the roll: if it succeeded, every player on the attacking side gets an Illuminati token. If the target was yours, you get one either way. Once per turn."
+  "text": "During an Attack to Destroy a SubGenius Group: after the dice, if the attack succeeded, every player on the attacking side gets an Illuminati token. If the target was yours, you get one either way. Once per turn."
  },
  {
   "id": "league-for-obvious-decency",
@@ -682,7 +682,7 @@
   "type": "Resource",
   "subtype": "Resource",
   "rarity": "Dirt",
-  "text": "Unique. At token placement one Personality you control gets an extra Action token. Its holder is safe from cards aimed at false Jesii.",
+  "text": "Unique. At its holder's token placement, one of his Personalities (his choice) gets an extra Action token.",
   "uniqueness": "Unique Gadget"
  },
  {
@@ -710,7 +710,7 @@
   "type": "Plot",
   "subtype": "Plot",
   "rarity": "Uncommon",
-  "text": "At any time, pay one Slack: every player shows all their Plots face up. Once per game per player."
+  "text": "At any time, pay one Slack: expose all your own Plots. Once per game per player."
  },
  {
   "id": "mwowm",
@@ -799,7 +799,7 @@
   "type": "Group",
   "subtype": "Personality",
   "rarity": "Uncommon",
-  "text": "His Weird puppets are SubGenius. OverMan and False OverMan cannot affect him.",
+  "text": "Every Weird Group he controls is SubGenius. OverMan and False OverMan cannot affect him.",
   "power": 3,
   "globalPower": 3,
   "resistance": 4,
@@ -909,7 +909,7 @@
   "type": "Group",
   "subtype": "Personality",
   "rarity": "Uncommon",
-  "text": "May give his token to another SubGenius Group without one, at any time.",
+  "text": "At any time he may give his token to any other SubGenius Group in play that has none.",
   "power": 3,
   "globalPower": 2,
   "resistance": 4,
@@ -1071,7 +1071,7 @@
   "type": "Plot",
   "subtype": "Plot",
   "rarity": "Uncommon",
-  "text": "With your attack on a rival's Group: +10, even against Groups immune to control or destruction. On success the target and its puppets become uncontrolled (in standard play: the target is discarded and its puppets go to their owners' hands)."
+  "text": "With any attack on a Group controlled by one of your rivals: +10, even against a Group otherwise immune, uncontrollable or undestroyable. If the attack succeeds, the target and all its puppets become uncontrolled instead (with no uncontrolled area: the target is discarded and its puppets go to their owners' hands)."
  },
  {
   "id": "science-cannot-remove-the-terror-of-the-gods",
@@ -1089,7 +1089,7 @@
   "type": "Group",
   "subtype": "Organization",
   "rarity": "Uncommon",
-  "text": "Can control only Personalities; each Personality it controls is SubGenius. May pass its token to its master or a puppet that is SubGenius by its own card. Always has its master's alignments.",
+  "text": "Can control only Personalities; each Personality it controls is SubGenius. May pass its token to its master or a puppet, if that Group is SubGenius by its own card. Always has its master's alignments.",
   "power": 2,
   "globalPower": 0,
   "resistance": 4,
@@ -1187,7 +1187,7 @@
   "type": "Plot",
   "subtype": "Plot",
   "rarity": "Uncommon",
-  "text": "On your turn: your Illuminati keeps only one token, and a rival's Illuminati loses all of its tokens. Your turn then ends.",
+  "text": "On your turn, pay every token on your Illuminati (at least one): a rival's Illuminati loses all of its tokens. Your turn then ends.",
   "playRequirement": "Requires spending all your Illuminati's tokens, and ends your turn."
  },
  {
@@ -1241,7 +1241,7 @@
   "type": "Plot",
   "subtype": "Plot",
   "rarity": "Uncommon",
-  "text": "Illuminati action, at any time: an Action token for one Personality, or for several with 5 total Power or less. Not for Groups holding a token or barred from tokens.",
+  "text": "Illuminati action, at any time: an Action token for any one Personality in play, or for several with 5 total Power or less. Not for Groups holding a token or barred from tokens.",
   "playRequirement": "Requires Illuminati Action"
  },
  {
@@ -1285,7 +1285,7 @@
   "type": "Resource",
   "subtype": "Resource",
   "rarity": "Dirt",
-  "text": "Unique. Once on each of your turns, spend an Illuminati action or the actions of all your Personalities (at least one): look at the top three cards of two decks, or at a rival's Plots.",
+  "text": "Unique. Once on each of your turns, spend an Illuminati action or the actions of all your Personalities (at least one): look at the top three cards of any two decks in the game, or at a rival's Plots.",
   "uniqueness": "Unique Artifact"
  },
  {
@@ -1357,7 +1357,7 @@
   "type": "Group",
   "subtype": "Organization",
   "rarity": "Uncommon",
-  "text": "At the start of each of your turns, draw an extra Group into the uncontrolled area. In standard play, spend its action at any time to draw a Group card.",
+  "text": "At the start of each of your turns you may draw an extra Group into the uncontrolled area. In standard play, spend its action at any time to draw a Group card.",
   "power": 3,
   "globalPower": 3,
   "resistance": 2,

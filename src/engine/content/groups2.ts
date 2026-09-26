@@ -6,12 +6,13 @@ import { alignments, attributes, countControlled, globalPower, isOpposite, power
 import { NWO_EFFECTS, fanaticUnited } from '../nwo';
 import { puppets, sideOf, structureCards } from '../geometry';
 import { resourceKinds } from './plots3';
-import { roll2d6, rollDie } from '../rng';
+import { rollDie } from '../rng';
 import {
   attackCancelled, canEnterPlay, cancelledGroups, controllerOf2, destroyGroup, discardCard, drawPlot, isPrivileged, log,
   livePlayers, placeGroup, player, protectedPlayer, revealTo,
 } from '../game';
 import { magicByCard } from '../hooks';
+import { cardRoll, registerRollResult } from '../game';
 
 /** Government Groups of the United States (Bill Clinton's +3; the data has no U.S. attribute). */
 const US_GOVERNMENT = [
@@ -784,21 +785,9 @@ registerHooks({
         if (!['1', '2', '3'].includes(p.mode ?? '')) return 'Choose how many Plot cards to bet: 1, 2 or 3.';
         return null;
       },
+      // The roll is announced (cardRoll), so cards that change any die roll may answer it.
       apply(s, pl, self, p) {
-        const r = vegasRival(s, pl, p)!;
-        const n = Number(p.mode);
-        const dice = roll2d6(s);
-        const total = dice[0] + dice[1];
-        const [winner, loser] = total >= 7 ? [pl, r] : [r, pl];
-        const from = player(s, loser).plotDeck;
-        let got = 0;
-        for (; got < n && from.length; got++) {
-          const c = from.shift()!;
-          Object.assign(s.cards[c], { zone: 'hand', exposed: false });
-          player(s, winner).hand.push(c);
-        }
-        log(s, `${cardName(s, self)}: ${player(s, pl).name} bets ${n} Plot card${n === 1 ? '' : 's'} with ${player(s, r).name} and rolls ${dice[0]}+${dice[1]} = ${total}. `
-          + `${total >= 7 ? 'The house wins' : `${player(s, r).name} beats the house`}: ${player(s, winner).name} takes ${got} from the top of ${player(s, loser).name}'s Plot deck.`, pl);
+        cardRoll(s, pl, 2, 'las-vegas', { self, rival: vegasRival(s, pl, p)!, n: Number(p.mode) }, { quiet: true });
       },
     }],
   },
@@ -928,5 +917,22 @@ registerHooks({
         hooksOf(s, p.target!)?.onEnterPlay?.(s, p.target!);
       },
     }],
+  },
+});
+
+registerRollResult({
+  'las-vegas'(s, pl, total, dice, data) {
+    const self = data.self as string, r = data.rival as string, n = data.n as number;
+    if (player(s, r).eliminated) return;
+    const [winner, loser] = total >= 7 ? [pl, r] : [r, pl];
+    const from = player(s, loser).plotDeck;
+    let got = 0;
+    for (; got < n && from.length; got++) {
+      const c = from.shift()!;
+      Object.assign(s.cards[c], { zone: 'hand', exposed: false });
+      player(s, winner).hand.push(c);
+    }
+    log(s, `${cardName(s, self)}: ${player(s, pl).name} bets ${n} Plot card${n === 1 ? '' : 's'} with ${player(s, r).name} and rolls ${dice[0]}+${dice[1]} = ${dice[0] + dice[1]}${total !== dice[0] + dice[1] ? ` (counting as ${total})` : ''}. `
+      + `${total >= 7 ? 'The house wins' : `${player(s, r).name} beats the house`}: ${player(s, winner).name} takes ${got} from the top of ${player(s, loser).name}'s Plot deck.`, pl);
   },
 });

@@ -221,6 +221,10 @@ stand-alone SubGenius game (`subgeniusRules`) played with the SubGenius set alon
   part of the SubGenius set) see an empty deck in this game.
 - Not implemented (not needed by the SubGenius cards alone): duplicates across several SubGenius sets
   (bounced leads, agents from the area).
+- Card-granted extra Group draws (www.subgenius.com) are made with the normal start-of-turn draws, whatever
+  the area holds (the fewer-than-8 limit is for the normal draw only); a person may decline them.
+- Dallas Catacombs: every way a Group enters its controller's Power Structure (automatic takeover, capture,
+  move) may use any side of the new master, up to its number of outgoing arrows (the card).
 
 ## Slack and the Church of the SubGenius
 
@@ -250,6 +254,34 @@ stand-alone SubGenius game (`subgeniusRules`) played with the SubGenius set alon
   Plot is discarded (SG "Links", "Canceled Actions, Alignment Changes and Other Surprises"). Engine:
   `PlotHandler.linkLegal`, re-checked after every action.
 - Other links (Resources) may be moved once per turn on your own turn (SG): the base rule, unchanged.
+
+## SubGenius cards: rulings
+
+Every SubGenius card follows its printed text (and the official errata and FAQ). Where the text leaves a
+genuine choice open, the engine reads it as follows (each also noted with the card's script):
+
+- Sacred Stencil helps against Instant attacks only in a standard game (it names them "in standard INWO").
+- Connie Dobbs protects every Group below her, her puppets' puppets included; like any undestroyable Group
+  they cannot even be attacked to destroy (CFAQ "Undestroyable Groups").
+- "Bobbies": nothing but a successful attack on them (a Disaster included) or the loss of their master
+  removes them (errata): they are never destroyed, never moved by their controller, never chosen for a
+  discard by another card; whoever takes them over may hang them on a rival's open arrow.
+- Kill "Bob"!: the attacking side is the attacker and every player whose aiding Group still counted; it
+  pays out once the attack is over, with the dice as they finally stood.
+- Schizm replaces the result of any successful attack it was played with (control or destroy), may be
+  played by a third player (CFAQ), and never with an Instant attack (only cards naming Instant attacks
+  affect those).
+- Dokstok's token is given away (a gift, or the player's side of a bargain struck at the table) or thrown
+  away through a question its controller must answer before anything else.
+- Psychic Pstench: its player picks which exposed Goal goes; Random Jesii: the victim keeps the Plot of his
+  choice hidden.
+- Die rolls: every attack roll, and every roll the SubGenius cards and Flat Earthers, Nephews of God, Las
+  Vegas and Suicide Squad make outside attacks, can be answered by Bulldada, Luck Plane, S.C.A.M.,
+  Shordurpersav and the Janor Device (a `dieRoll` event). A card rolling in the middle of an attack (OPEC,
+  Bill Clinton, Imelda Marcos, some Assassins cards) rolls at once: no window can wait inside an attack.
+- Time Control: an Illuminati token counts as spent when its own player's action (an attack, move, Plot,
+  ability, Resource, Group purchase, aid, defense, Relief, Zap removal, freeing a Group) takes it; giving one
+  away in a deal or as an answer to a card (. . . Or Kill Me!) is not spending it.
 
 ## AI
 

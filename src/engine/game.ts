@@ -6,7 +6,7 @@ import type {
 } from './types';
 import { RuleError } from './types';
 import { CARDS, cardName, def, inst } from './cards';
-import { roll2d6, shuffle } from './rng';
+import { roll2d6, rollDie, shuffle } from './rng';
 import {
   DELTA, OPPOSITE_SIDE, SIDES, attachRect, depth, ensureLayout, LAYOUT_VERSION, occupied, openArrows, openSides, sideOf, puppets, rotate, rotationFor, structureCards, subtree,
 } from './geometry';
@@ -384,6 +384,7 @@ function runContinuation(s: GameState, then: string, e?: GameEvent) {
   else if (then === 'finishBeginning') finishBeginning(s);
   else if (then === 'placeTokens') placeTokens(s);
   else if (then === 'resolveAction' && e) resolveAction(s, e);
+  else if (then === 'dieRoll' && e) finishCardRoll(s, e);
 }
 
 // ---------------------------------------------------------------- announced actions (R009/R010)
@@ -409,6 +410,13 @@ function canAnnounce(s: GameState) {
 
 /** Set while a Plot played in response to an announced action resolves (its window is closed then). */
 let respondingTo: GameEvent | undefined;
+/** Set while a Plot played in response to any event resolves. */
+let respondingEvent: GameEvent | undefined;
+
+/** The event being answered right now: the open event window's, or the one a responding Plot resolves for. */
+export function eventAnswered(s: GameState): GameEvent | undefined {
+  return s.window?.kind === 'event' ? s.window.event : respondingEvent;
+}
 
 /** The action waiting for responses: the open 'action' event, or the one a responding Plot resolves for. */
 export function announcedAction(s: GameState): GameEvent | undefined {
@@ -513,14 +521,39 @@ export function masterProblem(s: GameState, iid: string, master: string): string
   return HOOKS[s.cards[iid]?.cardId]?.masterRule?.(s, iid, master) ?? null;
 }
 
+/** Does a card of this player's free `master` from the "real arrow" rule (Dallas Catacombs)? */
+function freeArrowsFor(s: GameState, playerId: string | undefined, master: string): boolean {
+  return !!playerId && anyHook(s, (h, self) => controllerOf2(s, self) === playerId && !!h.freeArrows?.(s, self, master));
+}
+
 /** Sides open to moving `group` onto `master`: real arrows, or any side under Dallas Catacombs. */
 export function movableSides(s: GameState, playerId: string, group: string, master: string): Side[] {
   if (masterProblem(s, group, master)) return [];
+  if (HOOKS[s.cards[group].cardId]?.cannotMove || puppetForbidden(s, group, master, playerId)) return [];
   const ignore = new Set(subtree(s, group));
   const h = HOOKS[s.cards[group].cardId];
   if (h?.anySideMaster && h.anySideOnMove) return openSides(s, master, ignore);
-  const free = anyHook(s, (h, self) => controllerOf2(s, self) === playerId && !!h.freeArrows?.(s, self, master));
-  return free ? catacombsSides(s, master, ignore) : openArrows(s, master, ignore);
+  return freeArrowsFor(s, playerId, master) ? catacombsSides(s, master, ignore) : openArrows(s, master, ignore);
+}
+
+/**
+ * Cards whose forbidAttack / forbidPuppet rules apply to `target`: the cards in play, plus the target
+ * itself while it waits outside play, when its own rules follow it there (`rulesOffTable`).
+ */
+function ruleCards(s: GameState, target: string): string[] {
+  const act = activeHookCards(s);
+  const c = s.cards[target];
+  const waiting = !!c && c.zone !== 'structure' && c.zone !== 'resources' && c.zone !== 'table';
+  return waiting && HOOKS[c.cardId]?.rulesOffTable && !act.includes(target) ? [...act, target] : act;
+}
+
+/** Why `group` may not become a puppet of `master` (a Group of `playerId`), however it would get there; null if it may. */
+export function puppetForbidden(s: GameState, group: string, master: string, playerId: string): string | null {
+  for (const self of ruleCards(s, group)) {
+    const why = HOOKS[s.cards[self].cardId].forbidPuppet?.(s, self, group, master, playerId);
+    if (why) return why;
+  }
+  return null;
 }
 
 function doMove(s: GameState, pl: string, a: Extract<Action, { type: 'move' }>) {
@@ -885,7 +918,9 @@ function turnDraws(s: GameState) {
     for (const c of p.hand.filter((x) => ['Group', 'Resource'].includes(def(s, x).type))) { putUncontrolled(s, c, p.id); drawn.push(c); }
   }
   // SubGenius rules: the free Group draw happens only while fewer than 8 cards lie in the uncontrolled area.
-  const groupDraws = s.common && s.common.uncontrolled.length >= 8 ? 0 : 1;
+  let groupDraws = s.common && s.common.uncontrolled.length >= 8 ? 0 : 1;
+  // Extra Group draws granted by a card (www.subgenius.com); a person may decline them like any draw.
+  groupDraws += sumHooks(s, (h, self) => (controllerOf2(s, self) === p.id ? h.extraGroupDraws?.(s, self) : 0));
   if (!s.turnFlags.extraTurn && !s.turnFlags.noDraws) {
     let extra = 0;
     for (const iid of structureCards(s, p.id)) for (const a of abilitiesOf(s, iid)) if (a.kind === 'extraPlotDraw') extra += a.value;
@@ -898,7 +933,7 @@ function turnDraws(s: GameState) {
       return;
     }
     drawn.push(...drawPlot(s, p, 1 + extra));
-    if (groupDraws) drawn.push(...drawGroup(s, p));
+    for (let i = 0; i < groupDraws; i++) drawn.push(...drawGroup(s, p));
   }
   afterDraws(s, drawn);
 }
@@ -968,8 +1003,9 @@ function placeTokens(s: GameState) {
   const twoPlayerRule = (s.players.length === 2 || !!s.common) && s.turnFlags.takeoverDone && !s.turnFlags.extraTurn;
   s.log.push({ turn: s.turn, player: p.id, info: true, text: `${p.name}'s Groups get their Action tokens${twoPlayerRule ? ' (two-player rule: no Illuminati token this turn after an automatic takeover)' : ''}. Main phase.` });
   s.phase = 'main';
-  // Effects that lasted only while the tokens were placed end now (Strange Bedfellows).
-  fireHooks(s, (h, self) => h.onTokensPlaced?.(s, self));
+  // Cards acting "during the token placement phase" (Martyr Meter, Dokstok, S.L.A.K.), and effects that
+  // lasted only while the tokens were placed (Strange Bedfellows).
+  fireHooks(s, (h, self) => h.onTokensPlaced?.(s, self, p.id));
 }
 
 export function takeoverOptions(s: GameState, playerId: string): { card: string; onto: string; side: Side }[] {
@@ -977,20 +1013,23 @@ export function takeoverOptions(s: GameState, playerId: string): { card: string;
   const p = player(s, playerId);
   // A Paralyzed Group can get no new puppets (Assassins).
   const para = paralyzedGroups(s);
-  const spots = structureCards(s, playerId).filter((m) => !para.has(m)).flatMap((m) => openArrows(s, m).map((side) => ({ onto: m, side })));
+  // Dallas Catacombs: any side of a master, up to its number of outgoing arrows.
+  const sidesOf = (m: string) => (freeArrowsFor(s, playerId, m) ? catacombsSides(s, m, new Set()) : openArrows(s, m));
+  const spots = structureCards(s, playerId).filter((m) => !para.has(m)).flatMap((m) => sidesOf(m).map((side) => ({ onto: m, side })));
   // SubGenius rules: any one Group or Resource the player put into the uncontrolled area this turn.
   const candidates = s.common ? s.common.uncontrolled.filter((c) => s.cards[c].placedBy === playerId && s.cards[c].placedTurn === s.turn) : p.hand;
   for (const card of candidates) {
     if (s.cards[card].data?.noTakeoverTurn === s.turn) continue; // returned by Botched Contact
     if (s.cards[card].data?.permissionRefusedTurn === s.turn) continue; // its takeover was refused (Science Alarmists)
-    if (anyHook(s, (h, self) => !!h.forbidAttack?.(s, self, undefined, card, 'takeover', playerId))) continue;
+    if (ruleCards(s, card).some((self) => !!HOOKS[s.cards[self].cardId].forbidAttack?.(s, self, undefined, card, 'takeover', playerId))) continue;
     if (def(s, card).type === 'Resource' && canEnterPlay(s, card, playerId)) out.push({ card, onto: p.illuminati, side: 'TOP' });
     if (def(s, card).type !== 'Group' || !canEnterPlay(s, card)) continue;
     // Yetis: any physically open side of any of the player's Groups, not only their printed arrows.
     const useSpots = HOOKS[s.cards[card].cardId]?.anySideMaster
       ? structureCards(s, playerId).filter((m) => !para.has(m)).flatMap((m) => openSides(s, m).map((side) => ({ onto: m, side })))
       : spots;
-    for (const spot of useSpots) if (!masterProblem(s, card, spot.onto)) out.push({ card, ...spot });
+    // Some Groups may never become puppets of certain masters (Citizens for Normalcy, the Secret FisTemple).
+    for (const spot of useSpots) if (!masterProblem(s, card, spot.onto) && !puppetForbidden(s, card, spot.onto, playerId)) out.push({ card, ...spot });
   }
   return out;
 }
@@ -1440,7 +1479,8 @@ function specialGoal(s: GameState, playerId: string): GoalOption | undefined {
   }
   // The Sultan of Slack (SubGenius): nobody may win by their Special Goal without as many Illuminati
   // Action tokens as the Sultan currently holds.
-  if (why && s.sultanOfSlack && s.cards[ill].tokens < s.sultanOfSlack.tokens) why = null;
+  const sultan = s.sultanOfSlack ? s.players.find((x) => x.id === s.sultanOfSlack!.by && !x.eliminated) : undefined;
+  if (why && sultan && sultan.id !== playerId && s.cards[ill].tokens < s.cards[sultan.illuminati].tokens) why = null;
   return { id: 'special', label, met: !!why, why: why ?? undefined };
 }
 
@@ -1849,10 +1889,22 @@ function immuneTo(s: GameState, target: string, attackerGroups: string[], ctx?: 
   return false;
 }
 
+/**
+ * Sides of `master` (a Group of `playerId`) where a card could put `group` as a new puppet: its open
+ * arrows (any open side for the Yetis, any side under Dallas Catacombs), none if `group` may never be
+ * its puppet (Citizens for Normalcy, the Secret FisTemple).
+ */
+export function puppetSides(s: GameState, playerId: string, group: string, master: string): Side[] {
+  if (s.cards[master]?.zone !== 'structure' || s.cards[master].controller !== playerId || paralyzedGroups(s).has(master)) return [];
+  return puppetForbidden(s, group, master, playerId) ? [] : placementSides(s, master, group);
+}
+
 /** Sides of `master` where `target` could be placed as a new puppet (Yetis waives the printed-arrow requirement). */
 function placementSides(s: GameState, master: string, target: string, ignore?: Set<string>): Side[] {
   if (masterProblem(s, target, master)) return [];
-  return HOOKS[s.cards[target].cardId]?.anySideMaster ? openSides(s, master, ignore) : openArrows(s, master, ignore);
+  if (HOOKS[s.cards[target].cardId]?.anySideMaster) return openSides(s, master, ignore);
+  // Dallas Catacombs: any side of the new master, up to its number of outgoing arrows.
+  return freeArrowsFor(s, s.cards[master]?.controller, master) ? catacombsSides(s, master, ignore ?? new Set()) : openArrows(s, master, ignore);
 }
 
 /**
@@ -1903,13 +1955,19 @@ export function validateAttack(s: GameState, playerId: string, a: Extract<Action
   }
   const err = canAttackPlayer(s, playerId, fromHand ? undefined : tgt.controller);
   if (err) return err;
-  for (const self of activeHookCards(s)) {
-    const why = HOOKS[s.cards[self].cardId].forbidAttack?.(s, self, a.attacker, a.target, a.attackType, playerId);
+  // A card declared with the attack (Schizm) may let it ignore immunity and "cannot be destroyed".
+  const overridesImmunity = (a.plots ?? []).some((pl) => PLOTS[s.cards[pl.card]?.cardId]?.overridesImmunity);
+  for (const self of ruleCards(s, a.target)) {
+    const h = HOOKS[s.cards[self].cardId];
+    if (overridesImmunity && h.forbidIsImmunity) continue;
+    const why = h.forbidAttack?.(s, self, a.attacker, a.target, a.attackType, playerId);
+    if (why) return why;
+  }
+  if (a.attackType === 'control' && !overridesImmunity) {
+    const why = puppetForbidden(s, a.target, a.attacker, playerId);
     if (why) return why;
   }
   if (isSecret(s, a.target) && !isSecret(s, a.attacker) && def(s, a.attacker).type !== 'Illuminati' && !anyHook(s, (h, self) => !!h.secretOverride?.(s, self, a.attacker, a.target))) return `${cardName(s, a.target)} is Secret: only Illuminati and Secret Groups can attack it.`;
-  // A card declared with the attack (Schizm) may let it ignore immunity and "cannot be destroyed".
-  const overridesImmunity = (a.plots ?? []).some((pl) => PLOTS[s.cards[pl.card]?.cardId]?.overridesImmunity);
   if (!overridesImmunity && immuneTo(s, a.target, [a.attacker])) return `${cardName(s, a.target)} is immune to attacks from ${cardName(s, a.attacker)}.`;
   if (!overridesImmunity && a.attackType === 'destroy' && abilitiesOf(s, a.target).some((x) => x.kind === 'cannotBeDestroyed')) return `${cardName(s, a.target)} cannot be destroyed.`;
   const ill = illuminatiOf(s, playerId);
@@ -1996,11 +2054,11 @@ export function attackIllegal(s: GameState, ctx: AttackCtx): string | null {
   const saved = s.attack;
   s.attack = undefined;
   try {
-    if (!overridesImmunity) {
-      for (const self of activeHookCards(s)) {
-        const why = HOOKS[s.cards[self].cardId].forbidAttack?.(s, self, att, tgt, ctx.type, ctx.attackerPlayer);
-        if (why) return why;
-      }
+    for (const self of ruleCards(s, tgt)) {
+      const h = HOOKS[s.cards[self].cardId];
+      if (overridesImmunity && h.forbidIsImmunity) continue;
+      const why = h.forbidAttack?.(s, self, att, tgt, ctx.type, ctx.attackerPlayer);
+      if (why) return why;
     }
     if (isSecret(s, tgt) && !isSecret(s, att) && def(s, att).type !== 'Illuminati' && !anyHook(s, (h, self) => !!h.secretOverride?.(s, self, att, tgt))) return `${cardName(s, tgt)} is now Secret: ${cardName(s, att)} may not attack it.`;
     if (!overridesImmunity && immuneTo(s, tgt, [att])) return `${cardName(s, tgt)} is now immune to ${cardName(s, att)}.`;
@@ -2067,8 +2125,12 @@ function openWindow(s: GameState, kind: 'attack' | 'roll' | 'plot' | 'endOfTurn'
   s.window = { kind, passed: [], plot, deadline: Date.now() + s.settings.responseHours * 3600_000 };
 }
 
-function contributionPower(s: GameState, c: Contribution & { useGlobal?: boolean; selfDefense?: boolean }): number {
+function contributionPower(s: GameState, c: Contribution & { useGlobal?: boolean; selfDefense?: boolean }, opposing = false): number {
   if (!c.iid) return c.amount;
+  // A defensive Power bonus meant for any defense (Devival) also counts while the Group opposes an attack on another.
+  const forOpposing = opposing && !c.useGlobal && !c.selfDefense
+    ? s.cards[c.iid].mods.filter((m) => m.kind === 'power' && m.defenseOnly && m.forOpposing).reduce((n, m) => n + (m.value ?? 0), 0) : 0;
+  if (forOpposing) return contributionPower(s, c) + forOpposing;
   // Self-defense raises the multiplier one step (R006c). Defensive +10s are already part of the
   // target's defense value, so they are not counted again here (R028).
   const v = c.useGlobal ? globalPower(s, c.iid)
@@ -2202,7 +2264,7 @@ export function attackStrength(s: GameState, ctx: AttackCtx): StrengthBreakdown 
     const d = depth(s, tgt);
     add('d', d === 1 ? 10 : d === 2 ? 5 : 0, 'close to its Illuminati');
   }
-  for (const c of oppose) add('d', contributionPower(s, c), `${cardName(s, c.iid!)} opposes${(c as { selfDefense?: boolean }).selfDefense ? ' (defending itself, x2)' : ''}`);
+  for (const c of oppose) add('d', contributionPower(s, c, true), `${cardName(s, c.iid!)} opposes${(c as { selfDefense?: boolean }).selfDefense ? ' (defending itself, x2)' : ''}`);
   // Defensive abilities of the target's Power Structure.
   if (ctx.targetPlayer && !noAbilities) {
     const attackers = ctx.instant ? [] : attackingGroups(ctx);
@@ -2261,7 +2323,16 @@ function rollAttack(s: GameState) {
   }
   ctx.roll = roll2d6(s);
   log(s, `Needs ${strength} or less on 2d6 — rolled ${ctx.roll[0]} + ${ctx.roll[1]} = ${ctx.roll[0] + ctx.roll[1]}.`);
+  fireHooks(s, (h, self) => h.onDiceRolled?.(s, self, ctx));
   openWindow(s, 'roll');
+}
+
+/** The two dice of an attack as they finally fell (a live re-roll replaces them), before +/- changes; undefined if never rolled. */
+export function finalDice(ctx: AttackCtx): number[] | undefined {
+  if (!ctx.roll) return undefined;
+  let dice = ctx.roll;
+  for (const e of liveEffects(ctx)) if (e.t === 'reroll') dice = e.dice;
+  return dice;
 }
 
 export function finalRoll(ctx: AttackCtx): number {
@@ -2326,7 +2397,9 @@ function finishAttack(s: GameState) {
   }
   else if (ctx.result === 'success') {
     const margin = attackStrength(s, ctx).strength - finalRoll(ctx);
-    if (ctx.disaster && s.cards[tgt].zone === 'resources') {
+    // A card may deal with the target instead of the usual result (Schizm).
+    if (anyHook(s, (h, self) => !!h.replaceAttackResult?.(s, self, ctx))) { /* done by that card */ }
+    else if (ctx.disaster && s.cards[tgt].zone === 'resources') {
       // A Resource struck like a Place (Hidden City) is never Devastated: only a big enough margin destroys it.
       if (ctx.disaster.destroyMargin !== null && margin >= ctx.disaster.destroyMargin && !ctx.disaster.devastateOnly
         && !anyHook(s, (h, self) => !!h.preventDestroy?.(s, self, tgt, ctx))) {
@@ -2407,6 +2480,9 @@ function capture(s: GameState, ctx: AttackCtx) {
     log(s, `${cardName(s, attacker)} has no open control arrow left, so the capture fails.`);
     return;
   }
+  // A Group that may never be this master's puppet (Citizens for Normalcy, the Secret FisTemple).
+  const barred = puppetForbidden(s, tgt, attacker, ctx.attackerPlayer);
+  if (barred) { log(s, `${barred} The capture fails.`); return; }
   log(s, `${player(s, ctx.attackerPlayer).name} takes control of ${cardName(s, tgt)}.`, ctx.attackerPlayer);
   const from = s.cards[tgt].controller;
   const placed = moveSubtree(s, tgt, ctx.attackerPlayer, master, side, 'discard', { defer: !player(s, ctx.attackerPlayer).isAI });
@@ -2418,6 +2494,8 @@ function capture(s: GameState, ctx: AttackCtx) {
   hooksOf(s, tgt)?.onEnterPlay?.(s, tgt);
   fireHooks(s, (h, self) => h.onCapture?.(s, self, tgt, ctx.attackerPlayer, from));
   noteLastPuppet(s, from, ctx.attackerPlayer);
+  // Taking control of a Group from a hand or the uncontrolled area (Comet Hail-"Bob" answers it).
+  if (ctx.fromHand || ctx.fromArea) raiseEvent(s, { type: 'gainedControl', player: ctx.attackerPlayer, card: tgt, data: { how: 'attack' } });
   // Meta-rule: when your own duplicate (agents) helped you capture a Group from someone else, your copy
   // goes into your Power Structure and he keeps his card (R031).
   const agents = ctx.plays.find((pp) => pp.player === ctx.attackerPlayer && !pp.ability && s.cards[pp.iid]?.zone === 'table'
@@ -2490,8 +2568,9 @@ function placeTree(s: GameState, iid: string, controller: string, m: string, sd:
   placeGroup(s, iid, controller, m, sd);
   for (const { child, local } of layout[iid] ?? []) {
     let want: Side | undefined = rotate(local, s.cards[iid].rot ?? 0);
-    // A puppet that may hang on any side of its master (Yetis, Dittoheads) keeps a side with no arrow.
-    const open = HOOKS[s.cards[child].cardId]?.anySideMaster ? openSides(s, iid) : openArrows(s, iid);
+    // A puppet that may hang on any side of its master (Yetis, Dittoheads) keeps a side with no arrow;
+    // under Dallas Catacombs a puppet may keep a side of its master that is not a real arrow.
+    const open = HOOKS[s.cards[child].cardId]?.anySideMaster ? openSides(s, iid) : freeArrowsFor(s, controller, iid) ? catacombsSides(s, iid, new Set()) : openArrows(s, iid);
     if (!open.includes(want)) { want = open[0]; if (want) res.displaced.push(child); }
     if (want) placeTree(s, child, controller, iid, want, layout, res, o);
     else if (o.defer) res.pending.push({ group: child, master: iid });
@@ -2575,6 +2654,10 @@ function subtreeFromLayout(layout: Record<string, { child: string }[]>, iid: str
 export function destroyGroup(s: GameState, iid: string, by: string, attacker?: string) {
   const c = s.cards[iid];
   const prev = c.controller ?? c.owner;
+  if (HOOKS[c.cardId]?.neverDestroyed && c.zone === 'structure') { log(s, `${cardName(s, iid)} cannot be destroyed.`); return; }
+  if (HOOKS[c.cardId]?.survivesDestruction) { phantomDestroy(s, iid, by, prev); return; }
+  // Whose Power Structure it was destroyed from (none for a Group in a hand or the uncontrolled area).
+  c.data = { ...c.data, destroyedFrom: c.zone === 'structure' ? c.controller : undefined };
   // Where the Group and its puppets were, for cards that bring it back (Head in a Jar).
   const layout = c.zone === 'structure' ? subtree(s, iid).map((g) => ({ iid: g, master: s.cards[g].master, x: s.cards[g].x, y: s.cards[g].y, side: sideOf(s, g) })) : [];
   removeFromPiles(s, iid); // a discarded Group attacked by Opportunity Knocks
@@ -2617,11 +2700,37 @@ export function destroyGroup(s: GameState, iid: string, by: string, attacker?: s
   if (!HOOKS[c.cardId]?.noDestroyCredit && !player(s, by).destroyedCredit.includes(iid)) player(s, by).destroyedCredit.push(iid);
   if (draws) drawPlot(s, player(s, by), draws);
   noteLastPuppet(s, prev, by);
-  // A Group that is never really destroyed (Xists) goes to the uncontrolled area, or its destroyer's hand.
-  if (HOOKS[c.cardId]?.survivesDestruction) {
-    if (s.common) putUncontrolled(s, iid, by);
-    else { c.zone = 'hand'; player(s, by).hand.push(iid); }
+}
+
+/**
+ * A Group that never counts as destroyed for any purpose (Xists): no destruction is announced, no card
+ * reacts to it or gives credit for it. The card simply leaves its Power Structure for the uncontrolled
+ * area (its linked Resources go along and its linked Plots stay linked, SubGenius rules) or, with no
+ * uncontrolled area, the destroyer's hand (its linked Resources fall back to their controller's
+ * Illuminati, its linked Plots are discarded). Its puppets go where a destroyed Group's puppets go.
+ */
+function phantomDestroy(s: GameState, iid: string, by: string, prev: string) {
+  const c = s.cards[iid];
+  for (const p of puppets(s, iid)) {
+    if (s.common) { for (const g of subtree(s, p)) putUncontrolled(s, g, prev); continue; }
+    for (const g of subtree(s, p)) {
+      Object.assign(s.cards[g], { zone: 'hand', controller: undefined, master: undefined, x: undefined, y: undefined, tokens: 0 });
+      player(s, prev).hand.push(g);
+    }
   }
+  if (s.common) putUncontrolled(s, iid, by);
+  else {
+    for (const o of Object.values(s.cards)) {
+      if (o.linkedTo !== iid) continue;
+      if (o.zone === 'resources') o.linkedTo = o.controller ? player(s, o.controller).illuminati : undefined;
+      else discardCard(s, o.iid);
+    }
+    removeFromPiles(s, iid);
+    Object.assign(c, { zone: 'hand', controller: undefined, master: undefined, x: undefined, y: undefined, side: undefined, tokens: 0, heldTokens: undefined, owner: by });
+    player(s, by).hand.push(iid);
+  }
+  log(s, `${cardName(s, iid)} ${s.common ? 'goes to the uncontrolled area' : `goes to ${player(s, by).name}'s hand`}: it does not count as destroyed.`);
+  noteLastPuppet(s, prev, by);
 }
 
 /**
@@ -2685,6 +2794,9 @@ export function checkPlot(s: GameState, playerId: string, play: PlotPlay, declar
     // NWOs may not be played during an Instant or Privileged attack (R045).
     if (t.includes('event') && ctxKind === 'event' && (!h.events || h.events.includes(s.window!.event!.type))) ok = true;
     if (t.includes('nwo') && (isActiveMain || ctxKind === 'endOfTurn' || (ctxKind === 'attack' && !!ctx && !ctx.instant && !isPrivileged(ctx)))) ok = true;
+    // A card forcing this Plot to be used at once (Sacred Jests): whenever its player could play it on his own turn.
+    const forced = s.forcedPlay?.player === playerId && s.forcedPlay.card === play.card && !ctx;
+    if (forced && (t.includes('anytime') || t.includes('instant') || t.includes('nwo'))) ok = true;
   }
   if (!ok) return `${d.name} cannot be played right now.`;
   if (activePlayer(s).id === playerId && (s.turnFlags.extraTurn || s.turnFlags.restricted)) return s.turnFlags.extraTurn ? 'No Plots may be played during an extra turn.' : 'This turn you may only draw cards and place Action tokens.';
@@ -2852,7 +2964,8 @@ function resolvePendingPlot(s: GameState) {
     log(s, `${d.name} takes effect.`, pp.player);
     // A Plot answering an announced action may respond to it (respondToAction) while it resolves.
     respondingTo = w.event?.type === 'action' ? w.event : undefined;
-    try { PLOTS[d.id].resolve?.(s, pp.player, pp.play); } finally { respondingTo = undefined; }
+    respondingEvent = w.event;
+    try { PLOTS[d.id].resolve?.(s, pp.player, pp.play); } finally { respondingTo = undefined; respondingEvent = undefined; }
     const c = s.cards[pp.iid];
     if (c.zone === 'table' && !c.linkedTo && d.subtype !== 'NWO') discardCard(s, pp.iid);
   } else {
@@ -2980,6 +3093,7 @@ export function applyAction(state: GameState, playerId: string, action: Action):
     s.turnFlags.freeMovesOnce = undefined;
   }
 
+  const illBefore = s.cards[p.illuminati]?.tokens ?? 0;
   switch (action.type) {
     case 'playResource':
       startPlayResource(s, playerId, action.card);
@@ -3371,6 +3485,7 @@ export function applyAction(state: GameState, playerId: string, action: Action):
       break;
     }
   }
+  noteIlluminatiSpending(s, playerId, action, illBefore);
   // Anything played during an attack may have made an earlier play illegal: check them all again.
   if (s.attack && (s.window?.kind === 'attack' || s.window?.kind === 'roll')) recheckAttack(s);
   advance(s);
@@ -3386,6 +3501,70 @@ export function applyAction(state: GameState, playerId: string, action: Action):
   tidyPledges(s);
   s.version++;
   return s;
+}
+
+/** Actions that spend Action tokens (buying Plots, answering prompts and deals are left out). */
+const SPENDING_ACTIONS = new Set<Action['type']>([
+  'attack', 'move', 'playPlot', 'useAbility', 'playResource', 'drawGroup', 'aid', 'oppose', 'relief', 'removeZaps', 'freeGroup', 'agent', 'playAgent',
+]);
+
+/**
+ * Time Control (SubGenius): remember whose Illuminati spent a token this turn on anything but buying
+ * Plots, and refuse such spending (the whole action) while Time Control locks that Illuminati.
+ */
+function noteIlluminatiSpending(s: GameState, playerId: string, action: Action, before: number) {
+  if (!SPENDING_ACTIONS.has(action.type)) return;
+  const ill = player(s, playerId).illuminati;
+  if ((s.cards[ill]?.tokens ?? 0) >= before) return;
+  if (s.turnFlags.illuminatiLocked === playerId) throw new RuleError('Your Illuminati\'s token cannot be spent this turn except to buy a Plot card (Time Control).');
+  if (!s.turnFlags.illuminatiSpent?.includes(playerId)) (s.turnFlags.illuminatiSpent ??= []).push(playerId);
+}
+
+// ---------------------------------------------------------------- dice rolled by cards outside an attack
+
+/** What happens with the final result of a card's roll (see cardRoll), by key. */
+export const ROLL_RESULTS: Record<string, (s: GameState, player: string, total: number, dice: number[], data: Record<string, unknown>) => void> = {};
+export function registerRollResult(table: typeof ROLL_RESULTS) { Object.assign(ROLL_RESULTS, table); }
+
+/**
+ * A card rolls one or two dice outside an attack (MWOWM, the Janor Device's roll-off). The roll is made
+ * now and announced as a 'dieRoll' event, which the cards that change "any die roll" may answer
+ * (changeRoll); once its window closes the handler registered for `key` gets the final result. With
+ * nobody able to answer, that happens at once.
+ */
+export function cardRoll(s: GameState, playerId: string, count: 1 | 2, key: string, data: Record<string, unknown> = {}, opts: { quiet?: boolean } = {}) {
+  const dice = count === 2 ? roll2d6(s) : [rollDie(s)];
+  if (!opts.quiet) log(s, `${player(s, playerId).name} rolls ${dice.length > 1 ? `${dice[0]} + ${dice[1]} = ${dice[0] + dice[1]}` : dice[0]}.`, playerId);
+  const e: GameEvent = { type: 'dieRoll', player: playerId, data: { ...data, key, dice, delta: 0 } };
+  // During an attack no response window can wait for a card's roll: it counts at once, as rolled.
+  if (s.attack) { finishCardRoll(s, e); return; }
+  raiseEvent(s, e, 'dieRoll');
+}
+
+/** The dice and total of a 'dieRoll' event as they stand now. */
+export function rollOf(e: GameEvent): { dice: number[]; total: number } {
+  const d = e.data ?? {};
+  const dice = d.dice as number[];
+  const total = typeof d.set === 'number' ? d.set : Math.max(dice.length, dice.reduce((a, b) => a + b, 0) + ((d.delta as number) ?? 0));
+  return { dice, total };
+}
+
+/** Change a card's roll being answered: new dice (a re-roll, or a roll changed outright), or a +/- adjustment. */
+export function changeRoll(e: GameEvent, change: { dice?: number[]; set?: number; delta?: number }) {
+  const d = (e.data ??= {});
+  if (change.dice) { d.dice = change.dice; d.delta = 0; d.set = undefined; }
+  if (change.set !== undefined) d.set = change.set;
+  if (change.delta) d.delta = ((d.delta as number) ?? 0) + change.delta;
+}
+
+function finishCardRoll(s: GameState, e: GameEvent) {
+  const d = e.data ?? {};
+  const { dice, total } = rollOf(e);
+  const p = s.players.find((x) => x.id === e.player);
+  if (!p || p.eliminated) return;
+  if (total !== dice.reduce((a, b) => a + b, 0)) log(s, `The roll counts as ${total}.`, e.player);
+  ROLL_RESULTS[d.key as string]?.(s, e.player!, total, dice, d);
+  fireHooks(s, (h, self) => h.afterCardRoll?.(s, self, e));
 }
 
 /** Relief pledges lapse at the end of their turn, or when the Place or a pledging player is gone. */
@@ -3611,8 +3790,26 @@ function settleWindows(s: GameState) {
 export function advance(s: GameState) {
   for (let guard = 0; guard < 200; guard++) {
     settleWindows(s);
-    if (!openNextEvent(s)) return;
+    if (openNextEvent(s)) continue;
+    // A card ended the turn at once while something else was under way (endTurnAtOnce): the
+    // end-of-turn window opens as soon as the game is free.
+    if (s.turnFlags.endPending) {
+      if (s.window?.kind === 'endOfTurn' || s.phase !== 'endOfTurn') s.turnFlags.endPending = undefined;
+      else if (!s.window && !s.attack && !s.prompt && !s.events?.length) { s.turnFlags.endPending = undefined; openWindow(s, 'endOfTurn'); continue; }
+    }
+    return;
   }
+}
+
+/**
+ * A card ends the active player's turn at once (the Janor Device, Rant!, Repent!, ...): nobody may win
+ * at the end of it (R016), and its end-of-turn window opens once nothing else is under way.
+ */
+export function endTurnAtOnce(s: GameState) {
+  if (s.phase !== 'main') return;
+  s.phase = 'endOfTurn';
+  s.turnFlags.endedAtOnce = true;
+  s.turnFlags.endPending = true;
 }
 
 /**
