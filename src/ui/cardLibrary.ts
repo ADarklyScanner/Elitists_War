@@ -3,6 +3,7 @@
 import { ALL_CARDS, cardSet } from '../engine/cards';
 import type { CardDef, Side } from '../engine/types';
 import { cardFace } from './cardFace';
+import { tileKeywords } from './packs';
 
 declare const __ART__: string[];
 const ART = new Set<string>(typeof __ART__ === 'undefined' ? [] : __ART__);
@@ -51,7 +52,7 @@ function matches(d: CardDef): boolean {
   const q = view.q.trim().toLowerCase();
   if (!q) return true;
   const f = cardFace(d.id);
-  return [d.name, kindLabel(d), ...(d.alignments ?? []), ...(d.attributes ?? []), f?.rules, f?.goal, f?.flavor, d.text]
+  return [d.name, kindLabel(d), ...(d.alignments ?? []), ...(d.attributes ?? []), ...(d.keywords ?? []), f?.rules, f?.goal, f?.flavor, d.text]
     .some((t) => t?.toLowerCase().includes(q));
 }
 
@@ -76,10 +77,14 @@ const stats = (d: CardDef) => d.type === 'Illuminati'
 
 function tile(d: CardDef): string {
   const k = kindOf(d).id;
-  return `<button class="cl-card k-${k}${ART.has(d.id) ? ` has-art art-${d.id}` : ''}" data-cl-open="${d.id}" aria-label="${esc(d.name)}, ${esc(kindLabel(d))}">
+  const pack = cardSet(d) !== 'Base' ? cardSet(d) : '';
+  const kw = tileKeywords(d).filter((w) => w !== kindLabel(d));
+  return `<button class="cl-card k-${k}${ART.has(d.id) ? ` has-art art-${d.id}` : ''}${pack ? ' cl-exp' : ''}" data-cl-open="${d.id}" aria-label="${esc(d.name)}, ${esc(kindLabel(d))}${pack ? `, ${esc(pack)} pack` : ''}${kw.length ? `, ${esc(kw.join(', '))}` : ''}">
     ${arrows(d)}
-    <span class="cl-kind">${esc(kindLabel(d))}${cardSet(d) !== 'Base' ? ` · ${esc(cardSet(d))}` : ''}</span>
+    ${pack ? `<span class="cl-pack p-${pack.toLowerCase()}">${esc(pack)}</span>` : ''}
+    <span class="cl-kind">${esc(kindLabel(d))}</span>
     <b class="cl-name">${esc(d.name)}</b>
+    ${kw.length ? `<span class="cl-kw">${kw.map((w) => `<i>${esc(w)}</i>`).join('')}</span>` : ''}
     ${d.alignments?.length ? `<span class="cl-al">${d.alignments.map(esc).join(' · ')}</span>` : ''}
     ${d.type !== 'Group' && d.type !== 'Illuminati' ? `<span class="cl-snip">${esc(cardFace(d.id)?.rules || d.text)}</span>` : ''}
     <span class="cl-stats">${stats(d)}</span>

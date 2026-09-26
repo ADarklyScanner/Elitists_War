@@ -22,7 +22,9 @@ Sources:
   (`tests/expansions.test.ts › pack implementation progress` prints the count and then requires 100%).
   Until then the new-game pages (offline and online) show no pack switches, and the server ignores a
   request for a pack that is not ready. The engine itself plays whatever settings it is given; that is
-  how the tests force the packs on.
+  how the tests force the packs on. To try the switches early in one browser, set localStorage
+  `elitists-war.preview-packs` to `'1'` (offline games then use the chosen packs; the server still ignores
+  unready ones). The choice itself is remembered per browser (`elitists-war.packs`, `src/ui/packs.ts`).
 - Current state: Assassins 0/125 implemented, SubGenius 1/97 (the Church of the SubGenius, needed for
   the SubGenius game and carrying the Slack rule).
 - Games saved before this change have no `expansions`, `common` or `freezes` fields and play on exactly

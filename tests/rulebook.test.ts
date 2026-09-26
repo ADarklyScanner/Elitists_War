@@ -50,6 +50,26 @@ describe('the full rulebook', () => {
     for (const t of topics) expect(all, t).toContain(t);
   });
 
+  it('has an Expansions part covering both packs, with notes on how the app plays them', () => {
+    expect(PARTS[PARTS.length - 1]).toBe('Expansions');
+    const exp = RULEBOOK.filter((s) => s.part === 'Expansions').map((s) => s.id);
+    expect(exp).toEqual(['assassins', 'subgenius-mixed', 'subgenius-game']);
+    const text = (id: string) => plainText(sectionById(id)!).toLowerCase();
+    for (const t of ['zap', 'illuminati action', 'whole power structure', 'paralysis', 'free it', 'freeze', 'defend itself', 'killed', 'assassination', 'disaster', 'instant', 'society of assassins', 'australia'])
+      expect(text('assassins'), t).toContain(t);
+    for (const t of ['slack', 'three slack', 'subgenius attribute', 'requires', 'your own', 'uncontrolled area', 'hand'])
+      expect(text('subgenius-mixed'), t).toContain(t);
+    for (const t of ['shared', 'three plots', 'lead', 'fewer than eight', 'automatic takeover', 'uncontrolled area', 'one slack', 'position bonus', '10 groups', '12 with two', 'secret', 'third complete turn', 'discard'])
+      expect(text('subgenius-game'), t).toContain(t);
+    for (const id of exp) expect(sectionById(id)!.body, id).toContain('class="rb-app"');
+    // The glossary knows the new words.
+    for (const t of ['zap', 'freeze', 'slack', 'uncontrolled area', 'paralyzed']) expect(plainText(sectionById('glossary')!).toLowerCase(), t).toContain(t);
+    // The in-game Rules window has an Expansions tab that leads to the pack sections.
+    expect(RULES_PANEL_LINKS.packs).toBe('assassins');
+    const main = mainSource as string;
+    for (const id of ['assassins', 'subgenius-game', 'subgenius-mixed']) expect(main, id).toContain(`'${id}'`);
+  });
+
   it('marks where the app differs, and never names the original game or its publisher', () => {
     expect(RULEBOOK.filter((s) => s.body.includes('class="rb-app"')).length).toBeGreaterThanOrEqual(20);
     expect(all).not.toMatch(/steve jackson|sjgames|inwo|world domination handbook/);

@@ -23,7 +23,7 @@ const ex = (title: string, html: string) => `<div class="rb-ex"><div class="rb-e
 const strict = (html: string) => `<p class="rb-strict"><b>Strict table:</b> ${html}</p>`;
 const see = (id: string, label: string) => `<a href="#rb-${id}" data-rb-goto="${id}">${label}</a>`;
 
-export const PARTS = ['Getting started', 'Playing a turn', 'Attacks', 'Cards and schemes', 'Winning and losing', 'Beyond the basics'];
+export const PARTS = ['Getting started', 'Playing a turn', 'Attacks', 'Cards and schemes', 'Winning and losing', 'Beyond the basics', 'Expansions'];
 
 export const RULEBOOK: RuleSection[] = [
   // ------------------------------------------------------------------ Getting started
@@ -963,6 +963,7 @@ ${app('turn Tutorial on (top right of the table) and the app outlines in green w
 <dt>Exposed</dt><dd>A Plot laid face up in front of its owner, visible to all.</dd>
 <dt>Faction</dt><dd>One of several players running the same Illuminati.</dd>
 <dt>Free action / free move</dt><dd>Something that costs no token, discard or other payment.</dd>
+<dt>Freeze</dt><dd>An Assassins Plot that stops every Group with one attribute from spending tokens, except to defend itself, until the end of the turn.</dd>
 <dt>Global Power</dt><dd>The second Power number, used to aid or oppose when alignments would not allow full Power.</dd>
 <dt>Goal card</dt><dd>A Plot giving an extra way to win.</dd>
 <dt>Group</dt><dd>A card that can sit in a Power Structure: Illuminati, Organizations, Places and Personalities.</dd>
@@ -974,13 +975,13 @@ ${app('turn Tutorial on (top right of the table) and the app outlines in green w
 <dt>Instant attack</dt><dd>An Attack to Destroy launched by a card, at almost any time, that Groups cannot normally join.</dd>
 <dt>Instruction</dt><dd>Card text that works against its owner; it cannot be cancelled.</dd>
 <dt>Interference</dt><dd>Taking part in an attack as a player who is neither attacker nor defender.</dd>
-<dt>Killed</dt><dd>A Personality destroyed by an Assassination.</dd>
+<dt>Killed</dt><dd>A Personality destroyed by an Assassination (or by a card that says it kills). Only cards that restore killed Personalities bring it back.</dd>
 <dt>Link</dt><dd>A marked connection between two cards, such as a Resource and the Group that uses it.</dd>
 <dt>Master / puppet</dt><dd>If Group A controls Group B directly, A is B's master and B is A's puppet.</dd>
 <dt>New World Order (NWO)</dt><dd>A Plot that changes the rules for everyone while it is in force. One per colour.</dd>
 <dt>Open arrow</dt><dd>An outgoing arrow with no puppet on it and room for one.</dd>
 <dt>Oppose</dt><dd>Adding a Group's Power (or Global Power) to the defence against an attack.</dd>
-<dt>Paralyzed</dt><dd>Unable to spend tokens or use abilities or linked Resources, and not counting for Goals.</dd>
+<dt>Paralyzed</dt><dd>Unable to spend tokens or use abilities or linked Resources, and not counting for Goals (Assassins; see <a href="#rb-assassins" data-rb-goto="assassins">Assassins</a>).</dd>
 <dt>Permanent change</dt><dd>A change with no built-in end. Counts for Goals.</dd>
 <dt>Place</dt><dd>A Group representing a location's hidden rulers. Vulnerable to Disasters.</dd>
 <dt>Personality</dt><dd>A Group representing one person. Vulnerable to Assassinations.</dd>
@@ -997,11 +998,121 @@ ${app('turn Tutorial on (top right of the table) and the app outlines in green w
 <dt>Shuffle</dt><dd>Whoever searched a deck shuffles it afterwards; another player may cut.</dd>
 <dt>Special ability</dt><dd>Beneficial card text; it can be cancelled.</dd>
 <dt>Special Goal</dt><dd>The winning condition printed on an Illuminati.</dd>
+<dt>Slack</dt><dd>The Action tokens of the Church of the SubGenius, kept from turn to turn (SubGenius).</dd>
 <dt>Strength</dt><dd>Attack total minus defence total: roll that number or less on two dice.</dd>
+<dt>SubGenius</dt><dd>An attribute of the SubGenius pack's Groups. It does nothing by itself; cards refer to it.</dd>
 <dt>Temporary change</dt><dd>A change with a set lifetime, such as until the end of the turn.</dd>
 <dt>Turn</dt><dd>When a card says “each turn”, it means each of its owner's turns. Bonuses arrive at the matching step (extra tokens with the token refresh).</dd>
+<dt>Uncontrolled area</dt><dd>In the stand-alone SubGenius game, the face-up cards in the middle of the table that nobody controls and anyone may attack.</dd>
 <dt>Unique</dt><dd>A Resource of which only one copy may ever be in play.</dd>
+<dt>Zap</dt><dd>A Plot linked to a rival's Illuminati that restricts that player's whole Power Structure until someone spends an Illuminati action to remove it (Assassins).</dd>
 </dl>
+`,
+  },
+  // ------------------------------------------------------------------ Expansions
+  {
+    id: 'assassins', part: 'Expansions', title: 'Assassins',
+    blurb: 'Zaps, Paralysis, Freezes, killed Personalities and the pack\'s other new cards.',
+    body: `
+<p>The Assassins pack adds 125 cards to the standard game: new Groups, Resources and Plots, and a new Illuminati, the <b>Society of Assassins</b>, whose Fanatic Groups help each other and whose Special Goal counts Secret Groups twice. Shuffle its cards into your decks like any others. Most of the pack follows the rules you already know; this section covers what is new. The pack is optional and switched on when a game is set up.</p>
+<h4>Zaps</h4>
+<p>A <b>Zap</b> is a Plot you play on a rival's Illuminati. It costs one action of your own Illuminati unless the card says otherwise, may be played at any moment except inside a Privileged attack, and then stays on the table beside that Illuminati until it is removed.</p>
+<ul>
+<li>A Zap restricts the <b>whole Power Structure</b> of its victim, not just the Illuminati card. If it says the player cannot take over some kind of Group, then no Group of theirs may attack to control one, and their automatic takeover cannot bring one in either.</li>
+<li>Zaps add up: each is its own restriction, and a player may carry several.</li>
+<li>Played in the middle of an attack, a Zap can make that attack illegal. The attack is then cancelled, as if it had never been made.</li>
+<li><b>Removing Zaps:</b> any player (the victim, or anyone else) may spend one Illuminati action, at any time, to remove <i>every</i> Zap from one player at once. The only moment this is not allowed is during an Instant attack.</li>
+<li>Zaps on a player who is eliminated are discarded.</li>
+</ul>
+${ex('Brushfire War', `<p>Your rival's Power Structure is full of Peaceful Groups and they are two short of the Basic Goal. You spend your Illuminati action and play Brushfire War on their Illuminati: from now on none of their Groups may take over a Peaceful Group, by attack or by automatic takeover. On their turn they spend their own Illuminati action to sweep the Zap away, which is exactly the action they wanted for buying a Plot. Either way, you have slowed them down.</p>`)}
+<h4>Paralysis</h4>
+<p>A <b>Paralysis</b> card is played on a Group of the alignment it names, at any time except in a Privileged attack. It is paid with an Illuminati action, or with actions of Groups of the named opposite alignment whose Power adds up to the target's current Resistance. It stays linked to the Group. While it lasts, the Paralyzed Group:</p>
+<ul>
+<li>cannot spend its Action tokens (they stay on the card and come back when it is freed);</li>
+<li>cannot use its special ability or its linked Resources, and cannot take new puppets (its present puppets are not affected, and its Resources may be linked elsewhere);</li>
+<li>does not count toward any Goal. Only its own count is lost: its puppets still count, and anything it does for other cards simply by being in play still applies.</li>
+</ul>
+<p>The Paralysis ends at once if the Group loses the named alignment, even for a moment. It can also be removed at any time, even while someone is claiming victory: the Group's <b>master</b> may spend an action to free it (paid by the Group's controller), or <b>any Illuminati</b> may, each player paying with their own.</p>
+<h4>Attribute Freezes</h4>
+<p>A <b>Freeze</b> names an attribute (Bank, Media, Church…). Until the end of the turn no Group with that attribute, whoever controls it, may spend Action tokens, except to defend itself. Instead of freezing, the card may be used to cancel an action a matching Group has just taken. A few Freezes reach further: one also stops the orbiting Resources, another stops Liberal and Conservative Groups too. A Plot that needs the action of a Frozen Group cannot be paid, but duplicates played as agents still work against a Frozen Group.</p>
+<h4>Assassinations and killed Personalities</h4>
+<p>The pack brings new Assassinations. As before, a Personality destroyed by an Assassination is <b>killed</b>, and “killed” and “assassinated” mean the same thing. Some other cards kill without an Assassination; a Personality they destroy counts as killed too. A killed Personality is a destroyed Group like any other, except that only cards which restore <i>killed</i> Personalities can bring it back.</p>
+<h4>Disasters and other special cards</h4>
+<ul>
+<li>Not every new Disaster is an Instant attack. Drought and Flesh-Eating Bacteria are ordinary Attacks to Destroy launched without an action, and their cards name who may help the target (Coastal Places, Science Groups, Groups able to send Relief…). Some cards also make a helper count extra, such as a disease-control Group helping at triple Power.</li>
+<li>Oil Spill and No Beer! are Instant, like the base game's Disasters. Only cards that mention Instant attacks, Disasters or Assassinations affect them.</li>
+<li><b>Regi$tered Trademark</b> is linked to a Group, and from then on everyone must call that Group by its full printed name. Whoever slips discards a Plot; if the Group's own controller slips and a rival catches it, the controller hands that rival a Plot instead.</li>
+<li><b>Partition</b> splits a Huge Place into two halves with half its Power each; a player holding both halves may put them back together.</li>
+<li><b>Enough is Enough</b> clears every Zap, Paralysis and Freeze from your own Power Structure, at the cost of your Plot draw. <b>Reverse Whammy</b> sends a Zap back at whoever played it.</li>
+</ul>
+${app('Zaps show as a ⚡ on the Illuminati and a <i>Zapped</i> tag by the player\'s name; Paralyzed and Frozen Groups carry a band across the card, and a banner runs along the top of the table while a Freeze lasts. Tap any of them for the details and the buttons to remove Zaps or free a Group. Removing Zaps happens at once and cannot be answered (no card can cancel it). Paralysis played on a Group in the middle of its own action does not cancel that action. Naming slips for Regi$tered Trademark cannot be heard by the app, so players report them with buttons on the card. Australia reads weekends, holidays and the hour from the clock of the device showing the game. Computer players remove Zaps from themselves and free their own Groups when they have an Illuminati action to spare.')}
+`,
+  },
+  {
+    id: 'subgenius-mixed', part: 'Expansions', title: 'SubGenius cards in a regular game',
+    blurb: 'Slack, the SubGenius attribute and Plots that name their own cost.',
+    body: `
+<p>The SubGenius pack can be played on its own (see ${see('subgenius-game', 'The stand-alone SubGenius game')}) or shuffled into a standard game. Mixed in, its cards work under the standard rules, with a few additions.</p>
+<h4>The Church of the SubGenius and Slack</h4>
+<p>The pack's Illuminati is the <b>Church of the SubGenius</b>. It works like any other Illuminati, except for its tokens:</p>
+<ul>
+<li>It <b>keeps</b> its Action tokens from turn to turn. At each token refresh it gets its new one on top of whatever it still holds. These tokens are its <b>Slack</b>, and each Illuminati action spends one.</li>
+<li>Its Special Goal lets up to <b>three Slack count as Groups</b> toward the Basic Goal. With a goal of 12 you could win with 10 Groups and 2 Slack. This Goal cannot be combined with any other Goal.</li>
+<li>It and your SubGenius Groups get +2 on their own Attacks to Control against SubGenius Groups.</li>
+</ul>
+<h4>The SubGenius attribute</h4>
+<p>Many of the pack's Groups carry the attribute <b>SubGenius</b>. Like every attribute it does nothing by itself; cards that name it care about it.</p>
+<h4>Plots that name their cost</h4>
+<p>Many Plots of both packs say which action powers them: <i>Requires a SubGenius action</i>, <i>an Illuminati action or two Church actions</i>, <i>three discards</i>, and so on. Pay with exactly one of the listed alternatives when you play the card. Unless the card says otherwise, only <b>your own</b> Groups and cards can power it. A Group that is Paralyzed or Frozen cannot pay.</p>
+<h4>Links that remember</h4>
+<p>A Plot that changes a Group's numbers, alignments or attributes stays linked to it and travels with it when the Group changes hands. If the link becomes illegal for a while, the Plot does nothing until it is legal again; if it becomes illegal for good, the Plot is discarded.</p>
+<h4>Cards that mention the uncontrolled area</h4>
+<p>Some SubGenius cards talk about the uncontrolled area, which exists only in the stand-alone game. In a regular game, a card that would go there goes into the hand of the player concerned instead, and “from your hand or the uncontrolled area” simply means from your hand.</p>
+${app('the Church\'s Slack is shown on its card and beside the player\'s name, and counts in the goal bar. When you play a Plot that names its cost, the panel lists each way you can afford to pay (for example “an action of your Illuminati” or “the action of one of your SubGenius Groups”) and names the cards that will be spent; pick one. The app chooses which of your matching Groups pays (the weakest that is enough) and which Plots are discarded (exposed ones first). An action cancelled after it powered a Plot is not replaced by another.')}
+`,
+  },
+  {
+    id: 'subgenius-game', part: 'Expansions', title: 'The stand-alone SubGenius game',
+    blurb: 'Everyone plays the Church: shared decks and an uncontrolled area in the middle.',
+    body: `
+<p>The SubGenius pack is also a complete game for two to four players. Everyone plays a faction of the Church of the SubGenius, and instead of private decks the whole table shares one Plot deck and one Group deck. Group cards are dealt face up into an <b>uncontrolled area</b> in the middle of the table, and everybody fights over them.</p>
+<h4>Setting up</h4>
+<ol>
+<li>Give each player a Church of the SubGenius. Shuffle the Plots into one deck and the Groups (with the Resources) into another. Beside each deck goes a single face-up discard pile. When a deck runs out, shuffle its discards to make a new one.</li>
+<li>Deal each player three Plots and three Group cards. Everyone chooses a lead from their Group cards (a Resource may be a lead: it goes beside the Church) and all leads are revealed together.</li>
+<li>Each player keeps their other two Group cards until the start of their first turn, then lays them face up in the middle. That begins the uncontrolled area.</li>
+<li>Roll to see who goes first. Until a rival has finished their first turn, you may not attack them, play cards on them or otherwise harm them, unless they did it to you first.</li>
+</ol>
+<h4>A turn</h4>
+<ol>
+<li><b>Draw a Plot.</b></li>
+<li><b>Draw a Group</b> into the uncontrolled area, face up, but only if it holds fewer than eight cards.</li>
+<li><b>Automatic takeover</b> (optional): one Group or Resource that <i>you</i> put into the uncontrolled area this turn. If you take one, your Church gets no new token this turn (with any number of players).</li>
+<li><b>Tokens:</b> the Church adds its new token to its Slack; every other Group gets one only if it has none.</li>
+<li><b>Main phase:</b> act as usual. You may attack any Group in the uncontrolled area, to control it or to destroy it, as well as rivals' Groups.</li>
+<li><b>End:</b> anyone who meets a Goal may declare victory, and the others try to stop it.</li>
+</ol>
+<p>At any time, spend one Slack or the tokens of two other Groups to draw a card: a Plot goes to your hand, a Group card into the uncontrolled area (this is allowed however many cards already lie there).</p>
+<h4>The uncontrolled area</h4>
+<ul>
+<li>Its cards belong to nobody. An attack on one of them gets no position bonus, and there is no defender: any player may aid or oppose with Groups whose alignments allow it. A failed attack leaves the card where it is.</li>
+<li>A <b>Resource</b> in the area is taken, in your main phase, by spending one Slack; only one per turn.</li>
+<li>When a Group is destroyed its puppets, stripped of their tokens, go to the uncontrolled area. So do Groups that no longer fit after a move. Resources linked to a Group that goes there go with it, and linked Plots stay linked.</li>
+</ul>
+<h4>Differences from the standard game</h4>
+<ul>
+<li>Every rival plays the same Illuminati, so the +5 for attacking a rival's Group always applies.</li>
+<li>The Secret attribute has no effect of its own in this game.</li>
+<li>Discards go on the shared piles and never back into a deck, except when a deck is rebuilt.</li>
+<li>After your first turn you never hold Group cards: they come straight into the uncontrolled area.</li>
+</ul>
+<h4>Winning and losing</h4>
+<ul>
+<li><b>Basic Goal:</b> control 10 Groups including your Church, or 12 with two players. Up to three Slack count as Groups (the Church's Special Goal).</li>
+<li>Goal cards work as usual. If two players meet a Goal at the same moment, neither wins and play goes on (a very few cards allow a shared win).</li>
+<li>A player whose Church has no puppets after their third complete turn is out. The player who took or destroyed that last puppet takes their Plot hand and Resources. A player who leaves the game discards everything.</li>
+</ul>
+${app('the stand-alone game is played with the SubGenius cards alone. The uncontrolled area is a tray in the middle of the table that everyone can see, with the shared decks and discard piles beside it: tap a card to read it, pick one of your Groups and <i>Attack to control</i> or <i>Attack to destroy</i> to target it, or tap a Resource there to take it for one Slack. The shared decks stay face down for everyone; the discard piles can be browsed. The app offers no way to return a Plot to a deck in this game. Duplicates across several copies of the pack are not supported.')}
 `,
   },
 ];
@@ -1009,7 +1120,7 @@ ${app('turn Tutorial on (top right of the table) and the app outlines in green w
 /** Where each tab of the in-game Rules panel leads in the full rulebook. */
 export const RULES_PANEL_LINKS: Record<string, string> = {
   goal: 'victory', card: 'anatomy', turn: 'turn', tokens: 'tokens', attack: 'attacks', roll: 'attacks',
-  help: 'helping', plots: 'plots', more: 'immunity', foes: 'strategy',
+  help: 'helping', plots: 'plots', more: 'immunity', foes: 'strategy', packs: 'assassins',
 };
 
 export const sectionById = (id: string) => RULEBOOK.find((s) => s.id === id);
