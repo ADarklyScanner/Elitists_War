@@ -495,6 +495,13 @@ export type Action =
   | { type: 'removeZaps'; player: string }
   /** Free a Paralyzed Group: pay with its master (if you control it) or with your Illuminati (Assassins). */
   | { type: 'freeGroup'; group: string; payWith: string }
+  /**
+   * Admit a naming slip against a linked Regi$tered Trademark (Assassins): discard the named Plot from
+   * hand, or (if `discard` is left out) the top card of your own Plot deck.
+   */
+  | { type: 'nameSlip'; card: string; discard?: string }
+  /** Catch the linked Regi$tered Trademark's Group's owner slipping first: they hand you their top Plot (Assassins). */
+  | { type: 'catchNameSlip'; card: string }
   /** Rearranging Groups a capture or move brought in: put `group` on `side` of `onto` (its own master). */
   | { type: 'placeCaptured'; group: string; onto: string; side: Side }
   | { type: 'placeCapturedDone' }

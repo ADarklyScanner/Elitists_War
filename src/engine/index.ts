@@ -13,6 +13,7 @@ import './content/plots7';
 import './content/resources';
 // Expansion packs (docs/EXPANSIONS.md): add new content files of a pack here.
 import './content/assassins';
+import './content/assassins5';
 import './content/subgenius';
 import './content/subgenius3';
 import './content/subgenius1';
