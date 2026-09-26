@@ -182,7 +182,8 @@ export function randomDeck(seed: number, illuminati?: string, opts: { groups?: n
   // last Plot picked (drawn last, so every other choice above stays the same for a given seed).
   if (plots.length && r() < (opts.spareIlluminati ?? SPARE_ILLUMINATI_CHANCE)) {
     const others = ILLUMINATI.filter((c) => c.id !== ill);
-    plots[plots.length - 1] = others[Math.floor(r() * others.length)].id;
+    // Only one Illuminati in the chosen sets (the stand-alone SubGenius game): there is no spare to hide.
+    if (others.length) plots[plots.length - 1] = others[Math.floor(r() * others.length)].id;
   }
   return { illuminati: ill, groups: [...chosen, ...resources].map((g) => g.id), plots };
 }

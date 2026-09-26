@@ -12,7 +12,7 @@ import { GOALS, PLOTS } from './plotTypes';
  * hidden in the interface (the engine itself will play with whatever settings it is given, which is how
  * the tests force a pack on). Flip a flag only when tests/expansions.test.ts reports 100% for that pack.
  */
-export const EXPANSIONS_READY: Record<ExpansionId, boolean> = { assassins: false, subgenius: false };
+export const EXPANSIONS_READY: Record<ExpansionId, boolean> = { assassins: true, subgenius: true };
 
 export const PACKS: { id: ExpansionId; set: Exclude<CardSet, 'Base'>; name: string }[] = [
   { id: 'assassins', set: 'Assassins', name: 'Assassins' },

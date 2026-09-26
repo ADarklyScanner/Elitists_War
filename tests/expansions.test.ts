@@ -149,7 +149,7 @@ describe('settings and decks', () => {
     expect(enabledSets({ expansions: { assassins: true } })).toEqual(['Base', 'Assassins']);
     expect(enabledSets({ expansions: { subgenius: true } })).toEqual(['Base', 'SubGenius']);
     expect(enabledSets({ subgeniusRules: true })).toEqual(['SubGenius']);
-    expect(EXPANSIONS_READY).toEqual({ assassins: false, subgenius: false });
+    expect(EXPANSIONS_READY).toEqual({ assassins: true, subgenius: true });
   });
   it('random decks draw from the base game only unless a set is given', () => {
     for (let seed = 1; seed <= 20; seed++) {
@@ -637,5 +637,12 @@ describe('the stand-alone SubGenius game', () => {
     s.phase = 'main'; s.prompt = undefined;
     const att = give(s, pl, 'x-plain', { under: ill(s, pl), side: 'TOP' });
     expect(validateAttack(s, pl, { type: 'attack', attackType: 'control', attacker: att, target: secret.iid })).toBeNull();
+  });
+});
+
+describe('stand-alone SubGenius decks', () => {
+  it('builds decks when the Church is the only Illuminati, whatever the seed', async () => {
+    const { randomDeck } = await import('../src/engine/decks');
+    for (let seed = 1; seed <= 200; seed++) expect(() => randomDeck(seed, 'church-of-the-subgenius', { sets: ['SubGenius'], spareIlluminati: 1 })).not.toThrow();
   });
 });
