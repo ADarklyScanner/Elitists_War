@@ -100,7 +100,7 @@
   "type": "Group",
   "subtype": "Organization",
   "rarity": "Rare",
-  "text": "Spend its action: trade any number of your Plots for the same number of one rival's exposed Plots. Plots you get may be hidden; Plots you give stay exposed.",
+  "text": "Spend its action, at any time: trade any number of your Plots for the same number of one rival's exposed Plots. You choose which received Plots stay exposed; the rest go hidden. Plots you give away keep whatever exposed state they already had (they need not be exposed to begin with, and giving them up does not change it).",
   "power": 2,
   "globalPower": 0,
   "resistance": 4,

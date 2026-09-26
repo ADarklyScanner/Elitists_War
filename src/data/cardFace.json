@@ -2058,5 +2058,1115 @@
 "rules": "Any time during your turn, you may discard this Group and put another Group from your hand in exactly its place in your Power Structure, with no roll.",
 "goal": "",
 "flavor": "Collect them all, trade them all, then argue about the rules for a decade. Welcome to the club."
+},
+"five-year-plan": {
+"rules": "Freeze! Requires an Illuminati or Communist action. Until the end of the turn, no Communist Group may spend Action tokens except to defend, or cancel one right after it acts.",
+"goal": "",
+"flavor": "Quotas got met on paper well before anything got met in reality."
+},
+"teddy-kennedy": {
+"rules": "His Liberal puppets are immune to Attacks to Control, and defend at +5 against Attacks to Destroy.",
+"goal": "",
+"flavor": "Every scandal survived just adds another chapter to the legend."
+},
+"a-brief-attack-of-conscience": {
+"rules": "Zap! Requires an Illuminati action. Play on a rival Illuminati: they can no longer use Assassinations or Disasters. Stays until removed; any player may spend an Illuminati action to strip every Zap from one player.",
+"goal": "",
+"flavor": "The killer paused mid-contract, weighed the ethics, then finished the job anyway."
+},
+"you-d-pay-to-know-what-you-really-think": {
+"rules": "Not during an attack. Discard a puppet-free Group, not your Illuminati (uncontrolled area, in standard play); the top Group card replaces it, tokens kept. A Resource joins your Resources; an illegal Group is discarded and you draw a Plot.",
+"goal": "",
+"flavor": "But that service isn't offered in this area today."
+},
+"backmasquerade": {
+"rules": "Link it permanently to a Magic Group, letting that Group's action clear a Zap from any Illuminati whenever spent. Only one may be in play; playing a new one removes the old.",
+"goal": "",
+"flavor": "Play the record forward and the message sounds suspiciously like a subpoena."
+},
+"more-slack": {
+"rules": "Pay one Slack token: expose all your own Plot cards. Once per game, for each player.",
+"goal": "",
+"flavor": "Wanting more is the whole doctrine, really."
+},
+"strange-bedfellows": {
+"rules": "At any time: reverse any or all alignments of a Group you control, for one action, or for the whole token-placement step if played then. Doesn't count for Goals.",
+"goal": "",
+"flavor": "Allies today, strangers tomorrow, and nobody remembers whose idea it was."
+},
+"secret-fistemple": {
+"rules": "May only control Personalities, and each becomes SubGenius. It may pass its Action token to its master, or to a puppet that is SubGenius by its own printed card. It always shares its master's alignments.",
+"goal": "",
+"flavor": "The doorbell exists only for people who already know."
+},
+"the-meek-shall-inherit": {
+"rules": "Zap. Requires an Illuminati action. Played on a rival Illuminati: no Group in that Power Structure may take over Violent Groups. Stays until removed.",
+"goal": "",
+"flavor": "Softly-spoken types suddenly can't be bullied into anyone's army."
+},
+"good-sex-for-mutants-dating-league": {
+"rules": "Every rival of its controller takes -2 attacking to control any Weird Group in play, wherever it is.",
+"goal": "",
+"flavor": "Everyone here already has someone, technically."
+},
+"rant": {
+"rules": "Your turn only, after token placement: spend an open-armed Personality's action to take a Group or Resource from the uncontrolled area (hand, in a mixed game) into play with no roll, as its puppet. Your turn ends.",
+"goal": "",
+"flavor": "Nonsense, delivered with total conviction, moves mountains."
+},
+"drs-for-bob": {
+"rules": "Adds its Power to any SubGenius Group's defense, a free move that costs no token.",
+"goal": "",
+"flavor": "Their diagnosis is always the same: more noise, less quiet."
+},
+"the-thule-group": {
+"rules": "Spend its action, anytime: discard Group cards from hand, adding their printed Power to any Power or Resistance total, Instants included, regardless of alignment. With Hitler's Brain linked, it cannot be captured or destroyed.",
+"goal": "",
+"flavor": "Every discarded flunky still adds weight to somebody's grand total."
+},
+"inherently-bogus": {
+"rules": "Not during an attack. A Church of the SubGenius Illuminati holding no SubGenius Groups loses one Action token. Once per victim each turn.",
+"goal": "",
+"flavor": "Faith without members still somehow pays overhead."
+},
+"family-values": {
+"rules": "Zap! Requires an Illuminati action. Play on a rival Illuminati: no Group in their Power Structure may take over Weird Groups, except the Discordian Society. Stays until removed; an Illuminati action strips all Zaps from one player.",
+"goal": "",
+"flavor": "Every relative gets tolerated at dinner except the two actually causing problems."
+},
+"yetis": {
+"rules": "May attach to any open side of its master, arrow or not. Any Group with an open side may attack to control it.",
+"goal": "",
+"flavor": "Cryptid status hasn't stopped the union dues."
+},
+"you-are-what-you-eat": {
+"rules": "Right after your Group (not your Illuminati) destroys a Group: discard the attacker, counting as destroyed but not for Goals, and put the destroyed Group in its place. Its puppets may be rehung, discarded, or returned to hand.",
+"goal": "",
+"flavor": "Absorb your enemy's strengths; digest their weaknesses at leisure."
+},
+"lyndon-larouche": {
+"rules": "While his controller has a Government Group or named party, his Power equals the highest printed Power among them. Each turn, a roll of 1-3 gives him no token. His alignments never count for Goals.",
+"goal": "",
+"flavor": "Every conspiracy connects eventually, given enough index cards and free time."
+},
+"drought": {
+"rules": "Disaster! Attacks to Destroy a Huge Place, no action, not Instant: Power 24 against a Coastal Place, 28 otherwise. Coastal Places and Relief-capable Groups may help defend. Success Devastates it; beating the roll by 10+ destroys it.",
+"goal": "",
+"flavor": "The reservoir forecast kept insisting things were improving, right up until they weren't."
+},
+"waiting-period": {
+"rules": "Paralysis on a Violent Group, costing an Illuminati action or Peaceful actions equal to its Resistance: it cannot act, use abilities or Resources, or gain puppets, and doesn't count for Goals. Freed by losing Violent or an action from its master or any Illuminati.",
+"goal": "",
+"flavor": "Every itchy trigger finger cools off exactly on schedule."
+},
+"saucer-landing-strip": {
+"rules": "Whenever you hold no Plot cards, trade its Action token for two Plots at any time.",
+"goal": "",
+"flavor": "Visitors always leave better connected than they arrived."
+},
+"advanced-supersonic-aluminum-nazi-hell-creatures-from-beneath-the-hollow-earth": {
+"rules": "Helping wreck a rival's Group in a winning Attack to Destroy earns you an extra Plot draw.",
+"goal": "",
+"flavor": "Straight from the hollow earth, still insisting the trains run on time."
+},
+"x-day": {
+"rules": "Discard all your Plot cards and draw as many new ones, four at most. Once per turn.",
+"goal": "",
+"flavor": "The date keeps moving; the panic never does."
+},
+"tanstaafl": {
+"rules": "Zap. Requires an Illuminati action. Played on a rival Illuminati: no Group in that Power Structure may take over Liberal Groups. Stays until removed.",
+"goal": "",
+"flavor": "Turns out every free lunch had a hidden delivery fee."
+},
+"copy-shops": {
+"rules": "Spend its action, discard a Plot, and copy a rival's exposed, legally playable Plot at cost, leaving the original with them. It resolves now — a Goal only if it wins at once — keeping any link.",
+"goal": "",
+"flavor": "Every knockoff comes out remarkably close to the genuine article, allegedly."
+},
+"pale-people-in-black": {
+"rules": "When it takes part in an Attack to Control, the target's opposite-alignment penalty is ignored. It cannot be destroyed by any means.",
+"goal": "",
+"flavor": "Nothing moves them: not victory, not despair, not last call."
+},
+"end-of-the-world": {
+"rules": "Yellow NWO. Church and Fanatic Groups get +2 Power, +3 if both; Corporate and Government Groups get -2 Power.",
+"goal": "",
+"flavor": "Every prophecy needs a sequel once the deadline quietly passes unnoticed."
+},
+"convenience-stores": {
+"rules": "Any agents card you play gets +5, attacking or defending. You may also give that +5 to another player's agents card, free. No effect on spare Illuminati agents. Gets +10 against Attacks to Destroy.",
+"goal": "",
+"flavor": "Every checkout line doubles as a small, cheerful arms bazaar."
+},
+"pinks": {
+"rules": "Whenever they have no Action token, take one from another Straight Group you control.",
+"goal": "",
+"flavor": "Ambition, borrowed strictly from someone else's paycheck."
+},
+"teflon-coating": {
+"rules": "When a Personality is attacked and a rival's Media Group takes part: every Media action in that attack is cancelled, and no more Media Groups may join it.",
+"goal": "",
+"flavor": "Every accusation slides right off, leaving the cameras confused."
+},
+"give-me-slack-or-give-me-food": {
+"rules": "Counter. Right after you play a Plot: discard this and one other card, and take that Plot back into your hand.",
+"goal": "",
+"flavor": "Buyer's remorse, priced at exactly two cards."
+},
+"false-slack": {
+"rules": "Requires an Illuminati action. Strip every Action token from a rival's Group, other than their Illuminati, and from every puppet beneath it. Once per victim each turn.",
+"goal": "",
+"flavor": "Their to-do list survives; their motivation does not."
+},
+"time-control": {
+"rules": "Your turn only: your Illuminati may launch one direct attack using its printed Power, at no token cost, and you may spend no other Illuminati tokens this turn except to buy Plots.",
+"goal": "",
+"flavor": "Every other minute of the day still runs late."
+},
+"nevermore": {
+"rules": "Right after a Plot resolves, ban it for the rest of the game, kept under this card. Once down, anyone may keep banning Plots, paid for with an Illuminati action, or by discarding two Plots from hand or deck.",
+"goal": "",
+"flavor": "Once forbidden, a plot simply ceases to exist, at least on paper."
+},
+"floating-point-error": {
+"rules": "Freeze! Requires an Illuminati or Computer action. Until the end of the turn, no Computer Group may spend Action tokens except to defend, or cancel one right after it acts.",
+"goal": "",
+"flavor": "The spreadsheet balanced perfectly, right up until the decimal quietly wandered off."
+},
+"vile-secretions": {
+"rules": "Paralysis on a Weird Group, costing an Illuminati action or Straight actions equal to its Resistance: it cannot act, use abilities or Resources, or gain puppets, and doesn't count for Goals. Freed by losing Weird, or an action from its master or any Illuminati.",
+"goal": "",
+"flavor": "Every strange impulse gets minuted, filed, and quietly tabled."
+},
+"black-helicopters": {
+"rules": "Unique. Link for good to a Secret or Government Group: all its attacks become Privileged. Discarded once that Group is no longer Secret or Government.",
+"goal": "",
+"flavor": "Rotor blades over the neighborhood always meant a very routine, unrelated inspection."
+},
+"the-magic-goes-away": {
+"rules": "Red NWO. Magic Resources do nothing and Magic Groups get -1 Power, still counting fully for Goals. Every Illuminati gets -1 Power, and nobody makes automatic takeovers.",
+"goal": "",
+"flavor": "Spells fizzle, wands go quiet, and accountants finally feel useful."
+},
+"the-saint-of-sales": {
+"rules": "Your turn only. Spend your Illuminati's action, or SubGenius actions totaling 4 Power: take one Resource from the uncontrolled area or your hand into play with no roll.",
+"goal": "",
+"flavor": "He could sell the flood insurance during the flood."
+},
+"psychic-pstench": {
+"rules": "Requires a SubGenius Personality's action. A rival shows all their Plot cards, or discards one exposed Goal.",
+"goal": "",
+"flavor": "Their intentions reek from three rooms away."
+},
+"jhvh-1": {
+"rules": "Requires an Illuminati action. A rival discards half their Plot cards, rounded up, choosing which.",
+"goal": "",
+"flavor": "Somewhere a server logs every prayer you never sent."
+},
+"day-care-centers": {
+"rules": "Always has exactly its master's alignments; nothing else changes them. A Fanatic master's own Fanatic alignment still counts. When destroyed, it keeps whatever alignments it had at that moment.",
+"goal": "",
+"flavor": "Naptime enforces itself; nobody negotiates with a toddler about anything, ever."
+},
+"reverse-whammy": {
+"rules": "When a rival plays a Zap on you, it hits them instead. Costs a Group card from hand or the top of your Group deck.",
+"goal": "",
+"flavor": "Boomerangs are traditional. Boomerangs also, on occasion, come back sharpened."
+},
+"martyr-meter": {
+"rules": "Unique. At token placement, one Personality you control gets an extra Action token. Its holder is immune to Random Jesii.",
+"goal": "",
+"flavor": "Suffering, like everything else here, gets quantified."
+},
+"population-reduction": {
+"rules": "Goal. Each Huge Place you destroyed (up to 3) counts double toward your Basic Goal; no other destroyed Group counts. Or win outright with 5 Huge Places destroyed while World War III is absent.",
+"goal": "",
+"flavor": "Fewer mouths, fewer complaints, more room at the summit table."
+},
+"don-t-touch-that-dial": {
+"rules": "Requires a Media Group's action. Play when an attack on a Media Group fails: the attacker's turn ends immediately.",
+"goal": "",
+"flavor": "Nothing ends a hostile broadcast faster than a live equipment malfunction."
+},
+"arise": {
+"rules": "Goal. When a rival takes your last puppet, reveal this: you stay in until end of turn. If you still have none, you win. You may share this win with your own Illuminati's other player.",
+"goal": "",
+"flavor": "Defeat becomes a technicality once you refuse to leave the table."
+},
+"frop-farm": {
+"rules": "Its action: strip every Action token from one Personality.",
+"goal": "",
+"flavor": "Harvested fresh, forgotten just as fresh."
+},
+"interesting-times": {
+"rules": "Blue NWO. Choose one: only the Basic Goal can win, blocking Special Goals and Goal cards, or the Basic Goal needs two more Groups.",
+"goal": "",
+"flavor": "Ordinary ambition suddenly needed extra paperwork nobody remembered signing up for."
+},
+"cat-juggling": {
+"rules": "Paralysis on a Peaceful Group: no tokens, ability, linked Resource use, new puppets or Goal credit, until it loses that alignment or its master or an Illuminati acts. Costs an Illuminati action, or Violent actions worth its Resistance.",
+"goal": "",
+"flavor": "The talent agency swore the act was harmless, right up until the claws came out."
+},
+"st-janor-hypercleats": {
+"rules": "In attacks he makes or aids, an 11 doesn't auto-fail, but a natural 2 counts as 12 and costs your Illuminati a token if held. He may attack, or aid, Secret Groups of any alignment.",
+"goal": "",
+"flavor": "His cleats have opinions about everyone's footwork."
+},
+"back-to-the-salt-mines": {
+"rules": "When a Place is attacked, not by an Instant attack, play for +10 to your side. One per attack. If the defender plays it, an attacker's copy returns to hand; if your side wins, it returns to your hand, exposed.",
+"goal": "",
+"flavor": "Shift change never really ends; someone's always due back underground by morning."
+},
+"australian-rules": {
+"rules": "Red NWO. Attacking a rival, or aiding the attack, earns an extra Plot draw; capturing or destroying a rival's Group earns an extra Group draw.",
+"goal": "",
+"flavor": "Contact sport rules apply to boardrooms too, apparently, and nobody's filing a complaint."
+},
+"science-cannot-remove-the-terror-of-the-gods": {
+"rules": "Goal. Control Church Groups and have destroyed Science or Church Groups matching one pair: 5 and 2, 4 and 3, 3 and 4, 2 and 5, or 1 and 6. Combines with no other Goal.",
+"goal": "",
+"flavor": "Faith fills the gap right where the lab coats stop."
+},
+"earth-first": {
+"rules": "Goal. Win with destroyed Corporate Groups and controlled Green Groups totaling one of these pairs: 2 and 6, 3 and 5, 4 and 4, 5 and 3, 6 and 1. Combines with no other Goal.",
+"goal": "",
+"flavor": "Chainsaws stalled just often enough that somebody started calling it sabotage."
+},
+"brag-of-the-subgenius": {
+"rules": "Goal. Each SubGenius Group of Power 3 or more you control counts as two Groups toward your Basic Goal.",
+"goal": "",
+"flavor": "Modesty was never really part of the Church's marketing plan."
+},
+"blivit": {
+"rules": "Spend its action to cancel another Resource's action while that Resource still holds its token. Its owner is safe from the Nuclear Power Companies. Only one may be in play; a new one destroys the old.",
+"goal": "",
+"flavor": "It hums, it whirs, nobody's ever confirmed what it's actually for."
+},
+"bite-the-wax-tadpole": {
+"rules": "Freeze! Requires an Illuminati or Media action. Until the end of the turn, no Media Group may spend Action tokens except to defend, or cancel one right after it acts.",
+"goal": "",
+"flavor": "The jingle looped all afternoon until the outage mercifully cut the feed."
+},
+"pizza-for-the-secret-meeting": {
+"rules": "At any time: one Secret Group loses Secret status until the end of the turn.",
+"goal": "",
+"flavor": "Deliverer sees everything, remembers nothing, and never gets a decent tip."
+},
+"hubble-trouble": {
+"rules": "Freeze! Requires an Illuminati, Space or Science action. Until this turn ends, Space and Science Groups, Satellites, and the Orbital Mind Control Lasers may act only in their own defense — or, following one of their moves, that move is undone.",
+"goal": "",
+"flavor": "The telescope photographs perfectly clear skies right up until launch day, every time."
+},
+"sudden-european-vacation": {
+"rules": "At any time: move a Personality you control to another master in any Power Structure. Hostile Plots just played on it, Instants included, are cancelled, and it is immune to hostile Plots for the rest of the turn.",
+"goal": "",
+"flavor": "Gone by morning, and somehow the paperwork clears itself instantly."
+},
+"militia": {
+"rules": "A win it makes or helps make in an Attack to Destroy adds 1 to its printed Power; a loss there takes 1 away, down to a floor of 1.",
+"goal": "",
+"flavor": "Every drill photographs beautifully; every actual operation gets edited out entirely."
+},
+"frankenfood": {
+"rules": "Requires a Science action. Give a Place you control any alignment not opposite one it already has. Drop it whenever you like; a rival needs Science actions totaling 6 Power to remove it.",
+"goal": "",
+"flavor": "The tomatoes thrived in any climate, any soil, and most legal jurisdictions."
+},
+"they-may-be-pink": {
+"rules": "Whenever someone attacks a Straight Group, your Weird or SubGenius Groups are free to join its defense.",
+"goal": "",
+"flavor": "Even the normal ones get backup sometimes."
+},
+"watermelons": {
+"rules": "Blue NWO. Green Groups count as Communist and Communist Groups as Green. Or link it to a Green or Communist Group of yours, making it both for good; it then counts as an ordinary Plot.",
+"goal": "",
+"flavor": "Green outside, red inside, and the compost bin gets political."
+},
+"bobbies": {
+"rules": "When taken over, it hangs on any rival's open arrow, never counts for a Goal, and raises its owner's Basic Goal by one Group. Attacked successfully, it must be discarded or handed to a rival.",
+"goal": "",
+"flavor": "Every arrest photo looks exactly like the one before it."
+},
+"security-leak": {
+"rules": "Zap. Requires an Illuminati action. Played on a rival Illuminati: every Plot they draw from then on is revealed as it is drawn. Stays until removed.",
+"goal": "",
+"flavor": "Every card they draw might as well be read aloud."
+},
+"enough-is-enough": {
+"rules": "Your turn only, before drawing Plots: remove every Zap, Paralysis and Freeze from your Power Structure. You draw no Plot this turn.",
+"goal": "",
+"flavor": "Somebody finally said it out loud, and the meeting ended early for once."
+},
+"janor-device": {
+"rules": "Unique. Its holder may adjust any die roll they make by 1, up or down. Rolling a natural 11 or 12: if it's their turn, it ends at once; rivals then roll off, highest takes the Device.",
+"goal": "",
+"flavor": "Fortune loves it more than it will ever love you."
+},
+"overman": {
+"rules": "Not during an attack. Link to a Personality in play, controlled or not, who isn't already a False OverMan: Power and Global Power become 3.",
+"goal": "",
+"flavor": "Muscles first, wisdom optional, cape mandatory."
+},
+"rain-of-prairie-squid": {
+"rules": "Not during an attack. Shuffle the whole uncontrolled area into the Group deck and deal that many new cards there (in a mixed game, discard any number of your hand's Groups and draw as many).",
+"goal": "",
+"flavor": "Meteorology gave up explaining this years ago."
+},
+"every-year-is-worse": {
+"rules": "Paralysis on a Conservative Group: no tokens, ability, linked Resource use, new puppets or Goal credit, until it loses that alignment or its master or an Illuminati acts. Costs an Illuminati action, or Liberal actions worth its Resistance.",
+"goal": "",
+"flavor": "Each new session promised reform, then quietly reused last year's exact language."
+},
+"exorcism": {
+"rules": "Remove every Zap from one player, yourself or a rival. Costs the top card of your Plot or Group deck, discarded unseen.",
+"goal": "",
+"flavor": "The chanting worked eventually, mostly by boring the spirit into leaving."
+},
+"smite-them-all": {
+"rules": "Not during an attack; you need two or more Group cards in hand. Each rival sends one card from the uncontrolled area (their hand, in a mixed game) to the bottom of the Group deck, then you send two.",
+"goal": "",
+"flavor": "Judgment Day runs on a strict rotation."
+},
+"s-p-u-t-u-m": {
+"rules": "Triple Power in any attack on a Personality.",
+"goal": "",
+"flavor": "It logs off only to go reload."
+},
+"head-launching": {
+"rules": "Link to a Group, spending its action and discarding two other Plots: its Global Power becomes equal to its printed Power.",
+"goal": "",
+"flavor": "Communication improves dramatically once the head clears the atmosphere."
+},
+"x-ray-specs": {
+"rules": "Unique. Link to a Science Group: its action looks at the top three cards of one deck in play. A Weird Science Group may instead look at the top three of two decks, or the top six of one deck.",
+"goal": "",
+"flavor": "See straight through everyone's plans, except your own tailoring choices."
+},
+"false-overman": {
+"rules": "Not during an attack. Link to a Personality in play, controlled or not, who isn't already an OverMan: their Power becomes 3, and they gain Violent and Straight, losing Peaceful and Weird.",
+"goal": "",
+"flavor": "Buy the cape, skip the whole transformation."
+},
+"metric-system": {
+"rules": "Paralysis on a Corporate Group: no tokens, ability, linked Resource use, new puppets or Goal credit, until it loses that alignment or its master or an Illuminati acts. Costs an Illuminati action, or Government actions worth its Resistance.",
+"goal": "",
+"flavor": "Every measurement changed overnight; the invoices somehow stayed exactly the same."
+},
+"subgenius-fistemples": {
+"rules": "Every Group it controls, directly or through puppets, gets +5 Resistance.",
+"goal": "",
+"flavor": "Zoning laws have never once found them."
+},
+"three-fisted-tales-of-bob": {
+"rules": "Unique. Link to a SubGenius Place: it gets +2 Power, and Global Power equal to its new Power.",
+"goal": "",
+"flavor": "Every panel somehow ends with more questions."
+},
+"orgone-grinder": {
+"rules": "Unique. Link to a Personality you control: sets its Power to 6 and Resistance to 10, strips all alignments and attributes, and blocks any other card from adding new ones.",
+"goal": "",
+"flavor": "Charisma so total that opinions simply stop happening near him."
+},
+"backfire": {
+"rules": "Freeze! Requires an Illuminati or Magic action. Until the end of the turn, no Magic Group may spend Action tokens except to defend, or cancel one right after it acts.",
+"goal": "",
+"flavor": "Spells work exactly as intended, which is usually the whole problem."
+},
+"school-prayer": {
+"rules": "Freeze on Church, Liberal and Conservative Groups. Needs an Illuminati, Church, Liberal or Conservative action. None may spend Action tokens this turn except to defend. Or cancel a Church Group's action right after it happens.",
+"goal": "",
+"flavor": "Everyone bows their head; nobody agrees on why."
+},
+"whistle-blowers": {
+"rules": "Paralysis on a Government Group, costing an Illuminati action or Corporate actions equal to its Resistance: it cannot act, use abilities or Resources, or gain puppets, and doesn't count for Goals. Freed by losing Government or an action from its master or any Illuminati.",
+"goal": "",
+"flavor": "One leaked memo and the whole agency suddenly can't move."
+},
+"anarchists-unite": {
+"rules": "Zap! Requires an Illuminati action. Play on a rival Illuminati: no Group in their Power Structure may take over Government Groups. Stays until removed; any player may spend an Illuminati action to strip every Zap from one player.",
+"goal": "",
+"flavor": "No committee ever agreed on anything, which is precisely the point of the committee."
+},
+"dokstok": {
+"rules": "At token placement, its controller gets one extra token, which must first be given, traded to another player's Illuminati, or thrown away.",
+"goal": "",
+"flavor": "Free tickets for everyone; the shuttle bus never actually shows."
+},
+"glorps": {
+"rules": "Their Power doubles when they attack, or help attack, to destroy a SubGenius Group; it triples once you've exposed The Anti\"Bob\".",
+"goal": "",
+"flavor": "Slime finds its own level, usually upward."
+},
+"repent": {
+"rules": "Right after your token placement: your turn ends at once and your Illuminati gains one more token.",
+"goal": "",
+"flavor": "Guilt is optional; quitting early is not."
+},
+"go-fish": {
+"rules": "Name a Plot and a rival: they reveal hidden Plots, hand you every copy named, and discard two undrawn Plots each — or, lacking any, expose all your Plots instead. Recently targeted players are immune until their next turn ends.",
+"goal": "",
+"flavor": "Everyone swears their hand is clean right up until the cards hit the table."
+},
+"pave-the-earth": {
+"rules": "Freeze on Green. Requires an Illuminati or Green action. Until the end of the turn no Green Group may spend Action tokens except to defend. Or cancel a Green Group's action right after it happens.",
+"goal": "",
+"flavor": "The rally ends early: nobody could find parking for the bulldozers."
+},
+"let-the-sunshine-in": {
+"rules": "Freeze! Requires an Illuminati or Secret action. Until the end of the turn, no Secret Group may spend Action tokens except to defend, or cancel one right after it acts.",
+"goal": "",
+"flavor": "Every dossier gets aired eventually, usually at the worst possible moment."
+},
+"the-13th-apostle": {
+"rules": "Requires an Illuminati action. Give an Action token to one Personality, or to several totaling 5 Power or less. None may already hold a token or be barred from one.",
+"goal": "",
+"flavor": "Nobody quite remembers electing him, exactly."
+},
+"stark-fist-of-removal": {
+"rules": "Your turn only. Your Illuminati keeps only one Action token, and a rival's Illuminati loses all of theirs. Your turn ends at once.",
+"goal": "",
+"flavor": "Discipline arrives swinging and leaves no forwarding address."
+},
+"dittoheads": {
+"rules": "Only a Personality controls it, arrow or not, and never two. Its master gets +2 Power and triple Resistance. Unlimited copies may be in play, never an agents card; alignments are the master's plus Fanatic.",
+"goal": "",
+"flavor": "Every caller agreed completely, mega completely, with whatever aired moments earlier."
+},
+"killer-satellite": {
+"rules": "Cancels a Satellite Resource's or the Lasers' action. Discard it: a sure kill. Or roll: 1-3 kill target; 4 too, unless Lasers (then only this); 5 kills both; 6 only this. Or +5 attacking, or discard with token for +15 destroying, a Space Place.",
+"goal": "",
+"flavor": "One well-placed nudge sends an orbital budget line back to committee."
+},
+"mwowm": {
+"rules": "Whenever any Plot is discarded, spend its action and roll a die: on 3 or less, you take that Plot.",
+"goal": "",
+"flavor": "Nothing thrown away here stays thrown away."
+},
+"antitrust-legislation": {
+"rules": "Yellow NWO. Each player may reorganize: discard a Plot per Group moved, or 3 for a full reorg. A Corporate Group linked either way to another Corporate Group gets no Action token or ability use.",
+"goal": "",
+"flavor": "Regulators drew up the paperwork, then let every lobbyist help edit it."
+},
+"mediocretinism": {
+"rules": "A Group loses SubGenius until the end of the turn.",
+"goal": "",
+"flavor": "Genius is optional; mediocrity is mandatory today."
+},
+"excremeditation": {
+"rules": "Requires an Illuminati action. Give an Action token to one SubGenius Group, or to several totaling 5 Power or less. None may already hold a token or be barred from one.",
+"goal": "",
+"flavor": "Enlightenment arrives right on schedule, and so does everything else."
+},
+"near-miss": {
+"rules": "Play when a Place would be destroyed: it is only Devastated instead. Or remove Devastation from a Place. Two copies cannot fully cancel one destruction.",
+"goal": "",
+"flavor": "The building survived intact; the insurance adjuster somehow looked personally disappointed."
+},
+"dr-k-taden-legume": {
+"rules": "While he is yours and SubGenius, no attack of any kind may be made on your other SubGenius Personalities.",
+"goal": "",
+"flavor": "His sermons run long enough that assassins simply give up and leave."
+},
+"visualize-whirled-peas": {
+"rules": "Yellow NWO. Fanatic stops opposing Fanatic: every Fanatic Group now shares one identity. Any Fanatic Group without the Weird tag gains +2 Power.",
+"goal": "",
+"flavor": "Rival zealots link arms and forget what they were shouting about."
+},
+"blinded-by-science": {
+"rules": "Goal. Win by controlling at least 6 Science Groups totaling 30 or more Power. Combines with no other Goal.",
+"goal": "",
+"flavor": "Peer review was thorough; funding renewal made it thoroughly unnecessary."
+},
+"screaming-meme": {
+"rules": "Link to an Organization, never an Illuminati: it cannot be taken or moved, and the Organization cannot be destroyed by any means. Only one may exist; a new copy discards the old.",
+"goal": "",
+"flavor": "Once it gets stuck in your head, eviction is not an option."
+},
+"sacred-stencil": {
+"rules": "Unique. Against a rival's Attack to Destroy on any Group of yours, add +5 to your defense (in a mixed game, against Instant attacks too).",
+"goal": "",
+"flavor": "Sanctity, now available in spray-paint form."
+},
+"bar-codes": {
+"rules": "Requires a Computer Group's action. Look through a rival's Group deck for ten seconds without reordering or revealing it; the rival may then shuffle it.",
+"goal": "",
+"flavor": "Every purchase gets scanned twice; the second scan is just for curiosity."
+},
+"crackdown-on-crime": {
+"rules": "Paralysis on a Criminal Group: no tokens, ability, linked Resource use, new puppets or Goal credit, until it loses that alignment or its master or an Illuminati acts. Costs an Illuminati action, or Government actions worth its Resistance.",
+"goal": "",
+"flavor": "Photo ops multiplied while actual arrest numbers stayed remarkably, suspiciously flat."
+},
+"truck-bomb": {
+"rules": "Play when you attack to destroy an Organization, before anyone aids or opposes: it becomes an Instant attack, no action needed, made by one Violent Group with only your Illuminati helping, and no other bonuses.",
+"goal": "",
+"flavor": "Subtlety was never really on the shopping list."
+},
+"decency-is-ok": {
+"rules": "Shuts down an action a rival's Weird Group either took or helped with.",
+"goal": "",
+"flavor": "Somewhere, someone claps politely and calls it entertainment."
+},
+"shordurpersav": {
+"rules": "Requires an Illuminati action, or two SubGenius actions. Right after you roll: roll again.",
+"goal": "",
+"flavor": "Nobody agrees on the spelling, least of all its caster."
+},
+"sultan-of-slack": {
+"rules": "Not while a victory is contested. Until your next turn, nobody may win by their Illuminati's Special Goal unless they hold at least as many Action tokens as you. Once per game.",
+"goal": "",
+"flavor": "Everyone else's Slack gets measured against his own."
+},
+"random-jesii": {
+"rules": "Not during an attack. Requires a SubGenius or Church action. A rival exposes all but one of their Plot cards, their choice. Not against the Martyr Meter's holder.",
+"goal": "",
+"flavor": "Pick a savior, any savior, they're all on sale."
+},
+"church-of-middle-america": {
+"rules": "A SubGenius Group anywhere above it in the Power Structure gains +2 Power, and +2 more to its Global Power total when it prints any.",
+"goal": "",
+"flavor": "Every casserole recipe doubles as a loyalty oath."
+},
+"go-lemmings-go": {
+"rules": "When a rival discards cards from hand or deck to pay for a Plot or ability, they discard that many more of the same kind — two more if it was just one — from the same place, for no benefit.",
+"goal": "",
+"flavor": "One tumbles, then several dozen colleagues follow with startling enthusiasm and zero hesitation."
+},
+"general-disorder": {
+"rules": "Spend his action for +10 to a Disaster, capped at Devastation. If removed, he returns at turn's end (unless someone's won) to his last master's open arrow or to hand, keeping linked Plots; puppets return to hand.",
+"goal": "",
+"flavor": "He keeps coming back to the meeting, no matter how firmly asked otherwise."
+},
+"arms-dealers": {
+"rules": "Spend its action, any time: trade any number of your Plots for as many of a rival's exposed Plots. Choose which received ones stay exposed; the rest are hidden. Given Plots keep prior state.",
+"goal": "",
+"flavor": "Inventory rotates fast; today's embargo is tomorrow's closeout sale."
+},
+"alien-abduction": {
+"rules": "Play on a Personality: until end of turn it has no alignments and gains none. Or, outside an attack, spend a UFOs or Space Group action to move a Personality from hand or unclaimed into your Power Structure, no roll.",
+"goal": "",
+"flavor": "The neighbors always figured the flying saucer story explained the sudden career change."
+},
+"no-beer": {
+"rules": "Disaster. Instant Attack to Destroy any Place. Power 16; 24 against Australia, Germany or Texas; 8 against France or Italy. The Liquor Companies may spend their action to halve or double it. Only Devastates, never destroys.",
+"goal": "",
+"flavor": "Continents run dry, tempers run hot, treaties get renegotiated by furious mobs."
+},
+"australia": {
+"rules": "While controlled, its printed Resistance counts double — quadruple on weekends, local holidays or after 5pm. It gets +10 against Attacks to Destroy; the controller's other Organizations get +4 against Attacks to Destroy.",
+"goal": "",
+"flavor": "Everything down under runs on schedules nobody outside the office ever sees."
+},
+"reverend-ivan-stang": {
+"rules": "At any time, he may give his Action token to another SubGenius Group with none.",
+"goal": "",
+"flavor": "He keeps everyone else's schedule, never his own."
+},
+"may-day": {
+"rules": "Requires an Illuminati action, any time: give an Action token to one Communist Group, or to several Communist Groups totaling 5 Power or less. Not for Groups already holding a token or barred from tokens.",
+"goal": "",
+"flavor": "The parade route somehow passes every factory that's behind on its quota."
+},
+"illuminati-university": {
+"rules": "Each turn's end, discard a Plot or Group from hand or deck top, or discard it and return its puppets to hand. It, its master and puppets are immune to Disasters, Straight and Government Groups.",
+"goal": "",
+"flavor": "Tuition comes due every semester, payable strictly in secrets, never in cash."
+},
+"my-karma-ran-over-your-dogma": {
+"rules": "Zap! Requires an Illuminati action. Play on a rival Illuminati: no Group in their Power Structure may take over Straight Groups. Stays until removed; any player may spend an Illuminati action to strip every Zap from one player.",
+"goal": "",
+"flavor": "Whatever goes around eventually comes back around, usually wearing a name tag."
+},
+"lenin-s-body": {
+"rules": "Unique. Link to any Group for +5 on its direct Attacks to Control Communist Groups. A Communist Group linked to it has Global Power equal to its Power.",
+"goal": "",
+"flavor": "The exhibit stays remarkably well-preserved, drawing crowds long after the ideology retired."
+},
+"citizens-for-normalcy": {
+"rules": "Immune to direct control attacks, automatic takeover, or being moved under the Church of the SubGenius, Discordian Society, or a Weird or SubGenius Group. Spend its token plus an Illuminati token: cancel any Plot.",
+"goal": "",
+"flavor": "Even the weirdest cults agree: leave the normal ones alone."
+},
+"partition": {
+"rules": "On your turn, with a Huge Place in play: bring a duplicate from hand by automatic takeover, or by attacking to control it. It splits into two non-Huge Places at half Power (rounded up), +10 attacking each other. Reunite once you hold both.",
+"goal": "",
+"flavor": "Two capitals, one grudge, and a border nobody agreed to draw."
+},
+"church-of-violentology": {
+"rules": "Destroying it earns each attacker's controller a Plot. If the attack fails, its controller draws a Plot per attacker, and the weakest attacking Group — never an Illuminati, random on ties — is destroyed, credited to it.",
+"goal": "",
+"flavor": "Membership dues cover the pews, the pamphlets, and remarkably the ammunition."
+},
+"epa": {
+"rules": "While it holds a token, the Nuclear Power Companies lose access to their special ability.",
+"goal": "",
+"flavor": "Every permit gets stamped eventually, usually well after the spill dries up."
+},
+"junk-bonds": {
+"rules": "Freeze! Requires an Illuminati or Bank action. Until the end of the turn, no Bank Group may spend Action tokens except to defend, or cancel one right after it acts.",
+"goal": "",
+"flavor": "The rating stayed triple-A right up until the vault turned out empty."
+},
+"dallas-catacombs": {
+"rules": "Your Groups may hang or switch to any side of their master anytime, arrows or not, but never more puppets than outgoing arrows. Lose the Catacombs and it all moves back onto real arrows; the overflow is discarded.",
+"goal": "",
+"flavor": "No map survives long enough to reach the far end."
+},
+"vladimir-zhirinovsky": {
+"rules": "+10 on his direct attempts to control Russia; +5 on his direct attempts to control any other Communist Group.",
+"goal": "",
+"flavor": "His threats get wilder every year; the polling numbers barely move."
+},
+"overman-philo-drummond": {
+"rules": "His Weird puppets are SubGenius. The OverMan and False OverMan Plots cannot affect him.",
+"goal": "",
+"flavor": "He already outgrew that ridiculous costume."
+},
+"the-prescriptures": {
+"rules": "Unique. Once each of your turns, spend your Illuminati's action, or the actions of all your Personalities (at least one): look at the top three cards of two decks, or a rival's Plots.",
+"goal": "",
+"flavor": "Every prophecy checks out, after the fact."
+},
+"shock-jocks": {
+"rules": "Leading an Attack to Control a Straight Group, it fights as Straight instead of Weird. It and its controller can step into either side of any fight touching a Straight Group.",
+"goal": "",
+"flavor": "Outrage is the format; ratings are the religion; everyone tunes back in."
+},
+"this-was-only-a-test": {
+"rules": "When a rival announces a Disaster: it is stopped, returned to their hand exposed, and unusable until the end of their next turn.",
+"goal": "",
+"flavor": "The alarm was real; the emergency, mercifully, was not."
+},
+"fake-healing": {
+"rules": "Your turn only. Pick a Group in the uncontrolled area or your hand: its Resistance drops to 0 until the turn ends.",
+"goal": "",
+"flavor": "The cure works every single time nobody checks twice."
+},
+"s-c-a-m": {
+"rules": "Requires a Personality's action. Right after a rival makes any die roll: void it, and roll again.",
+"goal": "",
+"flavor": "Every con needs a second opinion, preferably rigged."
+},
+"xists": {
+"rules": "Cannot really be controlled. When destroyed, it goes to the uncontrolled area (its destroyer's hand, in a mixed game) instead of the discard pile, and never counts as destroyed for other cards.",
+"goal": "",
+"flavor": "Nobody has ever actually seen one leave."
+},
+"swingers": {
+"rules": "Gets +1 Power for every other Liberal Group you control.",
+"goal": "",
+"flavor": "Monogamy was tried once; the turnout was disappointing."
+},
+"comet-hail-bob": {
+"rules": "Right after a rival brings a Group into their Power Structure from hand or the uncontrolled area, however they managed it: it is destroyed, not counting for any Goal. Costs an Illuminati action, or two Church Group actions. Once per player per game.",
+"goal": "",
+"flavor": "The sign in the sky was clear; the RSVP was not optional."
+},
+"society-of-assassins": {
+"rules": "Each Fanatic Group you control has Global Power equal to its Power. Whenever one squares off in combat against a rival's Fanatic Group, you may make the two share one Fanatic alignment for that fight instead of opposing. Defending an Attack to Control, a Fanatic Group may instead share its master's Fanatic alignment.",
+"goal": "Special Goal: each Secret Group you control counts as two Groups toward your Basic Goal, unless a rival controls a stronger Secret Group.",
+"flavor": "Everyone converts eventually; the paperwork just takes longer for some."
+},
+"contract-on-america": {
+"rules": "Paralysis on a Liberal Group: no tokens, ability, linked Resource use, new puppets or Goal credit, until it loses that alignment or its master or an Illuminati acts. Costs an Illuminati action, or Conservative actions worth its Resistance.",
+"goal": "",
+"flavor": "Every promise got signed, framed, and quietly filed under someone else's budget."
+},
+"al-amarja": {
+"rules": "Its controller ignores the I Lied card. When a Disaster hits Al Amarja, its controller or a puppet, the controller may discard undrawn Plots before the roll for +4 defense each.",
+"goal": "",
+"flavor": "Nobody remembers arriving; nobody plans on leaving; the paperwork insists otherwise."
+},
+"the-green-party": {
+"rules": "Fighting to seize another Green Group, add +4. Every other Green Group you already hold gains +1 Power.",
+"goal": "",
+"flavor": "Membership drives triple whenever a species makes the news."
+},
+"tape-runs-out": {
+"rules": "Requires an Illuminati action, or discarding three other Plots. Right after any Plot is played: cancel it, and discard both cards.",
+"goal": "",
+"flavor": "The revelation always cuts off at the good part."
+},
+"kill-bob": {
+"rules": "During an Attack to Destroy a SubGenius Group, right after the roll: if it succeeds, everyone attacking gets an Illuminati token. If the target was yours, you get one regardless. Once per turn.",
+"goal": "",
+"flavor": "Martyrdom pays dividends whichever way the dice land."
+},
+"bait-and-switch": {
+"rules": "Zap! Requires an Illuminati action. Play on a rival Illuminati: no Group in their Power Structure may take over Corporate Groups. Stays until removed; any player may spend an Illuminati action to strip every Zap from one player.",
+"goal": "",
+"flavor": "The listed price vanished the instant anyone actually tried to pay it."
+},
+"science-alarmists": {
+"rules": "As long as you hold them, a rival needs your consent before automatically seizing a Science or Green Group.",
+"goal": "",
+"flavor": "Every study ends the same way: send money, panic responsibly."
+},
+"grave-robbers": {
+"rules": "Whenever you may take over a Resource, search your Group deck for 30 seconds for an Artifact and put it into play with all its tokens. A Magic Artifact instead needs Magic actions totaling 6 Power.",
+"goal": "",
+"flavor": "The shovel work is unglamorous, but the estate sale afterward pays remarkably well."
+},
+"the-big-prawn": {
+"rules": "Unique. Link for good to a Coastal Place: doubles its Power. As you link it, add, remove or reverse one alignment for good. Destroying the Prawn Devastates the Place; the Prawn is destroyed if the Place is destroyed or Devastated.",
+"goal": "",
+"flavor": "Tourists photograph a giant crustacean and never ask why the tide is angry."
+},
+"lab-explosion": {
+"rules": "Zap! Requires an Illuminati action. Play on a rival Illuminati: they can take over no more Resources. Stays until removed; any player may spend an Illuminati action to strip every Zap from one player.",
+"goal": "",
+"flavor": "The safety inspection was thorough right up until the actual incident occurred."
+},
+"phlegm-elementals": {
+"rules": "When they join an attack, once the dice are rolled the target skips its next token placement.",
+"goal": "",
+"flavor": "They leave a residue nobody wants to name."
+},
+"supreme-court-nomination": {
+"rules": "Attack to Destroy any Personality, no action needed, Power 15, never Instant or Privileged. Anyone may aid either side, Republicans, Democrats and Media double. Success destroys, not kills; failure makes the target Chief Justice, Power 4, Government not Corporate, unique.",
+"goal": "",
+"flavor": "One seat, one robe, and suddenly everybody loves the Constitution again."
+},
+"lama-ramadingdong": {
+"rules": "Counts +1 Power per additional Green Group sharing the board, and may leap into defense of a Green Group anytime, spending no action.",
+"goal": "",
+"flavor": "Every rally gets a little louder once the whole choir shows up."
+},
+"death-to-all-fanatics": {
+"rules": "Paralysis on a Fanatic Group: no tokens, ability, linked Resource use, new puppets or Goal credit, until it loses that alignment or its master or an Illuminati acts. Costs an Illuminati action, or Fanatic actions worth its Resistance.",
+"goal": "",
+"flavor": "Zealots make excellent recruiters against rival zealots, oddly enough, every time."
+},
+"oil-spill": {
+"rules": "Disaster. Instant Attack to Destroy a Coastal Place: Power 14 vs Huge, 18 otherwise. Success Devastates; margin over 6 destroys it, giving every Green Group an extra token, once per player. Or +10 vs OPEC or the Multinational Oil Companies.",
+"goal": "",
+"flavor": "Cleanup costs less than the ad campaign about how sorry everyone is."
+},
+"nhgh": {
+"rules": "Cannot be destroyed; only a player who exposed The Anti\"Bob\" may control it. Uncontrolled, its 5 Power aids Attacks to Destroy; or play it as a +5 Plot on one, whose controller takes it.",
+"goal": "",
+"flavor": "It answers to nothing, especially its own name."
+},
+"devival": {
+"rules": "Give +10 Power or Resistance to a SubGenius Group you control. With an action: play it when declared, for that action only. On defense: lasts until the end of the turn, not for Goals. One per action or defense.",
+"goal": "",
+"flavor": "Converts stumble out changed, mostly by the free snacks."
+},
+"church-of-the-subgenius": {
+"rules": "Keeps its Action tokens from turn to turn as Slack, spending only one per action. It and your SubGenius Groups get +2 on direct Attacks to Control SubGenius Groups.",
+"goal": "Special Goal: as many as 3 Slack tokens sitting on this card stand in for Groups toward your Basic Goal, and no other Goal may ride alongside it.",
+"flavor": "Ordination is instant; enlightenment, as always, remains on backorder."
+},
+"miraculous-manifestation": {
+"rules": "Every player draws a Group into the uncontrolled area (in a mixed game, into hand, shown to you).",
+"goal": "",
+"flavor": "Prophecy appears wherever people are already staring."
+},
+"speakers-in-tongues": {
+"rules": "+3 on any attempt to control a Church Group.",
+"goal": "",
+"flavor": "Translation services are extra, and unreliable."
+},
+"attitude-mutation": {
+"rules": "At any time: add, remove or reverse one alignment of a Group you control, until the end of the turn. Free for a Group your Illuminati controls directly; otherwise it costs its master's action. One per turn.",
+"goal": "",
+"flavor": "Yesterday's dogma becomes today's punchline becomes tomorrow's dogma again."
+},
+"www-subgenius-com": {
+"rules": "At the start of each of your turns, draw an extra Group into the uncontrolled area (in a mixed game, spend its action any time to draw one).",
+"goal": "",
+"flavor": "Pop-ups promised salvation; most delivered spyware."
+},
+"divine-mail-order": {
+"rules": "Its action alone nets a Plot; paired with an Illuminati action, it nets three instead.",
+"goal": "",
+"flavor": "Every catalog promises salvation; shipping and handling are extra."
+},
+"sufficiently-advanced-technology": {
+"rules": "Bond it to a Science Group of yours: Magic applies too, for as long as Science stays true. Bond it instead to a Magic Group, and Science follows the same way while Magic holds.",
+"goal": "",
+"flavor": "Nobody can tell the ritual from the reboot anymore."
+},
+"connie-dobbs": {
+"rules": "As long as she carries both Straight and SubGenius, destruction cannot touch her or anything beneath her.",
+"goal": "",
+"flavor": "Every appliance in her house works flawlessly, out of sheer respect."
+},
+"witch-hunt": {
+"rules": "Illuminati action, at any time: give an Action token to one Church Group, or several whose Power totals 5 or less. Not for a Group already holding a token or barred from getting one.",
+"goal": "",
+"flavor": "The accusation writes itself; the trial is mostly theater."
+},
+"official-all-inclusive-divine-excuse": {
+"rules": "Before the roll, when a Personality is attacked: the attack fails.",
+"goal": "",
+"flavor": "Every excuse arrives pre-approved, notarized, and free."
+},
+"corrective-phrenologists": {
+"rules": "Fighting alongside or against a rival's Violent Group, the moment dice land they gain a fresh Action token.",
+"goal": "",
+"flavor": "Every skull bump gets measured, mapped, and cheerfully misdiagnosed."
+},
+"sorry-wrong-number": {
+"rules": "Zap. Requires an Illuminati action. Played on a rival Illuminati: their Power Structure loses its defense bonus for closeness to the Illuminati. Stays until removed.",
+"goal": "",
+"flavor": "Being near the top stops meaning anything, defensively speaking."
+},
+"the-hour-of-slack": {
+"rules": "Whenever a rival attacks a Group in your Power Structure, draw a Plot.",
+"goal": "",
+"flavor": "Reception is spotty; enlightenment airs anyway."
+},
+"fickle-finger-of-fate": {
+"rules": "Zap! Requires an Illuminati action. Play on a rival Illuminati: they lose the takeover but, once a turn, may add +10 when their Illuminati leads an attack. Not in two-player games. Stays until removed; an Illuminati action strips all Zaps from one player.",
+"goal": "",
+"flavor": "Luck favored the house right up until someone actually started counting cards."
+},
+"dobbstown": {
+"rules": "Adds +5 whenever someone tries to seize a SubGenius Personality.",
+"goal": "",
+"flavor": "Paradise has a gate, a guard, and a strict dress code."
+},
+"13013": {
+"rules": "At any time: link to a SubGenius Group you control, raising its Power to 6. Counts as that Group's action. Only one may be in play per player.",
+"goal": "",
+"flavor": "Stare at the number long enough and the rent still isn't paid."
+},
+"bulldada": {
+"rules": "Right after any die roll: that roll becomes a 12. Costs three other Plot discards.",
+"goal": "",
+"flavor": "Nonsense wins arguments nobody was actually having in the first place."
+},
+"spy-satellite": {
+"rules": "Its action, at any time: look at three random Groups from a rival's hand, show them if you wish, then return them. Or expose one random Plot from a rival's hand instead.",
+"goal": "",
+"flavor": "Whatever's up there sees everything and mostly finds it boring."
+},
+"chain-letter": {
+"rules": "Paralysis on a Straight Group: no tokens, ability, linked Resource use, new puppets or Goal credit, until it loses that alignment or its master or an Illuminati acts. Costs an Illuminati action, or Weird actions worth its Resistance.",
+"goal": "",
+"flavor": "Break the sequence and expect seven years of extremely specific bad luck."
+},
+"rogue-subgenii": {
+"rules": "Whenever they have no Action token, discard a Plot to give them one. Once per turn.",
+"goal": "",
+"flavor": "Loyalty is negotiable; the getaway car isn't."
+},
+"drug-companies": {
+"rules": "May attack any Group in play as an Attack to Control, at +10. If it succeeds, the target permanently loses one alignment, attacker's choice.",
+"goal": "",
+"flavor": "One bad side effect birthed an entirely new, more profitable disease category."
+},
+"s-l-a-k": {
+"rules": "Gets an Action token at each rival's token placement, if it has none.",
+"goal": "",
+"flavor": "It never sleeps, mostly because it's furious."
+},
+"cease-fire": {
+"rules": "When two or more players are Zapped, remove every Zap in play. Costs the top card of your Plot or Group deck, discarded unseen.",
+"goal": "",
+"flavor": "Both sides agreed to stop, mostly because reloading had gotten expensive."
+},
+"sacred-jests": {
+"rules": "A rival picks one of their Plot cards at random: they must play it at once, or discard it. A Goal picked is shown instead.",
+"goal": "",
+"flavor": "Comedy works best when nobody consented to the punchline."
+},
+"don-t-rock-the-boat": {
+"rules": "Zap! Requires an Illuminati action. Play on a rival Illuminati: no Group in their Power Structure may take over Fanatic Groups. Stays until removed; any player may spend an Illuminati action to strip every Zap from one player.",
+"goal": "",
+"flavor": "Every congregation stayed remarkably calm right up until the collection plate emptied."
+},
+"regi-tered-trademark": {
+"rules": "Link for good to a Group. Everyone must use its full printed name; a slip costs a Plot, from hand or deck. If the controller slips and a rival catches it, the controller hands over their top Plot.",
+"goal": "",
+"flavor": "Say it wrong twice and the lawyers start returning your calls."
+},
+"anything-worth-doing-is-worth-overdoing": {
+"rules": "Zap! Requires an Illuminati action. Play on a rival Illuminati: no Group in their Power Structure may take over Conservative Groups. Stays until removed; any player may spend an Illuminati action to strip every Zap from one player.",
+"goal": "",
+"flavor": "One more escalation always seemed reasonable, and then there were several more."
+},
+"the-true-pipe": {
+"rules": "Unique. Your Illuminati gets +2 Power and +2 Global Power. Does not stack with another Resource that raises your Illuminati's Power.",
+"goal": "",
+"flavor": "It smokes back, occasionally, and always wins the argument."
+},
+"spontaneous-combustion": {
+"rules": "Assassination. Instant Attack to kill any Personality, no action needed. Power 10, 15 against a Magic Personality. One Magic Group may spend its action to add its own Power.",
+"goal": "",
+"flavor": "No arsonist, no motive, just an unlucky arrangement of static electricity."
+},
+"the-irish-flu": {
+"rules": "Put on a Personality: it loses this turn's Action token. Killing it cures the Flu; otherwise it grows immune next turn and passes to a Personality not yet immune. Discarded once nobody can catch it. Center for Disease Control shields its Power Structure.",
+"goal": "",
+"flavor": "Every immune survivor still avoids Personality parties for years afterward."
+},
+"nental-ife": {
+"rules": "Link to a SubGenius Personality, spending their action: their Global Power becomes equal to their printed Power.",
+"goal": "",
+"flavor": "Most of it just sits there, unbothered."
+},
+"or-kill-me": {
+"rules": "When your Illuminati holds no Slack, pick a rival who does: they give your Illuminati one token, or discard a Group from their Power Structure. For the rest of the turn you may only defend.",
+"goal": "",
+"flavor": "Negotiation, SubGenius style: threaten yourself first."
+},
+"robo-bob": {
+"rules": "Your turn only, using its action: link permanently to a SubGenius Place you control. Nobody else may ever control it, and it gets +5 against any attempt to destroy it. One per player.",
+"goal": "",
+"flavor": "Its patience outlasts every prayer aimed at it."
+},
+"dolphins": {
+"rules": "Requires an Illuminati action, any time: give an Action token to one Green Group, or to several Green Groups totaling 5 Power or less. Not for Groups already holding a token or barred from tokens.",
+"goal": "",
+"flavor": "Nobody asks how the pod always knows exactly where the yacht anchors."
+},
+"defection": {
+"rules": "Requires a Nation's action. Search your Group deck for a non-Unique Gadget, or a Clipper Chip, that copies a Resource a rival controls, and put it into play with all its tokens.",
+"goal": "",
+"flavor": "Loyalty transfers overnight once the other side's budget looks more attractive."
+},
+"supernova": {
+"rules": "On your turn: for each Space action you spend (up to two), take a Gadget Resource into play at once. A Resource with actions arrives with all its tokens.",
+"goal": "",
+"flavor": "The sky lights up and every budget committee suddenly finds funding."
+},
+"apathy": {
+"rules": "Red NWO. No Group may lend support to another Group's attack.",
+"goal": "",
+"flavor": "Everyone stood by, arms folded, applauding from a safe distance."
+},
+"beach-party": {
+"rules": "Any time: give a Devastated Coastal Place Relief and an Action token at once. Stays linked to that Place, adding +5 against later Disasters.",
+"goal": "",
+"flavor": "Nothing rebuilds morale like free drinks handed out on the rubble."
+},
+"cast-out-false-prophets": {
+"rules": "Eliminate a same-Illuminati rival by taking their last Group. Or play as a regular Plot instead: +10 wrecking the False Prophets, one of their puppets, or their master, unless the Illuminati holds them directly.",
+"goal": "",
+"flavor": "Heresy is just orthodoxy that forgot to check in first."
+},
+"schizm": {
+"rules": "Declared with a non-Instant attack on a rival's Group: +10, overriding any immunity to control or destruction. On success, the target and its puppets go uncontrolled instead of captured or destroyed (mixed game: target discarded, puppets to owners' hands).",
+"goal": "",
+"flavor": "Every congregation eventually forks over the smallest slight."
+},
+"crusade": {
+"rules": "Gives a Church Group you control +10 Power or Resistance. Played with an action, when declared, it lasts for that action only. Played on defense, it lasts until end of turn, for defense only, and never counts for Goals.",
+"goal": "",
+"flavor": "The banners cost more than the actual campaign, but morale needed banners."
+},
+"recycling-centers": {
+"rules": "Spend its action, at any time: return a Group or Gadget Resource discarded this turn to its owner's hand. Whoever claims a discard first gets it.",
+"goal": "",
+"flavor": "One player's cast-off conspiracy is another's Tuesday afternoon pickup."
+},
+"jesus-b": {
+"rules": "Once per game while you control him: mail a real dollar to the SubGenius Foundation for one Slack token.",
+"goal": "",
+"flavor": "Postage included, salvation sold quite separately."
+},
+"eternal-salvation-or-triple-your-money-back": {
+"rules": "Requires a SubGenius Group's action. Once per game: draw Plot cards until you hold five.",
+"goal": "",
+"flavor": "Refunds are processed the instant the world fails to end."
+},
+"state-lotteries": {
+"rules": "Spend its action, at any time: shuffle all your Group cards or all your Plots in hand back into that deck, then draw one fewer.",
+"goal": "",
+"flavor": "The odds are terrible and the state prints them anyway, cheerfully."
+},
+"local-clenches": {
+"rules": "Its master gets an extra Action token each turn while it is SubGenius.",
+"goal": "",
+"flavor": "Every chapter meets, mostly to argue about snacks."
+},
+"secret-master": {
+"rules": "Link to a Personality your Illuminati controls directly. It can never be captured, and can be destroyed only by an Assassination or another Illuminati's direct attack, at +20 against Assassination. It loses all alignments and attributes.",
+"goal": "",
+"flavor": "Nobody elected them, nobody photographs them, everybody somehow obeys them."
+},
+"back-to-the-drawing-board": {
+"rules": "Zap! Requires an Illuminati action. Play on a rival Illuminati: whenever they would draw a Group card, they draw a Plot card instead. Stays until removed; any player may spend an Illuminati action to strip every Zap from one player.",
+"goal": "",
+"flavor": "Every want-ad promised a fresh hire; every envelope held another eviction notice."
+},
+"league-for-obvious-decency": {
+"rules": "Its action lets you send up to two exposed Plot cards back atop their owners' Plot decks.",
+"goal": "",
+"flavor": "Modesty, they insist, starts with everyone else."
+},
+"global-warming": {
+"rules": "Blue NWO. Coastal Places get -2 Power, never below 1. Every other Place except Space Places becomes Coastal. Green Groups get +2 Power.",
+"goal": "",
+"flavor": "The coastline moved inland this year, and real estate followed enthusiastically."
+},
+"anti-slack": {
+"rules": "At any time, on a rival whose Illuminati holds two or more Action tokens: remove one. Only one such strike lands on any single player each turn.",
+"goal": "",
+"flavor": "Nothing kills momentum like a well-timed guilt trip."
+},
+"the-anti-bob": {
+"rules": "Goal. Control 6+ SubGenius Groups and have destroyed 2+ rivals' SubGenius or Weird Groups. Expose it yourself once for one extra Illuminati token; it then can never be hidden or discarded.",
+"goal": "",
+"flavor": "Nobody elected him, and nobody can unelect him either."
+},
+"false-prophets": {
+"rules": "Add +4 when you attack a rival's Church Group, to control or destroy it.",
+"goal": "",
+"flavor": "Every scripture they sell comes bundled with a coupon."
+},
+"nutrition-nazis": {
+"rules": "Any Science Group may join either side of an attack involving them, regardless of alignment. Once per game, play from hand as a Plot instead: link it to a Group, which becomes Science for good.",
+"goal": "",
+"flavor": "They weigh your lunch, judge your soul, and bill the insurance twice."
+},
+"newt-gingrich": {
+"rules": "While he is in any Power Structure, every Attack to Destroy a Liberal Group gets +3. His own direct attacks to destroy Liberal Groups get +5 more.",
+"goal": "",
+"flavor": "Every proposal comes wrapped in a grand historical analogy, usually inaccurate."
+},
+"power-satellite": {
+"rules": "Link to a Space Place or a Nation: +2 Power and +5 to all its defenses, Disasters included. Only the first copy linked to a Place counts.",
+"goal": "",
+"flavor": "Orbit hums quietly, watching the ground argue about whose flag that is."
+},
+"flesh-eating-bacteria": {
+"rules": "Disaster! Attacks to Destroy any Place, no action, not Instant: Power 20. Science Groups may help defend; CDC helps at triple Power. Success Devastates it; beating the roll by 8+ destroys it, and a Science action returns it to hand.",
+"goal": "",
+"flavor": "Hand sanitizer sold out within the hour; hand-wringing sold out shortly after."
+},
+"slackfusion": {
+"rules": "For the rest of the turn, Illuminati Action tokens may be given or traded in deals, Illuminati to Illuminati only.",
+"goal": "",
+"flavor": "Reaction achieved; containment remains theoretical, mostly."
+},
+"luck-plane": {
+"rules": "Right after any die roll: it becomes a 2. An attack too weak to roll still fails outright. Discard three other Plots to play this.",
+"goal": "",
+"flavor": "Turbulence is guaranteed; a safe landing is not."
+},
+"the-world-ends-tomorrow-and-you-may-die": {
+"rules": "Declared with an attack on a Group in the uncontrolled area (hand, in a mixed game): the attacker spends its token and must share an alignment with the target, or be Media. The attack succeeds at once; your turn ends.",
+"goal": "",
+"flavor": "The end keeps a very flexible schedule."
+},
+"take-the-money-and-run": {
+"rules": "Zap. Requires an Illuminati action. Played on a rival Illuminati: no Group in that Power Structure may take over Criminal Groups. Stays until removed.",
+"goal": "",
+"flavor": "The getaway car is idling; the alibi was rehearsed last week."
+},
+"yacatisma": {
+"rules": "Not during an attack. Requires a SubGenius action. Discard two of a rival's hidden Plots, chosen at random.",
+"goal": "",
+"flavor": "Their exhaust alone reroutes rush hour traffic."
+},
+"brushfire-war": {
+"rules": "Zap! Requires an Illuminati action. Play on a rival Illuminati: no Group in their Power Structure may take over Peaceful Groups. Stays until removed; any player may spend an Illuminati action to strip every Zap from one player.",
+"goal": "",
+"flavor": "Small skirmishes kept escalating just enough to justify the next budget request."
 }
 }
