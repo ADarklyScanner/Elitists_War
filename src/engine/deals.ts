@@ -27,6 +27,7 @@ import { cardName, def } from './cards';
 import { openArrows, subtree } from './geometry';
 import { registerPlots } from './plotTypes';
 import { activePlayer, canExpose, isPrivileged, livePlayers, log, moveSubtree, player, tokenBarred } from './game';
+import { anyHook } from './hooks';
 
 export const I_LIED = 'i-lied';
 /** Open offers one player may have at a time. */
@@ -231,13 +232,17 @@ function logHandover(s: GameState, giver: string, receiver: string, side: DealSi
 
 // ---------------------------------------------------------------- I Lied
 
-/** Why this player cannot play I Lied on a deal right now (null if he can). */
-export function lieProblem(s: GameState, pl: string, card: string): string | null {
+/**
+ * Why this player cannot play I Lied on a deal right now (null if he can). `victim` is the party who
+ * would be cheated (the other side of the deal): a card in play may make him immune (Al Amarja).
+ */
+export function lieProblem(s: GameState, pl: string, card: string, victim?: string): string | null {
   const c = s.cards[card];
   if (!c || c.cardId !== I_LIED || !player(s, pl).hand.includes(card)) return 'Choose an I Lied card from your hand.';
   if (s.attack) return 'I Lied cannot be played while an attack is under way; agree to the deal once the attack is over.';
   if (s.prompt || (s.window && s.window.kind !== 'event' && s.window.kind !== 'endOfTurn')) return 'I Lied cannot be played while another card is being resolved.';
   if (activePlayer(s).id === pl && (s.turnFlags.extraTurn || s.turnFlags.restricted)) return 'You may play no Plots this turn.';
+  if (victim && anyHook(s, (h, self) => !!h.immuneToLie?.(s, self, victim))) return `${player(s, victim).name} cannot be cheated by I Lied.`;
   return null;
 }
 
@@ -247,7 +252,7 @@ function nextLie(s: GameState, w: DealWait) {
   const l = w.lies.find((x) => x.state === 'waiting');
   if (!l) { s.dealWaits = (s.dealWaits ?? []).filter((x) => x !== w); return; }
   const other = l.player === w.deal.from ? w.deal.to : w.deal.from;
-  const err = lieProblem(s, l.player, l.card);
+  const err = lieProblem(s, l.player, l.card, other);
   if (err || player(s, l.player).eliminated) {
     // The card is gone or cannot be played now: the liar is bound by the deal after all.
     l.state = 'cancelled';
@@ -431,7 +436,7 @@ function accept(s: GameState, pl: string, d: Deal, a: Extract<Action, { type: 'r
   deliver(probe, d.from, d.to, give, true);
   deliver(probe, d.to, d.from, get, true);
   if (a.lie) {
-    const e = lieProblem(s, pl, a.lie);
+    const e = lieProblem(s, pl, a.lie, d.from);
     if (e) throw new RuleError(e);
   }
   const lies: DealWait['lies'] = [];

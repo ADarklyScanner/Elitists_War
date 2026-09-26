@@ -58,6 +58,12 @@ export interface PlotHandler {
    */
   joinRule?: (s: GameState, ctx: AttackCtx, group: string, as: 'aid' | 'oppose') => boolean | undefined;
   joinMultiplier?: (s: GameState, ctx: AttackCtx, group: string) => number;
+  /**
+   * A Disaster that succeeds (Devastates or destroys its target) may react right after, before the
+   * generic end-of-attack discard (Flesh-Eating Bacteria: a Science action returns the card to its
+   * player's hand instead of it being discarded; Oil Spill: every Green Group gets an extra token).
+   */
+  onDisasterSuccess?: (s: GameState, ctx: AttackCtx, destroyed: boolean) => void;
   /** Short hint for the UI about what the play needs (target, mode, payWith). */
   needs?: {
     /** What `play.target` is: a Group in play, a Resource, a card in your hand, a destroyed Group, a card

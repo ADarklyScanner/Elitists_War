@@ -66,6 +66,14 @@ export interface CardHooks {
   hasAction?: boolean;
   /** Resource: which Groups it may be linked to (Illuminati always allowed). */
   linkTo?: (s: GameState, self: string, group: string) => boolean;
+  /**
+   * Resource: is it still legal linked to `group` right now (not just when first linked)? Checked after
+   * every action (syncConditions), like a Plot's linkLegal; false discards it (Black Helicopters: the
+   * Group it is linked to stops being Secret or Government).
+   */
+  linkStillLegal?: (s: GameState, self: string, group: string) => boolean;
+  /** Resource: unlike every other Resource, it may never be linked to (or left unlinked on) an Illuminati (Screaming Meme). */
+  forbidIlluminatiLink?: boolean;
   /** Duplicates (agents) of the controller's Groups give no bonus (Xanadu). */
   cancelAgents?: (s: GameState, self: string) => boolean;
   // ---- constant effects (self = the card providing the effect, iid = the card being measured)
@@ -188,6 +196,8 @@ export interface CardHooks {
    * hooks are still active) and this runs once, from the destroyed pile, if the game is still going.
    */
   delayedRevive?: (s: GameState, self: string) => void;
+  /** `victim` cannot be cheated by I Lied in a deal (Al Amarja: its controller is immune). */
+  immuneToLie?: (s: GameState, self: string, victim: string) => boolean;
 
   // ---- triggers
   onTurnStart?: (s: GameState, self: string) => void;
@@ -197,6 +207,12 @@ export interface CardHooks {
   /** An attack (of any kind) has just begun: `s.attack` is already set to `ctx`. */
   onAttackStart?: (s: GameState, self: string, ctx: AttackCtx) => void;
   onEnterPlay?: (s: GameState, self: string) => void;
+  /**
+   * Fired for every active card at the end of every turn (whoever's turn it was), before the hand-limit
+   * check. Return true if it opened a prompt of its own (askChoice) and the cleanup must wait for the
+   * answer; the resolver must then call endTurnCleanup(s) itself to resume (Illuminati University's tuition).
+   */
+  onTurnEnd?: (s: GameState, self: string) => boolean | void;
 
   // ---- choices
   actions?: ActivatedAbility[];

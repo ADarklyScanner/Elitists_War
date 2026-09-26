@@ -66,8 +66,9 @@
   "type": "Plot",
   "subtype": "NWO",
   "rarity": "Rare",
-  "text": "Yellow NWO. On entry every player rearranges so no Corporate Group controls another; what cannot fit is discarded. No Corporate Group may take over another; a Corporate master of a Corporate puppet must move it free or discard it.",
-  "nwoColor": "yellow"
+  "text": "Yellow NWO. On entry each player may rearrange his Groups, discarding a Plot per move (or three for a full reorganization) from hand or deck. While in effect, a Corporate Group that controls or is controlled by another Corporate Group gets no Action tokens and cannot use its special ability.",
+  "nwoColor": "yellow",
+  "notes": "Follows the official errata, which replaced the forced-discard/no-takeover wording with an optional paid reorganization plus an ongoing token/ability freeze."
  },
  {
   "id": "anything-worth-doing-is-worth-overdoing",
@@ -267,7 +268,7 @@
   "subtype": "Resource",
   "rarity": "Uncommon",
   "text": "Its action cancels the action of another Resource that still holds an Action token. Its owner is safe from the Nuclear Power Companies. Only one may be in play: a newly played one destroys the old one.",
-  "uniqueness": "Gadget; not marked Unique"
+  "uniqueness": "Gadget; only one may be in play at a time"
  },
  {
   "id": "brushfire-war",
@@ -831,7 +832,7 @@
   "subtype": "Resource",
   "rarity": "Uncommon",
   "text": "Its action tries to destroy a Satellite Resource or the Orbital Mind Control Lasers (an action it just declared is cancelled). Discard it for a sure kill, or roll a die: 1-3 kills; 4 kills unless the target is the Lasers (then this dies); 5 kills both; 6 kills only this. Or +5 to an attack on a Space Place, or discard it with its token for +15 to destroy one.",
-  "uniqueness": "Gadget; not marked Unique"
+  "uniqueness": "Gadget (no card-specific limit)"
  },
  {
   "id": "lab-explosion",
@@ -1150,7 +1151,7 @@
   "subtype": "Resource",
   "rarity": "Uncommon",
   "text": "Link to a Space Place or a Nation: +2 Power and +5 to all its defenses, Disasters included. One per Place.",
-  "uniqueness": "Gadget; not marked Unique"
+  "uniqueness": "Gadget (no card-specific limit)"
  },
  {
   "id": "recycling-centers",
@@ -1337,7 +1338,7 @@
   "subtype": "Resource",
   "rarity": "Rare",
   "text": "Its action, at any time: pick three Groups at random from a rival's hand, show them if you wish and give them back. Or expose one random Plot in a rival's hand. Has its own Action token.",
-  "uniqueness": "Gadget; not marked Unique"
+  "uniqueness": "Gadget (no card-specific limit)"
  },
  {
   "id": "state-lotteries",
