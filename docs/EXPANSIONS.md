@@ -217,7 +217,8 @@ stand-alone SubGenius game (`subgeniusRules`) played with the SubGenius set alon
   otherwise they go to the discard piles. A player who leaves the game discards everything.
 - Online, the shared decks are hidden from everyone like any deck; the area and discards are public.
 - Decision/simplification: the per-player `plotDeck` / `groupDeck` arrays stay empty in this game; card
-  scripts must use `plotDeckOf` / `groupDeckOf`. Base cards that read a player's own deck (few, and not
+  scripts must use `plotDeckOf` / `groupDeckOf` (the engine's own deck moves do too: returning a Plot to a
+  deck, Regi$tered Trademark's penalties). Base cards that read a player's own deck (few, and not
   part of the SubGenius set) see an empty deck in this game.
 - Not implemented (not needed by the SubGenius cards alone): duplicates across several SubGenius sets
   (bounced leads, agents from the area).
@@ -275,10 +276,13 @@ genuine choice open, the engine reads it as follows (each also noted with the ca
   away through a question its controller must answer before anything else.
 - Psychic Pstench: its player picks which exposed Goal goes; Random Jesii: the victim keeps the Plot of his
   choice hidden.
-- Die rolls: every attack roll, and every roll the SubGenius cards and Flat Earthers, Nephews of God, Las
-  Vegas and Suicide Squad make outside attacks, can be answered by Bulldada, Luck Plane, S.C.A.M.,
-  Shordurpersav and the Janor Device (a `dieRoll` event). A card rolling in the middle of an attack (OPEC,
-  Bill Clinton, Imelda Marcos, some Assassins cards) rolls at once: no window can wait inside an attack.
+- Die rolls: every attack roll, and every roll a card makes (the SubGenius cards, Flat Earthers, Nephews of
+  God, Las Vegas, Suicide Squad, OPEC, Bill Clinton, Imelda Marcos, Killer Satellite), can be answered by
+  Bulldada, Luck Plane, S.C.A.M., Shordurpersav and the Janor Device (a `dieRoll` event). A card rolling in
+  the middle of an attack gets a response window of its own at once, and the attack goes on afterwards
+  with the final roll; this happens only when some player could answer, so games without those cards play
+  exactly as before. Lyndon LaRouche's start-of-turn roll still counts at once (it decides his token before
+  tokens are placed).
 - Time Control: an Illuminati token counts as spent when its own player's action (an attack, move, Plot,
   ability, Resource, Group purchase, aid, defense, Relief, Zap removal, freeing a Group) takes it; giving one
   away in a deal or as an answer to a card (. . . Or Kill Me!) is not spending it.

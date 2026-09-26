@@ -27,6 +27,8 @@ import { attackChance, attackOutcomeScore, bestBySimulation, evaluate, goalProgr
 function responseOptions(s: GameState, pl: string) {
   return engineResponseOptions(s, pl).filter((o) => {
     const a = o.action;
+    // Removing Zaps and freeing Paralyzed Groups are weighed on their own (conditionMove).
+    if (a.type === 'removeZaps' || a.type === 'freeGroup') return false;
     return a.type !== 'useAbility' || HOOKS[s.cards[a.card]?.cardId]?.actions?.find((x) => x.id === a.ability)?.ai !== 'never';
   });
 }

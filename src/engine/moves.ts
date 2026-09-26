@@ -7,8 +7,9 @@ import { openArrows, structureCards } from './geometry';
 import { alignments, attributes, power } from './stats';
 import { PLOTS } from './plotTypes';
 import { HOOKS } from './hooks';
-import { announcedAction, announcedActors, checkAbility, declareOptions, disasterTarget, resourcesOf, MARCH_ON_WASHINGTON } from './game';
+import { announcedAction, announcedActors, checkAbility, declareOptions, disasterTarget, paralysesOn, resourcesOf, zapsOn, MARCH_ON_WASHINGTON } from './game';
 import { costPlays } from './costs';
+import { abilitiesOf } from './abilities';
 import { plotDeckOf, uncontrolledCards } from './expansions';
 
 
@@ -54,6 +55,8 @@ export function plotOptions(s: GameState, pl: string, card: string, declaring?: 
   let targets: (string | undefined)[] = [undefined];
   if (needs.target === 'plot') targets = (s.window?.kind === 'plot' ? s.window.plays ?? [] : s.attack?.plays ?? []).map((p) => p.iid).filter((x) => x !== card && s.cards[x]);
   else if (needs.target) targets = targetPool(s, pl, needs.target, card);
+  // The Saint of Sales takes a Resource not yet in play: from the uncontrolled area, or your hand.
+  if (d.id === 'the-saint-of-sales') targets = [...uncontrolledCards(s), ...player(s, pl).hand].filter((c) => def(s, c).type === 'Resource');
   const modes: (string | undefined)[] = d.id === 'go-fish' ? goFishNames(s, pl)
     : needs.mode ?? (d.id === 'secrets-man-was-not-meant-to-know' ? ['illuminati', 'deck'] : [undefined]);
   const aligns: (Alignment | undefined)[] = needs.alignment ? ALIGNMENTS : [undefined];
@@ -71,14 +74,14 @@ export function plotOptions(s: GameState, pl: string, card: string, declaring?: 
   }
   const out: MoveOption[] = [];
   for (const targetList of targetSets) for (const target of targets) {
-    // A declared cost ("Requires ... Action", costs.ts): one play per way to pay it.
+    // A declared cost ("Requires ... Action", costs.ts): one play per affordable way to pay it (as
+    // costPlays gives them, which the interface also offers), the cheapest first so that a computer
+    // player that takes the first option spends as little as it can.
     if (h.requires) {
       for (const mode of modes) for (const alignment of aligns) for (const helper of helpers) {
-        for (const play of costPlays(s, pl, { card, target, mode, alignment, helper, targets: targetList }, h.requires)) {
-          if (declaring ? checkDeclaring(s, pl, play, declaring) : checkPlot(s, pl, play)) continue;
-          out.push({ label: describePlay(s, play), action: { type: 'playPlot', play } });
-          break;
-        }
+        const plays = costPlays(s, pl, { card, target, mode, alignment, helper, targets: targetList }, h.requires)
+          .filter((play) => !(declaring ? checkDeclaring(s, pl, play, declaring) : checkPlot(s, pl, play)));
+        for (const play of sortByCost(s, pl, plays)) out.push({ label: describePlay(s, play), action: { type: 'playPlot', play } });
       }
       continue;
     }
@@ -107,6 +110,23 @@ export function plotOptions(s: GameState, pl: string, card: string, declaring?: 
     }
   }
   return out;
+}
+
+/**
+ * How much a way of paying a declared cost gives up, for ordering the alternatives: a Plot card
+ * discarded is worth more than an action, an Illuminati action more than a Group's, and a stronger
+ * Group's action more than a weaker one's. Ties keep the order of the card's alternatives.
+ */
+export function payWeight(s: GameState, pl: string, play: PlotPlay): number {
+  const ill = player(s, pl).illuminati;
+  // The Church of the SubGenius's tokens are its Slack, which counts toward its Goal: dearer still.
+  const illCost = abilitiesOf(s, ill).some((a) => a.kind === 'slack') ? 3.5 : 2;
+  let w = (play.discards?.length ?? 0) * 3;
+  for (const g of play.payWith ?? []) w += g === ill ? illCost : 1 + (power(s, g) / 20);
+  return w;
+}
+function sortByCost(s: GameState, pl: string, plays: PlotPlay[]): PlotPlay[] {
+  return plays.map((p, i) => ({ p, i, w: payWeight(s, pl, p) })).sort((a, b) => a.w - b.w || a.i - b.i).map((x) => x.p);
 }
 
 /**
@@ -232,6 +252,31 @@ export function responseOptions(s: GameState, pl: string): MoveOption[] {
     }
   }
   for (const card of [...structureCards(s, pl), ...resourcesOf(s, pl)]) out.push(...abilityOptions(s, pl, card));
+  out.push(...conditionOptions(s, pl));
+  return out;
+}
+
+/**
+ * Removing the Zaps on your own Power Structure and freeing your own Paralyzed Groups (Assassins): both
+ * may be done at any time, so they are real answers in any window (auto-pass must not skip them). Freeing
+ * a rival's Group or lifting a rival's Zaps is legal too, but is never an answer to anything, so it is
+ * left to the buttons on those cards.
+ */
+export function conditionOptions(s: GameState, pl: string): MoveOption[] {
+  const out: MoveOption[] = [];
+  const me = player(s, pl);
+  if (zapsOn(s, pl).length) {
+    const a: Action = { type: 'removeZaps', player: pl };
+    if (legal(s, pl, a)) out.push({ label: 'Remove every Zap from your Power Structure (an action of your Illuminati)', action: a });
+  }
+  for (const g of structureCards(s, pl)) {
+    if (!paralysesOn(s, g).length) continue;
+    const m = s.cards[g].master;
+    for (const payWith of [...new Set([m && s.cards[m]?.controller === pl ? m : undefined, me.illuminati].filter((x): x is string => !!x))]) {
+      const a: Action = { type: 'freeGroup', group: g, payWith };
+      if (legal(s, pl, a)) out.push({ label: `Free ${cardName(s, g)} from Paralysis (${payWith === me.illuminati ? 'an action of your Illuminati' : `the action of ${cardName(s, payWith)}`})`, action: a });
+    }
+  }
   return out;
 }
 

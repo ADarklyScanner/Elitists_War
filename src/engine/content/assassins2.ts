@@ -14,12 +14,13 @@ import { registerPlots, registerGoals } from '../plotTypes';
 import { def, cardName, OPPOSITE } from '../cards';
 import { attributes, alignments, power } from '../stats';
 import { structureCards, puppets, subtree } from '../geometry';
-import { nextRandom, rollDie, shuffle } from '../rng';
+import { nextRandom, shuffle } from '../rng';
 import {
   activePlayer, announcedAction, canExpose, exposeCards, raiseEvent, revealTo, announcedActors, askChoice, attackCancelled, cancelActorEffect, canAttackPlayer, controllerOf2,
   discardCard, disasterTarget, drawGroup, drawPlot, endTurnCleanup, goalAlignWeight, goalNeeded, goalTally, isParalyzed, localTime, log,
   movableSides, moveSubtree, noteCostDiscard, player, respondToAction, startCardAttack, startInstantAttack, syncConditions, tokenBarred,
 } from '../game';
+import { cardRoll, registerRollResult } from '../game';
 import { plotDeckOf, groupDeckOf } from '../expansions';
 import { assassinationPlot } from './families';
 import { nwoColor } from '../nwo';
@@ -277,6 +278,25 @@ registerHooks({
 
 const SATELLITE_TARGETS = (s: GameState, iid: string) => def(s, iid).name.includes('Satellite') || def(s, iid).id === 'orbital-mind-control-lasers';
 
+/** Killer Satellite's strike, once decided: the target (and any action it had announced) and perhaps itself. */
+function satelliteStrike(s: GameState, pl: string, self: string, t: string, killsTarget: boolean, killsSelf: boolean) {
+  if (killsTarget && s.cards[t]?.zone === 'resources') {
+    log(s, `${cardName(s, t)} is destroyed.`, pl);
+    const e = announcedAction(s);
+    if (e && announcedActors(e).includes(t)) respondToAction(s, pl, self, { t: 'cancelGroup', group: t }, true);
+    destroyResource(s, t, pl);
+  }
+  if (killsSelf && s.cards[self]?.zone === 'resources') { log(s, 'Killer Satellite is destroyed.', pl); destroyResource(s, self, pl); }
+}
+registerRollResult({
+  'killer-satellite'(s, pl, total, _dice, d) {
+    const self = d.self as string, t = d.target as string;
+    const isOmcl = s.cards[t]?.cardId === 'orbital-mind-control-lasers';
+    log(s, `Killer Satellite rolls ${total} against ${cardName(s, t)}.`, pl);
+    satelliteStrike(s, pl, self, t, total <= 3 || (total === 4 && !isOmcl) || total === 5, total >= 5 || (total === 4 && isOmcl));
+  },
+});
+
 registerHooks({
   // Its action tries to destroy a Satellite Resource or the Orbital Mind Control Lasers (any action that
   // target had just announced is cancelled). Discard it for a sure kill, or roll a die. Or +5 to an
@@ -296,25 +316,15 @@ registerHooks({
         },
         apply(s, pl, self, p) {
           const t = p.target!;
-          const isOmcl = s.cards[t].cardId === 'orbital-mind-control-lasers';
-          let killsTarget: boolean, killsSelf = false;
           if (p.mode === 'sure') {
             log(s, `Killer Satellite is discarded for a sure kill on ${cardName(s, t)}.`, pl);
             discardCard(s, self);
-            killsTarget = true;
-          } else {
-            const die = rollDie(s);
-            log(s, `Killer Satellite rolls ${die} against ${cardName(s, t)}.`, pl);
-            killsTarget = die <= 3 || (die === 4 && !isOmcl) || die === 5;
-            killsSelf = die === 5 || die === 6 || (die === 4 && isOmcl);
+            satelliteStrike(s, pl, self, t, true, false);
+            return;
           }
-          if (killsTarget) {
-            log(s, `${cardName(s, t)} is destroyed.`, pl);
-            const e = announcedAction(s);
-            if (e && announcedActors(e).includes(t)) respondToAction(s, pl, self, { t: 'cancelGroup', group: t }, true);
-            destroyResource(s, t, pl);
-          }
-          if (killsSelf && s.cards[self]?.zone === 'resources') { log(s, 'Killer Satellite is destroyed.', pl); destroyResource(s, self, pl); }
+          // The roll is announced (cardRoll), so cards that change any die roll may answer it; used during
+          // an attack or in answer to an action, it is answered there and then (held), before it counts.
+          cardRoll(s, pl, 1, 'killer-satellite', { self, target: t }, { quiet: true, hold: true, label: 'Killer Satellite' });
         },
       },
       {

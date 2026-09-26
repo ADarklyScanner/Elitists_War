@@ -11,7 +11,7 @@ import {
   type Deal, type DealGroup, type DealSide, dealText, dealsAllowed, offersTo, offersFrom, I_LIED, MAX_NOTE, sideEmpty,
   legal, canExpose, specialGoalProgress, agentProblem, agentsOf, reliefPledgesFor, type PlaceCapturedData,
   PACKS, packSelectable, enabledSets, illuminatiFor, CHURCH, plotDeckOf, groupDeckOf, uncontrolledCards, type GameSettings,
-  cardSet, slackCount,
+  cardSet, slackCount, rollOf,
 } from '../engine';
 import { type PackChoice, type Store, loadPackChoice, savePackChoice, previewPacks, packOffered, settingsForChoice, PACK_INFO, keepsSlack, liveFreezes, cardConditions, playerConditions, zapLine, costChoices, declaresCost, packsInGame } from './packs';
 import { attachRect, rectOf, ensureLayout, type Rect } from '../engine/geometry';
@@ -1498,6 +1498,11 @@ function renderConsole(s: GameState): string {
       discarded: () => `${cn(ev?.card)} was discarded.`,
       plotResolved: () => `${cn(ev?.card)} took effect.`,
       relief: () => `Relief was sent to ${cn(ev?.card)}.`,
+      dieRoll: () => {
+        const r = rollOf(ev!);
+        const sum = r.dice.reduce((a, b) => a + b, 0);
+        return `${pn(ev?.player)} rolled ${r.dice.join(' + ')}${r.total !== sum ? `, which now counts as ${r.total}` : ''}. Cards that change any die roll can answer it before it counts.`;
+      },
       action: () => {
         const who = ev?.player === ui.me ? 'You want' : `${pn(ev?.player)} wants`;
         const stopped = ev && actionCancelled(ev) || (ev?.cards?.length && ev.cards.every((c) => actionCancelled(ev, c)));

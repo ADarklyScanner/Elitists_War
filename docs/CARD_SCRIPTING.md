@@ -245,7 +245,8 @@ import { anyOf, illuminatiAction, groupActions, targetAction, plotDiscards, targ
 The player names the payers in `play.payWith` (Groups spending an action) or `play.discards` (Plots from
 hand). `checkPlot` refuses a play that does not pay exactly one alternative, `playPlot` spends the
 tokens and discards the cards before `apply` runs, and `plotOptions` / the computer players offer one
-play per affordable alternative (`costPlays`). A token held back by a Paralysis or Freeze cannot pay.
+play per affordable alternative (`costPlays`), cheapest first (`payWeight`: Plot discards cost most, then an
+Illuminati action, dearer still as the Church's Slack, then Group actions). A token held back by a Paralysis or Freeze cannot pay.
 Illuminati tokens are "Slack" on the Church of the SubGenius: an Illuminati action spends one of them.
 
 ### Zaps
@@ -335,12 +336,19 @@ and `cancel` may be a list of Matches (any of them); a single Match with both `a
   Group stops being SubGenius for good). Linked Plots stay with their Group when it changes hands or goes
   to the uncontrolled area. A link is re-checked after every action (`syncConditions`).
 - **The SubGenius attribute** is plain card data: match it with `{ attributes: ['SubGenius'] }`.
-- **Die rolls outside attacks**: roll with `cardRoll(s, player, 1 | 2, key, data)` and handle the result in
-  `registerRollResult({ key(s, player, total, dice, data) {…} })`. The roll is announced as a `dieRoll` event,
-  which the cards changing "any die roll" answer (Bulldada, Luck Plane, S.C.A.M., Shordurpersav with timing
-  `'event'` and `events: ['dieRoll']`; the Janor Device's ability); they read and change it with
-  `eventAnswered(s)`, `rollOf(e)` and `changeRoll(e, …)`. With nobody able to answer, or during an attack (no
-  window can wait there), the handler runs at once. `afterCardRoll` hooks see the final roll.
+- **Die rolls made by cards**: roll with `cardRoll(s, player, 1 | 2, key, data, { quiet?, hold?, label? })` and
+  handle the result in `registerRollResult({ key(s, player, total, dice, data) {…} })` (put everything that
+  depends on the roll there: it may run later). The roll is announced as a `dieRoll` event, which the cards
+  changing "any die roll" answer (Bulldada, Luck Plane, S.C.A.M., Shordurpersav with timing `'event'` and
+  `events: ['dieRoll']`; the Janor Device's ability); they read and change it with `eventAnswered(s)`,
+  `rollOf(e)` and `changeRoll(e, …)`. With nobody able to answer, the handler runs at once, exactly as a
+  direct call would (base games never see a window: no base card answers a `dieRoll`). A roll made **during an
+  attack** (OPEC captured, Bill Clinton as an attack starts, Imelda Marcos, Killer Satellite), or with `hold`
+  while a window waits on the rolling card, is *held*: its own event window opens at once on top of the
+  current one (`heldRoll(s)` reads it); plays in it are not plays in the attack (their `ctx` is undefined);
+  when it closes, the interrupted window comes back with every pass reset and then the handler runs.
+  An ability used during an attack that needs its effect entry (Imelda) finds it in `ctx.plays` by the id it
+  noted when rolling. `afterCardRoll` hooks see the final roll.
 - **Control taken outside the automatic takeover**: a successful Attack to Control on a Group in a hand or the
   uncontrolled area, or a card putting one into play, raises a `gainedControl` event (Comet Hail-"Bob").
 - **Forced plays**: `s.forcedPlay = { player, card }` lets that Plot be played at once whatever its usual
