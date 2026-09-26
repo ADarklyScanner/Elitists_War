@@ -4,7 +4,7 @@
 import type { Alignment, GameState, Modifier } from './types';
 import { def, OPPOSITE } from './cards';
 import { abilitiesOf, matches, setAlignmentResolver } from './abilities';
-import { NWO_EFFECTS } from './nwo';
+import { NWO_EFFECTS, fanaticUnited } from './nwo';
 import { sumHooks, activeHookCards, HOOKS } from './hooks';
 
 function activeMods(s: GameState, iid: string, opts: ValueOpts): Modifier[] {
@@ -122,8 +122,13 @@ export function countControlled(s: GameState, player: string, pred: (iid: string
   return Object.values(s.cards).filter((c) => c.zone === 'structure' && c.controller === player && def(s, c.iid).type === 'Group' && pred(c.iid)).length;
 }
 
-export function isOpposite(a: Alignment, b: Alignment): boolean {
-  if (a === 'Fanatic' && b === 'Fanatic') return true;
+/**
+ * Two Fanatic groups are normally opposite each other (R006/R046), not sharing an alignment. Visualize
+ * Whirled Peas (Assassins) unites all Fanatics into one shared alignment instead: pass the game state
+ * along so this can be checked; omit it where no such NWO exists (e.g. hypothetical comparisons).
+ */
+export function isOpposite(a: Alignment, b: Alignment, s?: GameState): boolean {
+  if (a === 'Fanatic' && b === 'Fanatic') return !(s && fanaticUnited(s));
   return OPPOSITE[a] === b;
 }
 
@@ -131,11 +136,11 @@ export function isOpposite(a: Alignment, b: Alignment): boolean {
 export function alignmentPairs(s: GameState, a: string, b: string): { same: number; opposite: number } {
   const x = alignments(s, a);
   const y = alignments(s, b);
+  const united = fanaticUnited(s);
   let same = 0, opposite = 0;
   for (const p of x) {
-    if (y.includes(p) && p !== 'Fanatic') same++;
-    for (const q of y) if (isOpposite(p, q)) opposite++;
+    if (y.includes(p) && (p !== 'Fanatic' || united)) same++;
+    for (const q of y) if (isOpposite(p, q, s)) opposite++;
   }
-  // Two Fanatic groups: Fanatic counts as an opposite pair, not a shared alignment (R006/R046).
   return { same, opposite };
 }

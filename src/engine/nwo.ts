@@ -69,3 +69,20 @@ export function nwoColor(cardId: string): 'red' | 'blue' | 'yellow' {
   // Expansion NWOs carry their printed colour in the card data.
   return NWO_EFFECTS[cardId]?.color ?? NWO_COLOR[cardId] ?? CARDS[cardId]?.nwoColor ?? 'red';
 }
+
+/** Is a live NWO card of this id currently on the table (any colour slot)? */
+function nwoCard(s: GameState, cardId: string): string | undefined {
+  return Object.values(s.nwo).find((iid) => !!iid && s.cards[iid]?.cardId === cardId && s.cards[iid].zone === 'table');
+}
+
+/** Visualize Whirled Peas (Assassins): while it is in play, every Fanatic group shares one alignment
+ *  instead of opposing every other Fanatic group (R006/R046's normal rule). */
+export function fanaticUnited(s: GameState): boolean {
+  return !!nwoCard(s, 'visualize-whirled-peas');
+}
+
+/** Interesting Times (Assassins): the mode its player chose when playing it, if it is in play. */
+export function interestingTimesMode(s: GameState): 'basic' | 'harder' | undefined {
+  const iid = nwoCard(s, 'interesting-times');
+  return iid ? (s.cards[iid].data?.mode as 'basic' | 'harder' | undefined) : undefined;
+}

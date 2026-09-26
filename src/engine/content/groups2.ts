@@ -3,7 +3,7 @@ import { attackingGroups, abilitiesOf, matches, registerAbilities } from '../abi
 import { type ActivatedAbility, type CardHooks, HOOKS, activeHookCards, hooksOf, registerHooks } from '../hooks';
 import { cardName, def } from '../cards';
 import { alignments, attributes, countControlled, globalPower, isOpposite, power } from '../stats';
-import { NWO_EFFECTS } from '../nwo';
+import { NWO_EFFECTS, fanaticUnited } from '../nwo';
 import { puppets, sideOf, structureCards } from '../geometry';
 import { resourceKinds } from './plots3';
 import { roll2d6, rollDie } from '../rng';
@@ -169,10 +169,11 @@ const usedThisAttack = (ctx: AttackCtx, self: string, id: string) => ctx.plays.s
 
 /** Alignment modifier (R006) the leading attacker would get with alignments `mine`. */
 function alignValue(s: GameState, mine: Alignment[], theirs: Alignment[], type: AttackCtx['type']): number {
+  const united = fanaticUnited(s);
   let same = 0, opp = 0;
   for (const p of new Set(mine)) {
-    if (theirs.includes(p) && p !== 'Fanatic') same++;
-    for (const q of theirs) if (isOpposite(p, q)) opp++;
+    if (theirs.includes(p) && (p !== 'Fanatic' || united)) same++;
+    for (const q of theirs) if (isOpposite(p, q, s)) opp++;
   }
   let perSame = 4, perOpp = 4;
   for (const n of Object.values(s.nwo)) {
@@ -182,10 +183,10 @@ function alignValue(s: GameState, mine: Alignment[], theirs: Alignment[], type: 
   return type === 'control' ? same * perSame - opp * perOpp : opp * perOpp - same * perSame;
 }
 /** May a Group with alignments `mine` aid this kind of attack on a target with `theirs` (R006)? */
-function alignQualifies(mine: Alignment[], theirs: Alignment[], type: AttackCtx['type']): boolean {
+function alignQualifies(s: GameState, mine: Alignment[], theirs: Alignment[], type: AttackCtx['type']): boolean {
   return type === 'control'
-    ? mine.some((a) => a !== 'Fanatic' && theirs.includes(a))
-    : mine.some((a) => theirs.some((b) => isOpposite(a, b)));
+    ? mine.some((a) => (a !== 'Fanatic' || fanaticUnited(s)) && theirs.includes(a))
+    : mine.some((a) => theirs.some((b) => isOpposite(a, b, s)));
 }
 
 /** "As an action, cancel a [X] group's action." */
@@ -409,7 +410,7 @@ registerHooks({
       return Math.max(...wallStreetVariants(mine).map((v) => alignValue(s, v, ta, ctx.type))) - base;
     },
     mayJoin: (s, self, ctx, group, as) => as === 'aid' && group === self && !ctx.instant
-      && wallStreetVariants(alignments(s, self)).some((v) => alignQualifies(v, alignments(s, ctx.target), ctx.type)),
+      && wallStreetVariants(alignments(s, self)).some((v) => alignQualifies(s, v, alignments(s, ctx.target), ctx.type)),
     resistanceMod: (s, self, iid) => (s.cards[iid].master === self && inStructure(s, iid) ? 10 : 0),
   },
 
@@ -633,7 +634,7 @@ registerHooks({
       return Math.max(...subsets(alignments(s, self)).map((b) => alignValue(s, [...mine, ...b], ta, ctx.type))) - base;
     },
     mayJoin: (s, self, ctx, group, as) => as === 'aid' && !ctx.instant && group === s.cards[self].master
-      && alignQualifies([...alignments(s, group), ...alignments(s, self)], alignments(s, ctx.target), ctx.type),
+      && alignQualifies(s, [...alignments(s, group), ...alignments(s, self)], alignments(s, ctx.target), ctx.type),
   },
 
   'prince-charles': {
