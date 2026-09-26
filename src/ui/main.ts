@@ -11,7 +11,9 @@ import {
   type Deal, type DealGroup, type DealSide, dealText, dealsAllowed, offersTo, offersFrom, I_LIED, MAX_NOTE, sideEmpty,
   legal, canExpose, specialGoalProgress, agentProblem, agentsOf, reliefPledgesFor, type PlaceCapturedData,
   PACKS, packSelectable, enabledSets, illuminatiFor, CHURCH, plotDeckOf, groupDeckOf, uncontrolledCards, type GameSettings,
+  cardSet, slackCount,
 } from '../engine';
+import { type PackChoice, type Store, loadPackChoice, savePackChoice, previewPacks, packOffered, settingsForChoice, PACK_INFO, keepsSlack, liveFreezes, cardConditions, playerConditions, zapLine, costChoices, declaresCost, packsInGame } from './packs';
 import { attachRect, rectOf, ensureLayout, type Rect } from '../engine/geometry';
 import { applyDealAnswer, chooseAction, computerDealAnswer, successChance } from '../ai/ai';
 import { suggestBots, type TableLevel } from './botMix';
@@ -48,7 +50,7 @@ interface Ui {
   pledgePick?: { place: string; groups: string[] };
   /** The Illuminati arrow the lead Group will hang from (R025). */
   leadSide?: Side;
-  browse?: { kind: 'discard' | 'destroyed'; player: string };
+  browse?: { kind: 'discard' | 'destroyed' | 'plotDiscard' | 'groupDiscard'; player: string };
   game: GameState | null;
   me: string;
   sel: Sel;
@@ -305,7 +307,8 @@ function presetRandoms(l: Lineup, n: number, level: TableLevel): Lineup {
   const mix = suggestBots(Math.max(0, n), level);
   return { ...l, random: { ...l.random, easy: mix.filter((x) => x === 'easy').length, normal: mix.filter((x) => x === 'normal').length, hard: mix.filter((x) => x === 'hard').length } };
 }
-const goalFor = (n: number) => (n <= 3 ? 12 : n === 4 ? 11 : 10);
+// The stand-alone SubGenius game has its own number: 10 Groups, 12 with two players.
+const goalFor = (n: number) => (!ui.game && packSettings().subgeniusRules ? (n === 2 ? 12 : 10) : n <= 3 ? 12 : n === 4 ? 11 : 10);
 
 /**
  * The Basic Goal the players agree on before the game (R016): the book's number for the table size
@@ -422,30 +425,42 @@ function botsForGame(seed: number, min: number, maxBots: number): BotSpec[] {
   return bots.length >= min ? bots : [...bots, ...resolveLineup(presetRandoms(emptyLineup(), min - bots.length, 'standard'), seed + 1)];
 }
 
-// ---- Expansion packs: offered only once every card of a pack is implemented (EXPANSIONS_READY).
-interface PackChoice { assassins?: boolean; subgenius?: boolean; sgGame?: boolean }
-const packChoice = (): PackChoice => (ui as Ui & { packs?: PackChoice }).packs ?? {};
-/** The game settings for the packs chosen (only packs players may choose yet). */
-function packSettings(): Partial<GameSettings> {
-  const c = packChoice();
-  const assassins = !!c.assassins && packSelectable('assassins');
-  const subgenius = !!(c.subgenius || c.sgGame) && packSelectable('subgenius');
-  if (!assassins && !subgenius) return {};
-  return { expansions: { assassins, subgenius }, ...(c.sgGame && subgenius ? { subgeniusRules: true } : {}) };
-}
+// ---- Expansion packs: offered once every card of a pack is implemented (EXPANSIONS_READY), or to
+// preview them early (localStorage 'elitists-war.preview-packs' = '1'). The choice is remembered per browser.
+const store = (): Store | undefined => { try { return localStorage; } catch { return undefined; } };
+const packChoice = (): PackChoice => loadPackChoice(store());
+const offered = (id: 'assassins' | 'subgenius') => packOffered(id, previewPacks(store()));
+/** The game settings for the packs chosen (only packs this browser offers). */
+function packSettings(): Partial<GameSettings> { return settingsForChoice(packChoice(), offered); }
 function packsHtml(): string {
-  const packs = PACKS.filter((p) => packSelectable(p.id));
+  const packs = PACKS.filter((p) => offered(p.id));
   if (!packs.length) return '';
   const c = packChoice();
-  const box = (id: keyof PackChoice, label: string) => `<label class="toggle"><input type="checkbox" data-pack="${id}" ${c[id] ? 'checked' : ''}> ${label}</label>`;
-  return `<section class="panel start-panel"><div class="label">Expansion packs</div><div class="row">
-    ${packs.map((p) => box(p.id, `${p.name} cards`)).join('')}
-    ${packSelectable('subgenius') ? box('sgGame', 'The SubGenius game: everyone plays the Church of the SubGenius, with shared decks and an uncontrolled area') : ''}
-  </div></section>`;
+  const standalone = !!c.subgenius && c.sgMode === 'standalone' && offered('subgenius');
+  const sw = (id: 'assassins' | 'subgenius', off = false) => `<label class="pack-switch ${c[id] && !off ? 'on' : ''} ${off ? 'off' : ''}">
+      <input type="checkbox" role="switch" data-pack="${id}" ${c[id] && !off ? 'checked' : ''} ${off ? 'disabled' : ''}>
+      <span class="pack-knob" aria-hidden="true"></span>
+      <span class="pack-text"><b>${PACK_INFO[id].name}</b><span class="small muted">${off ? 'Not used in the stand-alone SubGenius game.' : esc(PACK_INFO[id].blurb)}</span></span></label>`;
+  const preview = packs.some((p) => !packSelectable(p.id));
+  return `<section class="panel start-panel packs"><div class="label">Expansions</div>
+    <p class="muted small">Optional packs of extra cards. Both are off unless you switch them on.${preview ? ' <span class="warn">Preview: not every pack shown here is finished yet.</span>' : ''}</p>
+    <div class="pack-list">
+    ${packs.map((p) => sw(p.id, p.id === 'assassins' && standalone)).join('')}
+    ${offered('subgenius') && c.subgenius ? `<div class="sg-mode" role="radiogroup" aria-label="How to play SubGenius">
+      <label class="${!standalone ? 'on' : ''}"><input type="radio" name="sg-mode" value="mixed" ${!standalone ? 'checked' : ''}><span><b>Mixed into a regular game</b><span class="small muted">SubGenius cards shuffled in with the others; everyone keeps their own decks.</span></span></label>
+      <label class="${standalone ? 'on' : ''}"><input type="radio" name="sg-mode" value="standalone" ${standalone ? 'checked' : ''}><span><b>Stand-alone SubGenius game</b><span class="small muted">Everyone plays the Church of the SubGenius, draws from shared decks, and fights over an uncontrolled area in the middle.</span></span></label>
+    </div>` : ''}
+    </div></section>`;
 }
 function bindPacks(rerender: () => void) {
   app.querySelectorAll<HTMLInputElement>('[data-pack]').forEach((b) => b.onchange = () => {
-    (ui as Ui & { packs?: PackChoice }).packs = { ...packChoice(), [b.dataset.pack!]: b.checked };
+    savePackChoice({ ...packChoice(), [b.dataset.pack!]: b.checked }, store());
+    const pick = (ui as Ui & { pick?: string }).pick;
+    if (pick && !illuminatiFor(packSettings()).some((c) => c.id === pick)) (ui as Ui & { pick?: string }).pick = undefined;
+    rerender();
+  });
+  app.querySelectorAll<HTMLInputElement>('input[name="sg-mode"]').forEach((b) => b.onchange = () => {
+    savePackChoice({ ...packChoice(), sgMode: b.value === 'standalone' ? 'standalone' : 'mixed' }, store());
     rerender();
   });
 }
@@ -584,8 +599,8 @@ function computeGuide(s: GameState): Guide {
   if (sel.kind === 'deck') { g.next = 'console'; g.text = 'Confirm in the panel, or Cancel.'; return g; }
   const illTok = s.cards[me.illuminati].tokens > 0;
   const groupTok = mine.filter((g) => g !== me.illuminati && s.cards[g].tokens > 0).length;
-  ((illTok || groupTok >= 2) && me.plotDeck.length ? g.ok : g.no).add('deck-plot');
-  (illTok && !s.turnFlags.illumGroupDraw && me.groupDeck.length ? g.ok : g.no).add('deck-group');
+  ((illTok || groupTok >= 2) && plotDeckOf(s, ui.me).length ? g.ok : g.no).add('deck-plot');
+  ((s.common ? illTok || groupTok >= 2 : illTok && !s.turnFlags.illumGroupDraw && me.groupDeck.length) ? g.ok : g.no).add('deck-group');
   const canUse = (c: string) => s.cards[c].tokens > 0 && (attackOptions(s, ui.me, c).length > 0 || abilityOptions(s, ui.me, c).length > 0 || def(s, c).type === 'Group');
   mark(mine, canUse);
   mark(res, (r) => abilityOptions(s, ui.me, r).length > 0 || !!HOOKS[s.cards[r].cardId]?.linkTo);
@@ -657,8 +672,8 @@ function render() {
         ${renderSide(s, ui.me, true)}
       </div></div>
       ${renderDecks(s)}
-      <div class="ticker" aria-live="polite">${recent.map((l) => `<div>${esc(youText(l.text))}</div>`).join('')}</div>
-      <div class="zoom"><button data-zoom="in" aria-label="Zoom in">+</button><button data-zoom="out" aria-label="Zoom out">−</button><button data-zoom="fit" title="See the whole table">All</button><button data-zoom="me" title="Jump to your seat">You</button>${!myTurn(s) && s.phase !== 'gameOver' ? `<button data-zoom="turn" title="Jump to the player whose turn it is">${esc(player(s, s.players[s.active].id).name)}'s turn</button>` : ''}</div>
+      <div class="ticker" aria-live="polite">${freezeBanner(s)}${recent.map((l) => `<div>${esc(youText(l.text))}</div>`).join('')}</div>
+      <div class="zoom"><button data-zoom="in" aria-label="Zoom in">+</button><button data-zoom="out" aria-label="Zoom out">−</button><button data-zoom="fit" title="See the whole table">All</button><button data-zoom="me" title="Jump to your seat">You</button>${s.common ? '<button data-zoom="area" title="Jump to the uncontrolled area in the middle of the table">Area</button>' : ''}${!myTurn(s) && s.phase !== 'gameOver' ? `<button data-zoom="turn" title="Jump to the player whose turn it is">${esc(player(s, s.players[s.active].id).name)}'s turn</button>` : ''}</div>
       ${renderInspect(s)}
       ${renderBrowse(s)}
       <aside class="sheet ${ui.sheetMin ? 'min' : ''} ${gnext('console')}">
@@ -675,7 +690,7 @@ function render() {
         <span class="label">Your hand</span>
         <button class="jump plots" data-handjump="plots">Plots ${plotsInHand(s, ui.me).length}</button>
         <button class="jump groups" data-handjump="groups">Groups ${me.hand.length - plotsInHand(s, ui.me).length}</button>
-        <span class="muted small">decks: ${me.plotDeck.length} Plots, ${me.groupDeck.length} Groups</span>
+        <span class="muted small">${s.common ? 'shared decks' : 'decks'}: ${plotDeckOf(s, ui.me).length} Plots, ${groupDeckOf(s, ui.me).length} Groups</span>
         <button class="fold" data-act="hand" aria-expanded="${!ui.handMin}" aria-label="${ui.handMin ? 'Show' : 'Hide'} your hand">${ui.handMin ? '▴' : '▾'}</button>
       </div>
       <div class="hand">${handSections(s)}</div>
@@ -766,8 +781,8 @@ function handSections(s: GameState): string {
     </section>`;
   return sec('plots', 'Plots', `· limit ${handLimit(s, ui.me)} outside your turn`, plots, 'No Plots.')
     + (s.common
-      // SubGenius game: the cards anyone may attack, take over or (Resources) claim for one Slack.
-      ? sec('groups uncontrolled', 'Uncontrolled area', '· anyone may take these', uncontrolledCards(s), 'Empty.') + (groups.length ? sec('groups', 'Groups waiting for your first turn', '', groups, '') : '')
+      // SubGenius game: Group cards lie in the uncontrolled area on the table; only the two dealt at the start wait here.
+      ? (groups.length ? sec('groups', 'Groups waiting for your first turn', '· they go to the uncontrolled area', groups, '') : '')
       : sec('groups', 'Groups & Resources', '· no limit', groups, 'No Groups.'));
 }
 
@@ -890,6 +905,7 @@ function bindTable() {
     if (z === 'fit') fitView(vp, world, true);
     else if (z === 'me') focusSeat(vp, world, ui.me);
     else if (z === 'turn' && ui.game) focusSeat(vp, world, ui.game.players[ui.game.active].id);
+    else if (z === 'area') focusSeat(vp, world, 'area');
     else zoomAt(vp.clientWidth / 2, vp.clientHeight / 2, z === 'in' ? 1.25 : 0.8);
     applyView(world);
   });
@@ -931,6 +947,7 @@ function renderSide(s: GameState, pl: string, mine: boolean): string {
           <span class="goal-bar"><span style="width:${Math.min(100, (special.current / special.target) * 100)}%"></span></span>
           <b>${special.current}</b>/${special.target} ${esc(special.label)}
         </span>` : ''}
+        ${conditionChips(s, pl)}
       </div>`;
   const field = `<div class="board-scroll"><div class="field" style="width:calc(var(--u) * ${maxX - minX});height:calc(var(--u) * ${maxY - minY})">${cells.join('')}</div></div>`;
   // Seat order mirrors a real table: your nameplate at your edge, the Power Structure toward the middle.
@@ -964,7 +981,7 @@ function seatRail(s: GameState, pl: string, mine: boolean): string {
     : '<span class="spot-empty">empty</span>', 'discard-spot');
   const destroyedPile = Object.values(s.cards).filter((c) => c.owner === pl && c.zone === 'destroyed');
   const destroyedTop = destroyedPile[destroyedPile.length - 1];
-  const destroyed = destroyedPile.length ? spot('Destroyed', `<button class="discard-top" data-browse="destroyed:${pl}" title="Browse the destroyed pile (${plural(destroyedPile.length, 'card')})"><b>${esc(cardName(s, destroyedTop.iid))}</b></button><span class="spot-count">${destroyedPile.length}</span>`, 'discard-spot') : '';
+  const destroyed = destroyedPile.length ? spot('Destroyed', `<button class="discard-top" data-browse="destroyed:${pl}" title="Browse the destroyed pile (${plural(destroyedPile.length, 'card')})"><b>${esc(cardName(s, destroyedTop.iid))}</b>${destroyedTop.killed ? '<span class="killed-tag">killed</span>' : ''}</button><span class="spot-count">${destroyedPile.length}</span>`, 'discard-spot') : '';
   const plots = plotsInHand(s, pl).length, groups = p.hand.length - plots;
   const fan = (deck: 'plot' | 'group', k: number) => Array.from({ length: Math.min(k, 6) }, () => `<span class="cardback ${deck}"></span>`).join('');
   // A player's exposed Plots are face up and public, even in a rival's hand (R048).
@@ -981,6 +998,8 @@ function seatRail(s: GameState, pl: string, mine: boolean): string {
     return `<button class="res ${sel ? 'selected' : ''} ${gcls(r)}" data-res="${r}"><b>${esc(cardName(s, r))}</b>${c.tokens ? '<span class="token-inline"></span>' : ''}<span class="muted small">${c.hiddenUnder ? `face down under ${esc(cardName(s, c.hiddenUnder))}` : c.linkedTo && s.cards[c.linkedTo] && def(s, c.linkedTo).type !== 'Illuminati' ? `linked to ${esc(cardName(s, c.linkedTo))}` : 'unlinked'}</span></button>`;
   }).join('') || (agentCards ? '' : '<span class="spot-empty">none in play</span>')}</div><span class="spot-label">Resources</span></div>`;
   // Your own decks live on the rail at the left of the screen, where you tap to draw.
+  // SubGenius game: the decks and discard piles are shared, and lie beside the uncontrolled area.
+  if (s.common) return `<div class="seat-rail">${destroyed}${hand}${tray}</div>`;
   return `<div class="seat-rail">${mine ? '' : pile('plot', p.plotDeck.length) + pile('group', p.groupDeck.length)}${discard}${destroyed}${hand}${tray}</div>`;
 }
 
@@ -1033,8 +1052,18 @@ function tableCard(s: GameState, iid: string): string {
     outs.includes(sd) ? `<i class="arr out ${sd.toLowerCase()}"></i>` : sd === inSide ? `<i class="arr in ${sd.toLowerCase()}"></i>` : '').join('');
   const p = power(s, iid), g = globalPower(s, iid);
   const partial = !ill && !isImplemented(d.id) && (GROUP_ABILITIES[d.id]?.length ?? 0) > 0;
+  const cond = cardConditions(s, iid);
+  const slack = ill && keepsSlack(s, iid);
+  const zaps = ill && c.controller ? playerConditions(s, c.controller).zaps.length : 0;
+  const badges = [
+    cond.paralyzed.length ? '<span class="cond-ribbon para">Paralyzed</span>' : '',
+    cond.frozen ? '<span class="cond-ribbon frozen">Frozen</span>' : '',
+    zaps ? `<span class="zap-badge" aria-label="${plural(zaps, 'Zap')}">⚡${zaps > 1 ? zaps : ''}</span>` : '',
+    cond.held ? `<span class="token held" title="${plural(cond.held, 'Action token')} held back until it is free again">${cond.held > 1 ? cond.held : ''}</span>` : '',
+  ].join('');
+  const condText = [cond.paralyzed.length ? 'Paralyzed' : '', cond.frozen ? 'Frozen this turn' : '', zaps ? `${plural(zaps, 'Zap')} on this Power Structure` : '', slack ? `${c.tokens} Slack` : ''].filter(Boolean).join('; ');
   return `
-    <button class="card ${ill ? 'ill' : ''} ${artCls(d.id)} ${c.devastated ? 'devastated' : ''} ${highlightFor(s, iid)} ${gcls(iid)}" data-card="${iid}" title="${esc(`${d.name}: Power ${p}${ill ? '' : `, Global Power ${g}, Resistance ${resistance(s, iid)}`}`)}">
+    <button class="card ${ill ? 'ill' : ''} ${artCls(d.id)} ${c.devastated ? 'devastated' : ''} ${cond.paralyzed.length ? 'paralyzed' : ''} ${cond.frozen ? 'frozen' : ''} ${highlightFor(s, iid)} ${gcls(iid)}" data-card="${iid}" title="${esc(`${d.name}: Power ${p}${ill ? '' : `, Global Power ${g}, Resistance ${resistance(s, iid)}`}${condText ? `. ${condText} (tap for details)` : ''}`)}">
       ${arrows}
       <span class="name">${esc(d.name)}</span>
       <span class="aligns">${alignments(s, iid).map(chip).join('')}</span>
@@ -1042,7 +1071,9 @@ function tableCard(s: GameState, iid: string): string {
         <span class="pw">${p}${g ? `<small>/${g}</small>` : ''}</span>
         ${ill ? '' : `<span class="rs">${resistance(s, iid)}</span>`}
       </span>
-      ${c.tokens ? `<span class="token" title="${c.tokens} Action token${c.tokens > 1 ? 's' : ''}">${c.tokens > 1 ? c.tokens : ''}</span>` : ''}
+      ${slack ? `<span class="slack" title="Slack: the Church's Action tokens, kept from turn to turn">${c.tokens}<small> Slack</small></span>`
+        : c.tokens ? `<span class="token" title="${c.tokens} Action token${c.tokens > 1 ? 's' : ''}">${c.tokens > 1 ? c.tokens : ''}</span>` : ''}
+      ${badges}
       ${partial ? '<span class="partial" title="Part of this ability is not active yet">◐</span>' : ''}
     </button>`;
 }
@@ -1081,7 +1112,53 @@ function renderNwo(s: GameState): string {
     <div class="emblem" aria-hidden="true">${EMBLEM}</div>
     <div class="nwo-label" title="New World Order cards stay in play and change the rules for every player. Only one of each colour can be in play; a new one replaces the old.">New World Order</div>
     <div class="nwo-slots">${NWO_COLORS.map(slot).join('')}</div>
+    ${s.common ? areaTray(s) : ''}
   </div>`;
+}
+
+/**
+ * SubGenius game: the uncontrolled area in the middle of the table, face up for everyone, with the
+ * shared decks and discard piles beside it. Tap a card to read it; attacks may target its Groups, and
+ * a Resource here is taken for one Slack.
+ */
+function areaTray(s: GameState): string {
+  const cards = uncontrolledCards(s);
+  const c = s.common!;
+  const pile = (label: string, n: number, deck: 'plot' | 'group') => `<div class="spot deck-spot"><div class="spot-card"><span class="cardback ${deck} ${n ? '' : 'empty'}" aria-hidden="true"></span><span class="spot-count">${n}</span></div><span class="spot-label">${label}</span></div>`;
+  const disc = (label: string, list: string[], kind: 'plotDiscard' | 'groupDiscard') => `<div class="spot discard-spot"><div class="spot-card">${list.length
+    ? `<button class="discard-top" data-browse="${kind}:" title="Browse the shared ${label.toLowerCase()} (${plural(list.length, 'card')}, face up)"><b>${esc(cardName(s, list[list.length - 1]))}</b></button><span class="spot-count">${list.length}</span>`
+    : '<span class="spot-empty">empty</span>'}</div><span class="spot-label">${label}</span></div>`;
+  const tile = (iid: string) => {
+    const d = def(s, iid);
+    if (d.type === 'Resource') {
+      return `<button class="area-res ${gcls(iid)}" data-card="${iid}" title="${esc(d.name)}: a Resource. Take it for one Slack (your Illuminati's token), once per turn.">
+        <span class="kind">Resource</span><b>${esc(d.name)}</b><span class="small">${esc(cardFace(d.id)?.rules || d.text)}</span></button>`;
+    }
+    return `<div class="area-cell">${tableCard(s, iid)}</div>`;
+  };
+  return `<section class="area-tray" data-seat="area" aria-label="Uncontrolled area">
+    <div class="area-head"><span class="area-title">Uncontrolled area</span><span class="muted small">${plural(cards.length, 'card')} · anyone may attack a Group here; a Resource is taken for one Slack</span></div>
+    <div class="area-body">
+      <div class="area-cards">${cards.map(tile).join('') || '<span class="spot-empty">No cards here right now.</span>'}</div>
+      <div class="area-piles">${pile('Plot deck', c.plotDeck.length, 'plot')}${pile('Group deck', c.groupDeck.length, 'group')}${disc('Plot discards', c.plotDiscard, 'plotDiscard')}${disc('Group discards', c.groupDiscard, 'groupDiscard')}</div>
+    </div>
+  </section>`;
+}
+
+/** Zaps, Paralysis and Slack at a seat: small chips by the name; the Zap and Paralysis ones open the details. */
+function conditionChips(s: GameState, pl: string): string {
+  const c = playerConditions(s, pl);
+  const p = player(s, pl);
+  const chips: string[] = [];
+  if (c.zaps.length) chips.push(`<button class="cond-chip zap" data-inspect="${p.illuminati}" title="${esc(c.zaps.map((z) => zapLine(s, z)).join(' · '))}">⚡ Zapped${c.zaps.length > 1 ? ` ×${c.zaps.length}` : ''}</button>`);
+  if (c.paralyzed.length) chips.push(`<button class="cond-chip para" data-inspect="${c.paralyzed[0]}" title="Paralyzed: ${esc(c.paralyzed.map((g) => cardName(s, g)).join(', '))}">${c.paralyzed.length} Paralyzed</button>`);
+  if (s.cards[p.illuminati] && keepsSlack(s, p.illuminati)) chips.push(`<button class="cond-chip slack" data-inspect="${p.illuminati}" title="Slack: the Church keeps its tokens from turn to turn; up to 3 count toward the Basic Goal">${s.cards[p.illuminati].tokens} Slack</button>`);
+  return chips.join('');
+}
+
+/** While an Attribute Freeze is in effect: a banner at the top of the table (tap to read the card). */
+function freezeBanner(s: GameState): string {
+  return liveFreezes(s).map((f) => `<button class="freeze-banner" data-inspect="${f.card}">❄ <b>${esc(f.label)} Groups are Frozen</b> until the end of the turn: they may spend tokens only to defend themselves. <span class="muted">${esc(cardName(s, f.card))}, played by ${esc(f.by === ui.me ? 'you' : player(s, f.by).name)}</span></button>`).join('');
 }
 
 /** The table's centrepiece: an eye in a pyramid over a globe, drawn here from scratch. */
@@ -1136,7 +1213,7 @@ function rulesHtml(s: GameState): string {
   const two = s.players.length === 2;
   const sec = (id: string, title: string, body: string) => `<section id="rule-${id}"><h3>${title}</h3>${body}${fullRules(id)}</section>`;
   return `<h2>How to play</h2>
-  <nav class="rule-nav">${[['goal', 'Your goal'], ['card', 'Reading a card'], ['turn', 'A turn'], ['tokens', 'Actions'], ['attack', 'Attacks'], ['roll', 'The roll'], ['help', 'Helping'], ['plots', 'Plots'], ['more', 'More rules'], ...(s.players.some((p) => p.isAI && p.aiStyle) ? [['foes', 'Opponents']] : [])].map(([id, t]) => `<button data-rules="${id}">${t}</button>`).join('')}<button class="rb-open-btn" data-rulebook="">Full rulebook</button><button class="close-rules" data-rules="" aria-label="Close rules">✕</button></nav>
+  <nav class="rule-nav">${[['goal', 'Your goal'], ['card', 'Reading a card'], ['turn', 'A turn'], ['tokens', 'Actions'], ['attack', 'Attacks'], ['roll', 'The roll'], ['help', 'Helping'], ['plots', 'Plots'], ['more', 'More rules'], ...(packsInGame(s) ? [['packs', 'Expansions']] : []), ...(s.players.some((p) => p.isAI && p.aiStyle) ? [['foes', 'Opponents']] : [])].map(([id, t]) => `<button data-rules="${id}">${t}</button>`).join('')}<button class="rb-open-btn" data-rulebook="">Full rulebook</button><button class="close-rules" data-rules="" aria-label="Close rules">✕</button></nav>
   ${sec('goal', 'Your goal', `<p>You win by <b>declaring victory</b> when you meet a Goal at the end of a turn (yours or anyone's; never in the first round), and then surviving your rivals' attempts to stop you. Nobody wins without declaring. There are three kinds of Goal:</p><ul>
     <li><b>Basic Goal:</b> control ${goalNeeded(s, ui.me)} Groups, counting your Illuminati. You have ${goalCount(s, ui.me)}.</li>
     <li><b>Your Illuminati's Special Goal</b> (${esc(ill.name)}): ${esc(goalLine(ill.id) || (cardFace(ill.id) ? 'none of its own: its ability above changes how it wins (see its card).' : ill.text.replace(/^Power [^.]+\.\s*/, '')))}</li>
@@ -1178,6 +1255,7 @@ function rulesHtml(s: GameState): string {
     <ul><li>Outside your own turn you may hold at most <b>${handLimit(s, ui.me)}</b> Plots; in your turn there is no limit.</li>
     <li><b>New World Orders</b> sit in the middle and change the rules for everyone; only one of each colour at a time.</li>
     <li>Nobody may use two copies of the same Plot in one attack.</li></ul>`)}
+  ${packsInGame(s) ? sec('packs', 'Expansions in this game', packRules(s)) : ''}
   ${s.players.some((p) => p.isAI && p.aiStyle) ? sec('foes', 'Your opponents', `<p>Each computer player has a style it always plays. Learn their habits and use them.</p><ul>${s.players.filter((p) => p.isAI).map((p) => {
     const st = styleById(p.aiStyle);
     return `<li><b>${esc(p.name)}</b> (${st ? esc(st.style) : 'Computer'}, ${LEVEL_NAME[p.aiLevel ?? 'normal']})${st ? `: ${esc(st.blurb)}` : ''}</li>`;
@@ -1190,8 +1268,31 @@ function rulesHtml(s: GameState): string {
     <li>When a card and a rule disagree, the card wins.</li></ul>`)}`;
 }
 
+/** The Rules window's short section on the packs this game uses. */
+function packRules(s: GameState): string {
+  const parts: string[] = [`<p>This game uses ${esc(packsInGame(s))}.</p>`];
+  if (s.settings.expansions?.assassins && !s.settings.subgeniusRules) {
+    parts.push(`<h4>Assassins</h4><ul>
+      <li><b>Zaps</b> (⚡) are played on a rival's Illuminati for an Illuminati action and restrict that player's whole Power Structure. Anyone may spend one Illuminati action at any time (not during an Instant attack) to remove every Zap from one player.</li>
+      <li><b>Paralyzed</b> Groups keep their tokens but cannot spend them, use their abilities or linked Resources, or take new puppets, and they do not count toward Goals. Their master or any Illuminati may spend an action to free them.</li>
+      <li><b>Freezes</b> (❄) stop every Group with the named attribute, whoever controls it, from spending tokens until the end of the turn, except to defend itself.</li>
+      <li>Personalities destroyed by an Assassination are <b>killed</b>; only cards that restore killed Personalities bring them back.</li></ul>
+      <button class="rb-link" data-rulebook="assassins">Open the full rulebook: Assassins ›</button>`);
+  }
+  if (s.settings.expansions?.subgenius || s.settings.subgeniusRules) {
+    parts.push(`<h4>SubGenius</h4><ul>
+      <li>The <b>Church of the SubGenius</b> keeps its Action tokens as <b>Slack</b>, from turn to turn; up to 3 Slack count as Groups toward the Basic Goal.</li>
+      <li>Many Plots name the action that powers them (<i>Requires … Action</i>). When you play one, pick which of the listed ways to pay; only your own Groups can pay.</li>
+      ${s.settings.subgeniusRules ? `<li>Everyone plays the Church and draws from <b>shared decks</b>. Group cards are drawn face up into the <b>uncontrolled area</b> in the middle of the table (only while it holds fewer than 8). Anyone may attack a Group there, to control or destroy it; a Resource there is taken for one Slack, once per turn.</li>
+      <li>Your automatic takeover is a card you put into the area this turn, and it costs your Church its new token. Basic Goal: ${goalNeeded(s, ui.me)} Groups.</li>` : '<li>In a regular game, a card that would go to the uncontrolled area goes to that player\'s hand instead.</li>'}</ul>
+      <button class="rb-link" data-rulebook="${s.settings.subgeniusRules ? 'subgenius-game' : 'subgenius-mixed'}">Open the full rulebook: SubGenius ›</button>`);
+  }
+  return parts.join('');
+}
+
 /** The link from a short Rules section to the matching section of the full rulebook. */
 function fullRules(id: string): string {
+  if (id === 'packs') return ''; // the packs section links to its own rulebook sections
   const target = sectionById(RULES_PANEL_LINKS[id] ?? '');
   return target ? `<button class="rb-link" data-rulebook="${target.id}">Open the full rulebook: ${esc(target.title)} ›</button>` : '';
 }
@@ -1331,11 +1432,10 @@ function renderConsole(s: GameState): string {
       ${single ? '' : `<div class="btns"><button class="primary" data-act="choose" ${picked.length >= ch.min && picked.length <= ch.max ? '' : 'disabled'}>Confirm (${picked.length})</button></div>`}`;
   } else if (s.prompt?.player === ui.me && s.prompt.kind === 'draw') {
     const d = s.prompt.data as { plot: number; group: number };
-    const me = player(s, ui.me);
-    body = `<h2>Draw your cards</h2><p>Start of your turn: draw ${d.plot > 1 ? `${d.plot} Plot cards` : 'a Plot card'} and a Group card. Tap the decks on the left of the table, or use the buttons.</p>
+    body = `<h2>Draw your cards</h2><p>Start of your turn: draw ${d.plot > 1 ? `${d.plot} Plot cards` : 'a Plot card'} and ${s.common ? (d.group ? 'a Group card, which goes face up into the uncontrolled area' : 'no Group card (the uncontrolled area already holds 8 or more)') : 'a Group card'}. Tap the decks on the left of the table, or use the buttons.</p>
       <div class="btns">
-        <button class="${d.plot ? 'primary' : ''}" data-act="draw-plot" ${d.plot && me.plotDeck.length ? '' : 'disabled'}>Draw a Plot${d.plot > 1 ? ` (${d.plot} left)` : ''}</button>
-        <button class="${!d.plot && d.group ? 'primary' : ''}" data-act="draw-group" ${d.group && me.groupDeck.length ? '' : 'disabled'}>Draw a Group</button>
+        <button class="${d.plot ? 'primary' : ''}" data-act="draw-plot" ${d.plot && (plotDeckOf(s, ui.me).length || s.common?.plotDiscard.length) ? '' : 'disabled'}>Draw a Plot${d.plot > 1 ? ` (${d.plot} left)` : ''}</button>
+        <button class="${!d.plot && d.group ? 'primary' : ''}" data-act="draw-group" ${d.group && (groupDeckOf(s, ui.me).length || s.common?.groupDiscard.length) ? '' : 'disabled'}>Draw a Group${s.common ? ' into the area' : ''}</button>
         <button class="linkish" data-act="skipDraw">Skip the rest (drawing is optional)</button>
       </div>`;
   } else if (s.prompt?.player === ui.me && s.prompt.kind === 'chooseLead') {
@@ -1379,12 +1479,12 @@ function renderConsole(s: GameState): string {
       plotExcess ? `Outside your turn you may hold ${handLimit(s, ui.me)} Plots: pick Plots to get rid of until you are down to ${handLimit(s, ui.me)}.` : '',
     ].filter(Boolean).join(' ');
     body = `<h2>${goalExcess ? 'Too many Goal cards' : 'Too many Plots'}</h2><p>${parts} Tap the cards in your hand.</p>
-      <div class="btns"><button class="primary" data-act="discard" ${ok && sel.length ? '' : 'disabled'}>Discard ${sel.length} card${sel.length === 1 ? '' : 's'}</button><button data-act="return" ${ok && sel.length ? '' : 'disabled'}>Put back in my Plot deck</button></div>`;
+      <div class="btns"><button class="primary" data-act="discard" ${ok && sel.length ? '' : 'disabled'}>Discard ${sel.length} card${sel.length === 1 ? '' : 's'}</button>${s.common ? '' : `<button data-act="return" ${ok && sel.length ? '' : 'disabled'}>Put back in my Plot deck</button>`}</div>`;
   } else if (ui.sel.kind === 'discard') {
     // Voluntary discard/return/expose (R048): legal at any time, not only a forced prompt.
     body = renderVoluntaryDiscard(s, ui.sel);
   } else if (s.window && waiting.includes(ui.me)) {
-    const opts = responseOptions(s, ui.me);
+    const opts = withCostChoices(s, responseOptions(s, ui.me));
     const ev = s.window.event;
     const cn = (iid?: string) => esc(iid && s.cards[iid] ? cardName(s, iid) : 'a card');
     const pn = (id?: string) => esc(id ? player(s, id).name : 'A player');
@@ -1474,8 +1574,13 @@ function renderMainConsole(s: GameState): string {
   if (sel.kind === 'deck') {
     const ill = me.illuminati;
     if (sel.deck === 'plot') {
-      return `<h2>Plot deck</h2><p>${plural(me.plotDeck.length, 'card')} left. Buying a Plot costs your Illuminati's Action token, or the tokens of two other Groups — at any time, not only in your own main phase.</p>
+      return `<h2>Plot deck</h2><p>${plural(plotDeckOf(s, ui.me).length, 'card')} left. Buying a Plot costs your Illuminati's Action token, or the tokens of two other Groups — at any time, not only in your own main phase.</p>
         ${anyTimeBar(s)}
+        <div class="btns"><button class="linkish" data-act="clear">Close</button></div>`;
+    }
+    if (s.common) {
+      return `<h2>Shared Group deck</h2><p>${plural(s.common.groupDeck.length, 'card')} left (the discards are shuffled back in when it runs out). At any time you may spend 1 Slack or the tokens of two other Groups to draw a Group card face up into the uncontrolled area, however many cards already lie there.</p>
+        ${sgBuyGroup(s) || '<p class="muted">You have no Slack or two other tokens to spend right now.</p>'}
         <div class="btns"><button class="linkish" data-act="clear">Close</button></div>`;
     }
     const can = s.cards[ill].tokens && !s.turnFlags.illumGroupDraw && me.groupDeck.length;
@@ -1486,6 +1591,13 @@ function renderMainConsole(s: GameState): string {
   if (sel.kind === 'resource') {
     const d = def(s, sel.iid);
     const inHand = s.cards[sel.iid].zone === 'hand';
+    if (s.cards[sel.iid].zone === 'uncontrolled') {
+      // SubGenius game: an uncontrolled Resource is taken for one Slack, once per turn.
+      const can = legal(s, ui.me, { type: 'playResource', card: sel.iid });
+      return `<h2>${esc(d.name)}</h2><p class="muted small">In the uncontrolled area.</p>${faceBlock(d.id, d.text)}
+        <div class="btns"><button class="primary" data-act="playResource" ${can ? '' : 'disabled'}>Take it (1 Slack, once per turn)</button><button class="linkish" data-act="clear">Close</button></div>
+        ${!can && tutorial() ? `<p class="why">${esc(s.turnFlags.resourcePlayed ? 'You have already taken a Resource this turn.' : !s.cards[me.illuminati].tokens ? 'Taking a Resource costs one Slack, and your Church has none left.' : 'It cannot be taken right now.')}</p>` : ''}`;
+    }
     if (inHand) {
       const can = !s.turnFlags.resourcePlayed && s.cards[me.illuminati].tokens > 0 && canEnterPlay(s, sel.iid, ui.me);
       return `<h2>${esc(d.name)}</h2>${faceBlock(d.id, d.text)}
@@ -1508,9 +1620,10 @@ function renderMainConsole(s: GameState): string {
   }
   if (sel.kind === 'plot') {
     const d = def(s, sel.card);
-    const opts = plotOptions(s, ui.me, sel.card);
+    const opts = withCostChoices(s, plotOptions(s, ui.me, sel.card));
     (window as unknown as { __popts: typeof opts }).__popts = opts;
     return `<h2>${esc(d.name)}</h2>${faceBlock(d.id, d.text)}
+      ${PLOTS[d.id]?.requires && opts.length ? `<p class="muted small">Choose how to pay: this card names the actions that can power it.</p>` : ''}
       ${PLOTS[d.id] ? (opts.length ? `<div class="opts">${opts.map((o, i) => `<button data-popt="${i}">${esc(o.label)}</button>`).join('')}</div>` : (tutorial() ? `<p class="why">${esc(whyNot(s, sel.card) ?? 'Not playable right now.')}</p>` : '<p class="muted">Not playable right now.</p>')) : '<p class="muted">This card is not in this version of the game yet.</p>'}
       <div class="btns"><button class="linkish" data-act="clear">Close</button></div>`;
   }
@@ -1518,12 +1631,34 @@ function renderMainConsole(s: GameState): string {
     ${declarePanel(s, true)}
     <p>Tap one of your Groups with a <span class="token-inline"></span> token to attack or move it. Tap a Plot in your hand to play it.</p>
     <div class="btns">
-      <button data-act="drawGroup" ${s.cards[me.illuminati].tokens && !s.turnFlags.illumGroupDraw && me.groupDeck.length ? '' : 'disabled'}>Draw a Group card (Illuminati token, once per turn)</button>
+      ${s.common ? '' : `<button data-act="drawGroup" ${s.cards[me.illuminati].tokens && !s.turnFlags.illumGroupDraw && me.groupDeck.length ? '' : 'disabled'}>Draw a Group card (Illuminati token, once per turn)</button>`}
       <button class="primary" data-act="endTurn">End turn</button>
     </div>
     ${anyTimeBar(s)}
     ${voluntaryBar(s)}
     ${online ? '' : `<label class="toggle"><input type="checkbox" id="autopass" ${ui.autoPass ? 'checked' : ''}> Pass for me when I have no possible response</label>`}`;
+}
+
+/**
+ * "Requires ... Action" (both packs): the engine offers one way to pay each such Plot. Show every
+ * affordable alternative instead (an Illuminati action, the named Groups' actions, discards...), each
+ * saying what it spends, so the player picks the cost.
+ */
+function withCostChoices(s: GameState, opts: { label: string; action: Action }[]): { label: string; action: Action }[] {
+  const out: { label: string; action: Action }[] = [];
+  for (const o of opts) {
+    const play = o.action.type === 'playPlot' ? o.action.play : undefined;
+    if (!play || !s.cards[play.card] || !declaresCost(s.cards[play.card].cardId)) { out.push(o); continue; }
+    const choices = costChoices(s, ui.me, play);
+    if (!choices.length) { out.push(o); continue; }
+    const prefix = o.label.startsWith(`${cardName(s, play.card)}: `) ? `${cardName(s, play.card)}: ` : '';
+    const base = describePlay(s, { ...play, payWith: undefined, discards: undefined });
+    for (const ch of choices) {
+      const label = `${prefix}${base === 'Play' ? '' : `${base} · `}pay with ${ch.cost}`;
+      if (!out.some((x) => x.label === label)) out.push({ label, action: { type: 'playPlot', play: ch.play } });
+    }
+  }
+  return out;
 }
 
 /** Is the victory reminder on for you: the game's setting, or Tutorial/Guided help? */
@@ -1578,7 +1713,7 @@ function anyTimeBar(s: GameState): string {
   const ill = me.illuminati;
   const allPayers = structureCards(s, ui.me).filter((g) => g !== ill && s.cards[g].tokens > 0).sort((a, b) => power(s, a) - power(s, b));
   let buy = '';
-  if (me.plotDeck.length) {
+  if (plotDeckOf(s, ui.me).length || s.common?.plotDiscard.length) {
     if (ui.buyPick) {
       const picked = ui.buyPick;
       const ok = picked.length === 2 && new Set(picked).size === 2;
@@ -1634,7 +1769,31 @@ function anyTimeBar(s: GameState): string {
   // Spare Illuminati cards that can become agents now (R044).
   const spare = me.hand.filter((c) => def(s, c).type === 'Illuminati' && !agentProblem(s, ui.me, c));
   const agents = spare.length ? `<div class="label">Spare Illuminati</div><div class="opts">${spare.map((c) => `<button data-agent="${c}">Play ${esc(cardName(s, c))} as an agent (+3 against it; discards the top card of both your decks)</button>`).join('')}</div>` : '';
-  return buy + relief + agents;
+  return buy + sgBuyGroup(s) + relief + agents + conditionsBar(s);
+}
+
+/** SubGenius game: a Group card may be drawn into the uncontrolled area at any time, for 1 Slack or 2 other tokens. */
+function sgBuyGroup(s: GameState): string {
+  if (!s.common) return '';
+  const me = player(s, ui.me);
+  const two = structureCards(s, ui.me).filter((g) => g !== me.illuminati && s.cards[g].tokens > 0).sort((a, b) => power(s, a) - power(s, b)).slice(0, 2);
+  const ill = legal(s, ui.me, { type: 'drawGroup', payWith: [me.illuminati] });
+  const grp = two.length === 2 && legal(s, ui.me, { type: 'drawGroup', payWith: two });
+  if (!ill && !grp) return '';
+  return `<div class="btns">
+    ${ill ? `<button data-sg-buy="${me.illuminati}">Draw a Group into the area (1 Slack)</button>` : ''}
+    ${grp ? `<button data-sg-buy="${two.join(',')}">Draw a Group into the area (tokens of ${esc(two.map((g) => cardName(s, g)).join(' and '))})</button>` : ''}</div>`;
+}
+
+/**
+ * Assassins: remove the Zaps on you, or free your Paralyzed Groups, whenever you may act. (A rival's
+ * Zaps and Groups can be dealt with the same way from their card's details.)
+ */
+function conditionsBar(s: GameState): string {
+  if (player(s, ui.me).eliminated) return '';
+  const c = playerConditions(s, ui.me);
+  const html = [c.zaps.length ? unzapButton(s, ui.me) : '', ...c.paralyzed.map((g) => freeButtons(s, g))].filter(Boolean).join('');
+  return html ? `<div class="label">Zaps and Paralysis</div><div class="opts">${html}</div>` : '';
 }
 
 /** A button that opens the "tidy your hand" picker: discard, return a Plot to your deck, or expose a
@@ -1653,9 +1812,9 @@ function renderVoluntaryDiscard(s: GameState, sel: Extract<Sel, { kind: 'discard
   return `<h2>Tidy your hand</h2><p>Tap cards in your hand to select them, then choose what to do. Legal at any time.</p>
     <div class="btns">
       <button class="primary" data-act="voluntary-discard" ${cards.length ? '' : 'disabled'}>Discard</button>
-      <button data-act="voluntary-return-top" ${allPlots ? '' : 'disabled'}>Return to deck: top</button>
+      ${s.common ? '' : `<button data-act="voluntary-return-top" ${allPlots ? '' : 'disabled'}>Return to deck: top</button>
       <button data-act="voluntary-return-middle" ${allPlots ? '' : 'disabled'}>Return to deck: middle</button>
-      <button data-act="voluntary-return-bottom" ${allPlots ? '' : 'disabled'}>Return to deck: bottom</button>
+      <button data-act="voluntary-return-bottom" ${allPlots ? '' : 'disabled'}>Return to deck: bottom</button>`}
       ${canExposeAll && cards.length === 1 ? '<button data-act="voluntary-expose">Expose</button>' : ''}
       ${canExposeAll && cards.length === 1 ? rivalsLive(s).map((r) => `<button data-show-to="${r.id}">Show it to ${esc(r.name)} only</button>`).join('') : ''}
       <button class="linkish" data-act="clear">Cancel</button>
@@ -1694,6 +1853,73 @@ function faceBlock(cardId: string, engineText: string): string {
     <details class="face-exact"><summary>Exact rules wording</summary><p class="small">${esc(engineText)}</p></details>`;
 }
 
+/** Ways you may free a Paralyzed Group now: its master (if it is yours) or your Illuminati. */
+function freeButtons(s: GameState, group: string): string {
+  const me = player(s, ui.me);
+  const g = s.cards[group];
+  const payers = [...new Set([g?.master && s.cards[g.master]?.controller === ui.me ? g.master : undefined, me.illuminati].filter((x): x is string => !!x))];
+  return payers.filter((pay) => legal(s, ui.me, { type: 'freeGroup', group, payWith: pay }))
+    .map((pay) => `<button data-free="${group}:${pay}">Free ${esc(cardName(s, group))} (${pay === me.illuminati ? 'your Illuminati\'s action' : `action of its master, ${esc(cardName(s, pay))}`})</button>`).join('');
+}
+/** The button to remove every Zap from a player, when you may (one Illuminati action). */
+function unzapButton(s: GameState, pl: string): string {
+  if (!legal(s, ui.me, { type: 'removeZaps', player: pl })) return '';
+  return `<button data-unzap="${pl}">Remove every Zap from ${pl === ui.me ? 'your Power Structure' : esc(player(s, pl).name)} (your Illuminati's action)</button>`;
+}
+
+/**
+ * The packs' lasting conditions on an inspected card, in plain words, with what can be done about
+ * them: Zaps (on an Illuminati, or a Zap card itself), Paralysis, Freezes, killed Personalities, Slack.
+ */
+function conditionsBlock(s: GameState, iid: string): string {
+  const c = s.cards[iid];
+  const d = def(s, iid);
+  const out: string[] = [];
+  const kw = d.keywords ?? [];
+  // A Zap, Paralysis or Freeze card on the table: what it holds, and how to end it.
+  if (c.zone === 'table' && c.linkedTo && s.cards[c.linkedTo]) {
+    const on = s.cards[c.linkedTo];
+    if (kw.includes('Zap') && def(s, c.linkedTo).type === 'Illuminati' && on.controller) {
+      out.push(`<p class="cond-note zap">⚡ A Zap on ${on.controller === ui.me ? 'your' : `${esc(player(s, on.controller).name)}'s`} whole Power Structure.</p><div class="opts">${unzapButton(s, on.controller)}</div>`);
+    } else if (kw.includes('Paralysis')) {
+      out.push(`<p class="cond-note para">Paralyzing ${esc(cardName(s, c.linkedTo))}.</p><div class="opts">${freeButtons(s, c.linkedTo)}</div>`);
+    }
+  }
+  if (kw.includes('Freeze') && liveFreezes(s).some((f) => f.card === iid)) out.push('<p class="cond-note frozen">❄ In effect until the end of this turn.</p>');
+  if (d.type === 'Illuminati' && c.controller) {
+    const zaps = playerConditions(s, c.controller).zaps;
+    if (zaps.length) {
+      out.push(`<div class="label">Zapped</div><p class="small">A Zap restricts every Group in this Power Structure, not only the Illuminati. Any player may spend one Illuminati action at any time (not during an Instant attack) to remove every Zap on it at once.</p>
+        <div class="opts">${zaps.map((z) => `<button data-inspect="${z}">⚡ ${esc(zapLine(s, z))}</button>`).join('')}${unzapButton(s, c.controller)}</div>`);
+    }
+    if (keepsSlack(s, iid)) {
+      out.push(`<div class="label">Slack</div><p class="small"><b>${c.tokens}</b> Slack. The Church of the SubGenius keeps its Action tokens from turn to turn and gets its new one on top; each Illuminati action spends one. Up to 3 Slack count as Groups toward the Basic Goal (${slackCount(s, c.controller)} do now).</p>`);
+    }
+  }
+  const cond = cardConditions(s, iid);
+  if (cond.paralyzed.length) {
+    out.push(`<div class="label">Paralyzed</div><p class="small">By ${cond.paralyzed.map((pz) => `<button class="linkish inline" data-inspect="${pz}">${esc(cardName(s, pz))}</button>`).join(', ')}. It cannot spend Action tokens, use its ability or its linked Resources, or take new puppets, and it does not count toward any Goal (its puppets still do). ${cond.held ? `${plural(cond.held, 'token')} held back until it is free.` : ''} Its master or any Illuminati may spend an action to free it, at any time.</p>
+      <div class="opts">${freeButtons(s, iid)}</div>`);
+  }
+  if (cond.frozen) {
+    const f = liveFreezes(s).filter((x) => !x.exempt.includes(c.controller ?? ''));
+    out.push(`<div class="label">Frozen</div><p class="small">${f.length ? `${esc(f.map((x) => x.label).join(', '))} Groups are Frozen` : 'Frozen'} until the end of the turn: it may spend Action tokens only to defend itself.</p>`);
+  }
+  if (cond.killed) out.push('<p class="cond-note killed">Killed (assassinated). Only a card that restores killed Personalities can bring it back.</p>');
+  // Regi$tered Trademark: slips in naming the Group are reported by the players themselves.
+  if (d.id === 'regi-tered-trademark' && c.zone === 'table' && c.linkedTo) {
+    const slips = [
+      legal(s, ui.me, { type: 'nameSlip', card: iid }) ? `<button data-slip="${iid}:">I slipped: discard the top card of my Plot deck</button>` : '',
+      ...plotsInHand(s, ui.me).filter((h) => legal(s, ui.me, { type: 'nameSlip', card: iid, discard: h })).map((h) => `<button data-slip="${iid}:${h}">I slipped: discard ${esc(cardName(s, h))}</button>`),
+      legal(s, ui.me, { type: 'catchNameSlip', card: iid }) ? `<button data-catch="${iid}">Caught its owner slipping: take their top Plot</button>` : '',
+    ].filter(Boolean).join('');
+    if (slips) out.push(`<div class="label">Naming slips</div><p class="small">Everyone must call ${esc(cardName(s, c.linkedTo))} by its full printed name.</p><div class="opts">${slips}</div>`);
+  }
+  // Partition: the two halves of a Place, both yours, can be put back together.
+  if (c.data?.partitionPair && legal(s, ui.me, { type: 'reunitePartition', group: iid })) out.push(`<div class="opts"><button data-reunite="${iid}">Reunite the two halves of ${esc(cardName(s, iid))}</button></div>`);
+  return out.join('');
+}
+
 function renderInspect(s: GameState): string {
   const iid = ui.inspect;
   if (!iid || !s.cards[iid]) return '';
@@ -1710,10 +1936,13 @@ function renderInspect(s: GameState): string {
     ? Object.values(s.cards).filter((c) => c.zone === 'table' && c.linkedTo === iid).map((c) => c.iid) : [];
   const linkedRes = (d.type === 'Group' || d.type === 'Illuminati')
     ? Object.values(s.cards).filter((c) => c.zone === 'resources' && c.linkedTo === iid && !c.hiddenUnder).map((c) => c.iid) : [];
+  // The packs' conditions (Zaps, Paralysis, Freezes...) come first, above the picture, with their buttons.
+  const cond = conditionsBlock(s, iid);
   return `<div class="panel inspect popover">
     <button class="close" data-act="closeInspect" aria-label="Close">×</button>
+    ${cond ? `<div class="label">${esc(d.subtype)}</div><h3>${esc(d.name)}</h3>${cond}` : ''}
     ${ART.has(d.id) ? `<div class="art-hero art-${d.id}" role="img" aria-label="${esc(d.name)}"></div>` : ''}
-    <div class="label">${esc(d.subtype)}</div><h3>${esc(d.name)}</h3>${stats}
+    ${cond ? stats : `<div class="label">${esc(d.subtype)}</div><h3>${esc(d.name)}</h3>${stats}`}
     ${faceBlock(d.id, d.text)}
     ${d.type === 'Plot' ? `<p class="small"><span class="timing">${esc(plotTiming(d.id, d.subtype))}</span></p>` : ''}
     ${tutorial() && whyNot(s, iid) ? `<p class="why">${esc(whyNot(s, iid)!)}</p>` : ''}
@@ -1947,13 +2176,22 @@ function bindDeals(s: GameState) {
 function renderBrowse(s: GameState): string {
   const b = ui.browse;
   if (!b || !s.cards) return '';
+  // The SubGenius game's shared discard piles belong to nobody.
+  if (b.kind === 'plotDiscard' || b.kind === 'groupDiscard') {
+    const list = s.common?.[b.kind] ?? [];
+    return `<div class="panel inspect popover browse">
+    <button class="close" data-act="closeBrowse" aria-label="Close">×</button>
+    <div class="label">Shared ${b.kind === 'plotDiscard' ? 'Plot' : 'Group'} discard pile (${list.length})</div>
+    <div class="opts">${list.length ? [...list].reverse().map((iid) => `<button data-inspect="${iid}">${esc(cardName(s, iid))}</button>`).join('') : '<p class="muted small">Empty.</p>'}</div>
+  </div>`;
+  }
   const p = player(s, b.player);
   const cards = b.kind === 'discard' ? p.discard : Object.values(s.cards).filter((c) => c.owner === b.player && c.zone === 'destroyed').map((c) => c.iid);
   const title = b.kind === 'discard' ? `${b.player === ui.me ? 'Your' : `${esc(p.name)}'s`} discard pile` : `${b.player === ui.me ? 'Your' : `${esc(p.name)}'s`} destroyed pile`;
   return `<div class="panel inspect popover browse">
     <button class="close" data-act="closeBrowse" aria-label="Close">×</button>
     <div class="label">${title} (${cards.length})</div>
-    <div class="opts">${cards.length ? [...cards].reverse().map((iid) => `<button data-inspect="${iid}">${esc(cardName(s, iid))}</button>`).join('') : '<p class="muted small">Empty.</p>'}</div>
+    <div class="opts">${cards.length ? [...cards].reverse().map((iid) => `<button data-inspect="${iid}">${esc(cardName(s, iid))}${s.cards[iid].killed ? ' <span class="killed-tag">killed</span>' : ''}</button>`).join('') : '<p class="muted small">Empty.</p>'}</div>
   </div>`;
 }
 
@@ -1979,10 +2217,10 @@ const subBar = (title: string) => `<header class="bar sub-bar"><button class="li
 
 /** The Illuminati picker, shared by the offline and online new-game pages. */
 function illPicker(pick: string): string {
-  if (packSettings().subgeniusRules) return '<p class="muted">In the SubGenius game every player leads a faction of the Church of the SubGenius.</p>';
+  if (packSettings().subgeniusRules) return '<p class="muted sg-note">In the stand-alone SubGenius game every player leads a faction of the Church of the SubGenius: there is no Illuminati to choose.</p>';
   return `<div class="ills">${illuminatiFor(packSettings()).map((c) => `
     <button class="ill-pick ${pick === c.id ? 'on' : ''}" data-pick="${c.id}">${ART.has(c.id) ? `<span class="pick-art art-${c.id}"></span>` : ''}
-      <b>${esc(c.name)}</b><span class="pw">${c.power}/${c.globalPower}</span>
+      <b>${esc(c.name)}</b><span class="pw">${c.power}/${c.globalPower}</span>${cardSet(c) !== 'Base' ? `<span class="pack-tag">${esc(cardSet(c))}</span>` : ''}
       <span class="small">${esc(illPickText(c.id, c.text))}</span>
     </button>`).join('')}</div>`;
 }
@@ -2086,6 +2324,8 @@ function onTableCard(iid: string) {
   if (s.prompt?.player === ui.me && s.prompt.kind === 'placeCaptured' && (s.prompt.data as unknown as PlaceCapturedData).cards.includes(iid)) {
     ui.sel = { kind: 'rearrange', group: iid };
   }
+  // SubGenius game: a Resource lying in the uncontrolled area can be taken for one Slack.
+  if (idle(s) && s.cards[iid].zone === 'uncontrolled' && def(s, iid).type === 'Resource') ui.sel = { kind: 'resource', iid };
   if (idle(s) && s.cards[iid].controller === ui.me && sel.kind !== 'move') {
     ui.sel = { kind: 'group', iid };
   }
@@ -2130,9 +2370,22 @@ function bind() {
   app.querySelectorAll<HTMLElement>('[data-hand]').forEach((b) => b.onclick = () => onHandCard(b.dataset.hand!));
   app.querySelectorAll<HTMLElement>('[data-inspect]').forEach((b) => b.onclick = () => { ui.inspect = b.dataset.inspect; render(); });
   app.querySelectorAll<HTMLElement>('[data-browse]').forEach((b) => b.onclick = () => {
-    const [kind, pl] = b.dataset.browse!.split(':') as ['discard' | 'destroyed', string];
+    const [kind, pl] = b.dataset.browse!.split(':') as [NonNullable<Ui['browse']>['kind'], string];
     ui.browse = { kind, player: pl };
     render();
+  });
+  // Assassins: remove Zaps from a player, free a Paralyzed Group.
+  app.querySelectorAll<HTMLElement>('[data-sg-buy]').forEach((b) => b.onclick = () => act({ type: 'drawGroup', payWith: b.dataset.sgBuy!.split(',') }));
+  app.querySelectorAll<HTMLElement>('[data-slip]').forEach((b) => b.onclick = () => {
+    const [card, discard] = b.dataset.slip!.split(':');
+    act({ type: 'nameSlip', card, ...(discard ? { discard } : {}) });
+  });
+  app.querySelectorAll<HTMLElement>('[data-catch]').forEach((b) => b.onclick = () => act({ type: 'catchNameSlip', card: b.dataset.catch! }));
+  app.querySelectorAll<HTMLElement>('[data-reunite]').forEach((b) => b.onclick = () => act({ type: 'reunitePartition', group: b.dataset.reunite! }));
+  app.querySelectorAll<HTMLElement>('[data-unzap]').forEach((b) => b.onclick = () => act({ type: 'removeZaps', player: b.dataset.unzap! }));
+  app.querySelectorAll<HTMLElement>('[data-free]').forEach((b) => b.onclick = () => {
+    const [group, payWith] = b.dataset.free!.split(':');
+    act({ type: 'freeGroup', group, payWith });
   });
   app.querySelectorAll<HTMLElement>('[data-slot]').forEach((b) => b.onclick = () => {
     const choices = b.dataset.slot!.split('|');

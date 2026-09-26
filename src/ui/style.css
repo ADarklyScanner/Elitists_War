@@ -849,3 +849,68 @@ button.big:hover { filter: brightness(1.08); }
 .sub-bar .linkish { text-decoration: none; font-size: 15px; }
 .start-panel { gap: 12px; }
 .modal.ask { width: min(440px, calc(100% - 32px)); display: flex; flex-direction: column; gap: 12px; }
+
+/* ---------- expansion packs (Assassins, SubGenius) ---------- */
+/* New game: the pack switches and the SubGenius choice. */
+.packs .pack-list { display: grid; gap: 8px; margin-top: 8px; }
+.pack-switch { display: flex; gap: 12px; align-items: flex-start; padding: 9px 11px; border: 1px solid var(--line); border-radius: 9px; cursor: pointer; position: relative; }
+.pack-switch.on { border-color: var(--brass); background: #d4a34012; }
+.pack-switch.off { opacity: .5; cursor: default; }
+.pack-switch input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.pack-switch:focus-within { outline: 2px solid var(--brass); outline-offset: 2px; }
+.pack-knob { flex: none; position: relative; width: 38px; height: 22px; margin-top: 2px; border-radius: 11px; background: var(--line); border: 1px solid #5a4630; transition: background .15s; }
+.pack-knob::after { content: ''; position: absolute; left: 2px; top: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--muted); transition: transform .15s, background .15s; }
+.pack-switch.on .pack-knob { background: var(--gilt-lo); }
+.pack-switch.on .pack-knob::after { transform: translateX(16px); background: var(--gilt-hi); }
+.pack-text { display: grid; gap: 2px; min-width: 0; }
+.pack-text b { font-family: var(--display); font-size: 15px; }
+.sg-mode { display: grid; gap: 6px; margin-left: 20px; padding-left: 12px; border-left: 2px solid var(--brass-soft); }
+.sg-mode label { display: flex; gap: 8px; align-items: flex-start; padding: 7px 9px; border: 1px solid var(--line); border-radius: 8px; cursor: pointer; }
+.sg-mode label.on { border-color: var(--brass); background: #d4a34012; }
+.sg-mode input { margin-top: 4px; accent-color: var(--brass); }
+.sg-mode span { display: grid; gap: 1px; }
+.pack-tag { justify-self: start; font: 600 10px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--brass); border: 1px solid var(--brass-soft); border-radius: 4px; padding: 0 5px; }
+.ill-pick .pack-tag { grid-column: 1 / -1; }
+.sg-note { padding: 8px 0; }
+
+/* On the table: Paralysis, Freezes, Zaps, Slack, held tokens. */
+.card.paralyzed { filter: saturate(.55); }
+.card.frozen { box-shadow: inset 0 0 0 2px #8fc3e8aa, 0 0 12px -2px #8fc3e8aa; }
+.cond-ribbon { position: absolute; left: -3px; right: -3px; top: 42%; text-align: center; font: 700 9.5px/15px var(--display); letter-spacing: .14em; text-transform: uppercase; pointer-events: none; transform: rotate(-8deg); box-shadow: 0 2px 6px #0008; }
+.cond-ribbon.para { background: #5a1e2ae8; color: #f3c6c0; border-block: 1px solid #d4604f; }
+.cond-ribbon.frozen { background: #1c3a52e8; color: #d8eeff; border-block: 1px solid #8fc3e8; }
+.cond-ribbon.para + .cond-ribbon.frozen { top: 62%; }
+.zap-badge { position: absolute; left: -6px; top: -7px; min-width: 18px; height: 18px; padding: 0 3px; border-radius: 9px; background: #2a1030; border: 1px solid #e0b15a; color: #f3d89a; font: 700 11px/16px var(--mono); text-align: center; box-shadow: 0 0 8px #e0b15a88; }
+.token.held { right: 12px; background: transparent; border: 1.5px dashed var(--brass); box-shadow: none; color: var(--brass); line-height: 11px; }
+.slack { position: absolute; bottom: -9px; left: 50%; transform: translateX(-50%); padding: 0 6px; height: 18px; border-radius: 9px; background: var(--brass); color: #1a1406; font: 700 11px/18px var(--mono); box-shadow: 0 0 8px #d4a34099; white-space: nowrap; }
+.slack small { font-size: 9px; letter-spacing: .04em; }
+.cond-chip { font: 600 11px var(--display); letter-spacing: .06em; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line); background: #120c12cc; color: var(--ink); white-space: nowrap; }
+.cond-chip.zap { border-color: #e0b15a; color: #f3d89a; }
+.cond-chip.para { border-color: #d4604f; color: #f3c6c0; }
+.cond-chip.slack { border-color: var(--brass); color: var(--brass); }
+.freeze-banner { pointer-events: auto; display: block; text-align: left; width: fit-content; max-width: 100%; background: #10263ae8; border: 1px solid #8fc3e8; color: #d8eeff; border-radius: 6px; padding: 4px 9px; font-size: 12.5px; line-height: 1.35; }
+.freeze-banner .muted { color: #a9c3d6; }
+.killed-tag { display: inline-block; margin-left: 4px; font: 600 9px var(--display); letter-spacing: .1em; text-transform: uppercase; color: #f3c6c0; border: 1px solid #d4604f99; border-radius: 3px; padding: 0 3px; vertical-align: 1px; }
+.cond-note { font-size: 13px; margin: 6px 0 2px; }
+.cond-note.zap { color: #f3d89a; } .cond-note.para, .cond-note.killed { color: #f3c6c0; } .cond-note.frozen { color: #d8eeff; }
+.linkish.inline { padding: 0; font-size: inherit; }
+
+/* The stand-alone SubGenius game: the uncontrolled area in the middle of the table. */
+.area-tray { position: relative; display: grid; gap: 8px; margin-top: 10px; padding: 10px 12px 12px; border: 1px dashed #c99a4899; border-radius: 14px; background: #0d0716b3; max-width: calc(var(--u) * 96); }
+.area-head { display: flex; flex-wrap: wrap; gap: 2px 10px; align-items: baseline; justify-content: center; text-align: center; }
+.area-title { font: 600 12px var(--display); letter-spacing: .14em; text-transform: uppercase; color: #f3d89a; }
+.area-body { display: flex; gap: 14px; align-items: flex-start; justify-content: center; flex-wrap: wrap; }
+.area-cards { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; align-items: flex-start; min-height: calc(var(--u) * 14); max-width: calc(var(--u) * 70); }
+.area-cell { width: calc(var(--u) * 10); height: calc(var(--u) * 14); }
+.area-res { width: calc(var(--u) * 10); height: calc(var(--u) * 14); display: flex; flex-direction: column; gap: 3px; overflow: hidden; text-align: left; border: 1px solid #5a3f5e; background: linear-gradient(170deg, #3a2750, #1b1828); border-radius: 7px; padding: 5px 6px; }
+.area-res b { font: 600 11.5px/1.1 var(--display); }
+.area-res .kind { font: 600 8.5px var(--display); letter-spacing: .12em; text-transform: uppercase; color: #c9a8e0; }
+.area-res .small { font-size: 10px; line-height: 1.25; color: var(--muted); overflow: hidden; }
+.area-res.g-ok { box-shadow: 0 0 0 2px var(--ok); }
+.area-piles { display: grid; grid-template-columns: repeat(2, auto); gap: 12px 16px; }
+
+/* The card library: which pack a card comes from, and its printed keywords. */
+.cl-pack { position: absolute; top: -7px; left: 10px; font: 700 8.5px/14px var(--display); letter-spacing: .12em; text-transform: uppercase; padding: 0 6px; border-radius: 3px; background: #140c06; border: 1px solid var(--brass); color: var(--gilt-hi); }
+.cl-pack.p-subgenius { border-color: #c97a3c; color: #f5c28f; }
+.cl-kw { display: flex; flex-wrap: wrap; gap: 3px; }
+.cl-kw i { font: 600 9px/13px var(--display); font-style: normal; letter-spacing: .08em; text-transform: uppercase; padding: 0 4px; border-radius: 3px; background: #0006; border: 1px solid #fff3; }
