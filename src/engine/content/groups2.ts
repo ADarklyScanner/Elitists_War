@@ -1,4 +1,4 @@
-import type { Alignment, AttackCtx, GameState } from '../types';
+import type { Alignment, AttackCtx, GameState, PlotEffect } from '../types';
 import { attackingGroups, abilitiesOf, matches, registerAbilities } from '../abilities';
 import { type ActivatedAbility, type CardHooks, HOOKS, activeHookCards, hooksOf, registerHooks } from '../hooks';
 import { cardName, def } from '../cards';
@@ -362,13 +362,49 @@ function loseHidden(s: GameState, self: string) {
  * turn (it holds outside attacks, e.g. for Goals and moves).
  */
 function rollClinton(s: GameState, self: string, attack?: number) {
-  const die = rollDie(s);
+  const pl = controllerOf2(s, self);
+  // His roll is announced (cardRoll), so cards that change any die roll may answer it, even as an attack starts.
+  if (pl) { cardRoll(s, pl, 1, 'bill-clinton', { self, attack, turn: s.turn }, { quiet: true, label: 'Bill Clinton' }); return; }
+  setClinton(s, self, rollDie(s), attack, s.turn);
+}
+function setClinton(s: GameState, self: string, die: number, attack: number | undefined, turn: number) {
+  if (!s.cards[self]) return;
   const liberal = die <= 3;
   s.cards[self].data = attack === undefined
-    ? { ...s.cards[self].data, liberalTurn: liberal ? s.turn : undefined }
+    ? { ...s.cards[self].data, liberalTurn: liberal ? turn : undefined }
     : { ...s.cards[self].data, rollAttack: attack, liberalAttack: liberal };
   log(s, `Bill Clinton rolls ${die}: he is ${liberal ? '' : 'not '}Liberal ${attack === undefined ? 'for now' : 'in this attack'}.`);
 }
+registerRollResult({
+  'bill-clinton': (s, _pl, total, _dice, d) => setClinton(s, d.self as string, total, d.attack as number | undefined, d.turn as number),
+});
+/**
+ * Imelda Marcos's roll, once final: 1-5 her Power counts as 5 in this attack, 6 (or more) she is destroyed
+ * and her action cancelled. Rolled at once, the effect is handed back to her ability (imeldaNow); after a
+ * window, it is set on the ability's entry in the attack.
+ */
+let imeldaNow: PlotEffect | undefined;
+registerRollResult({
+  'imelda-marcos'(s, pl, total, _dice, d) {
+    const self = d.self as string;
+    const ctx = s.attack;
+    if (!ctx || ctx.id !== d.attack || !s.cards[self] || s.cards[self].zone !== 'structure') return;
+    if (total <= 5) {
+      const add = 5 - power(s, self);
+      log(s, `Imelda Marcos rolls ${total}: her Power counts as 5.`, pl);
+      if (add > 0) ctx.attackBonus.push({ player: pl, plot: d.entry as string, forGroup: self, amount: add, label: 'Imelda Marcos (Power counts as 5)' });
+      return;
+    }
+    const credit = ctx.targetPlayer ?? s.cards[ctx.target].owner;
+    log(s, `Imelda Marcos rolls ${total} and is destroyed.`, pl);
+    destroyGroup(s, self, credit);
+    const effect: PlotEffect = { t: 'cancelGroup', group: self };
+    const entry = ctx.plays.find((p) => p.iid === d.entry);
+    if (entry) entry.effect = effect;
+    else imeldaNow = effect;
+  },
+});
+
 function clintonLiberal(s: GameState, self: string): boolean {
   const d = s.cards[self].data;
   if (s.attack && d?.rollAttack === s.attack.id) return !!d.liberalAttack;
@@ -610,18 +646,14 @@ registerHooks({
         if (usedThisAttack(ctx, self, 'gamble')) return 'She already rolled in this attack.';
         return null;
       },
+      // The roll is announced (cardRoll): cards that change any die roll may answer it before it counts
+      // (imeldaResult uses the final result).
       apply(s, pl, self, _p, ctx) {
-        const die = rollDie(s);
-        if (die <= 5) {
-          const add = 5 - power(s, self);
-          log(s, `Imelda Marcos rolls ${die}: her Power counts as 5.`, pl);
-          if (add > 0) ctx!.attackBonus.push({ player: pl, plot: abilityEntry(s, self, 'gamble'), forGroup: self, amount: add, label: 'Imelda Marcos (Power counts as 5)' });
-          return;
-        }
-        const credit = ctx!.targetPlayer ?? s.cards[ctx!.target].owner;
-        log(s, `Imelda Marcos rolls 6 and is destroyed.`, pl);
-        destroyGroup(s, self, credit);
-        return { t: 'cancelGroup', group: self };
+        imeldaNow = undefined;
+        cardRoll(s, pl, 1, 'imelda-marcos', { self, attack: ctx!.id, entry: abilityEntry(s, self, 'gamble') }, { quiet: true, label: 'Imelda Marcos' });
+        const effect = imeldaNow;
+        imeldaNow = undefined;
+        return effect;
       },
     }],
   },

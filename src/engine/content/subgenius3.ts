@@ -282,8 +282,8 @@ registerPlots({
 
   // Right after any die roll by anyone (an attack roll, or a card's roll outside an attack, announced as
   // a 'dieRoll' event): that roll becomes a 12. Three other Plots are discarded.
-  // RULING: a card rolling in the middle of an attack (OPEC, Bill Clinton, Imelda Marcos, some Assassins
-  // cards) rolls at once, since no response window can wait inside an attack; every other roll is reached.
+  // A card rolling in the middle of an attack (OPEC, Bill Clinton, Imelda Marcos, Killer Satellite) is
+  // reached too: its roll is held in a window of its own (cardRoll) and the attack goes on afterwards.
   bulldada: {
     timing: ['roll', 'event'],
     events: ['dieRoll'],

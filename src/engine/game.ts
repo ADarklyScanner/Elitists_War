@@ -2,7 +2,7 @@
 // validates the move against the rules, mutates a copy of the state and returns it.
 import type {
   Action, Alignment, AttackCtx, CardInstance, Contribution, Freeze, GameSettings, GameState, GoalOption, PlaceCapturedData, PlayedPlot,
-  PlayerState, PlotPlay, Prompt, Side,
+  PlayerState, PlotPlay, Prompt, ResponseWindow, Side,
 } from './types';
 import { RuleError } from './types';
 import { CARDS, cardName, def, inst } from './cards';
@@ -804,14 +804,18 @@ function vanishCopy(s: GameState, iid: string) {
   Object.assign(s.cards[iid], { zone: 'removed', setAside: true, controller: undefined, master: undefined, linkedTo: undefined, tokens: 0, exposed: false });
 }
 
-/** Discard a hand card, or (Plots only) return it to its owner's Plot deck at a chosen position. */
+/**
+ * Discard a hand card, or (Plots only) return it to the Plot deck its owner draws from at a chosen
+ * position: his own, or the shared one under SubGenius rules.
+ */
 function putAway(s: GameState, p: PlayerState, c: string, toDeck: boolean | undefined, position: 'top' | 'middle' | 'bottom' | undefined) {
   if (!toDeck) { discardCard(s, c); return; }
   p.hand = p.hand.filter((x) => x !== c);
   s.cards[c].zone = 'plotDeck'; s.cards[c].exposed = false;
-  if (position === 'top') p.plotDeck.unshift(c);
-  else if (position === 'middle') p.plotDeck.splice(Math.floor(p.plotDeck.length / 2), 0, c);
-  else p.plotDeck.push(c); // bottom (also the default)
+  const deck = plotDeckOf(s, p.id);
+  if (position === 'top') deck.unshift(c);
+  else if (position === 'middle') deck.splice(Math.floor(deck.length / 2), 0, c);
+  else deck.push(c); // bottom (also the default)
 }
 
 export function controllerOf(s: GameState, iid: string): string | undefined {
@@ -1342,12 +1346,13 @@ export function meetsGoal(s: GameState, playerId: string): string | null {
 }
 
 /** Plain words for an Illuminati's self-contained Special Goal. */
-const SPECIAL_GOAL_TEXT: Record<string, (v: number) => string> = {
+const SPECIAL_GOAL_TEXT: Record<string, (v: number, who: string) => string> = {
   totalPower: (v) => `Power totalling ${v} in your Power Structure`,
   bermuda: (v) => `every alignment in your Power Structure and Power totalling ${v}`,
   destroyCount: (v) => `${v} Groups destroyed`,
   peacefulPower: (v) => `${v} Power of Peaceful Groups in play (anyone's)`,
-  slack: (v) => `the Basic Goal, counting up to ${v} Slack (tokens on your Illuminati) as Groups`,
+  // Named for whoever claims it: the label is shown to every player (a claim, the log).
+  slack: (v, who) => `the Basic Goal, counting up to ${v} Slack (tokens on ${who}'s Illuminati) as Groups`,
 };
 
 /**
@@ -1457,7 +1462,7 @@ function specialGoal(s: GameState, playerId: string): GoalOption | undefined {
   const ill = illuminatiOf(s, playerId);
   const a = abilitiesOf(s, ill).find((x) => x.kind === 'specialGoal');
   if (!a || a.kind !== 'specialGoal') return undefined;
-  const label = `Special Goal: ${SPECIAL_GOAL_TEXT[a.goal](a.value)}`;
+  const label = `Special Goal: ${SPECIAL_GOAL_TEXT[a.goal](a.value, player(s, playerId).name)}`;
   const mine = structureCards(s, playerId).filter((iid) => !tokenBarredForGoals(s, iid));
   const total = mine.reduce((n, iid) => n + power(s, iid, { goals: true }), 0);
   let why: string | null = null;
@@ -2122,7 +2127,11 @@ function participantsBeforeBar(s: GameState): string[] {
 }
 
 function openWindow(s: GameState, kind: 'attack' | 'roll' | 'plot' | 'endOfTurn', plot?: PlayedPlot) {
-  s.window = { kind, passed: [], plot, deadline: Date.now() + s.settings.responseHours * 3600_000 };
+  const w: ResponseWindow = { kind, passed: [], plot, deadline: Date.now() + s.settings.responseHours * 3600_000 };
+  // A held roll is being answered (Bill Clinton rolls as an attack starts): this window opens after it.
+  const held = heldRoll(s);
+  if (held) { held.data = { ...held.data, resume: w }; return; }
+  s.window = w;
 }
 
 function contributionPower(s: GameState, c: Contribution & { useGlobal?: boolean; selfDefense?: boolean }, opposing = false): number {
@@ -2780,7 +2789,8 @@ export function checkPlot(s: GameState, playerId: string, play: PlotPlay, declar
   const bench = s.cards[play.card].data?.unusableUntilOwnerTurns;
   if (typeof bench === 'number' && p.turnsTaken < bench) return `${d.name} cannot be used again so soon.`;
   const ctxKind = plotContext(s);
-  const ctx = s.attack;
+  // Answering a card's roll held in the middle of an attack is not a play in that attack.
+  const ctx = heldRoll(s) ? undefined : s.attack;
   const isActiveMain = ctxKind === 'main' && activePlayer(s).id === playerId;
   const t = h.timing;
   let ok = false;
@@ -2930,7 +2940,8 @@ export function playPlot(s: GameState, playerId: string, play: PlotPlay, declari
   if (h.requires && play.discards?.length) noteCostDiscard(s, playerId, [{ kind: 'plot', place: 'hand', cards: play.discards }]);
   const pp: PlayedPlot = { iid: play.card, player: playerId, play, effect: { t: 'none' } };
   log(s, `${player(s, playerId).name} plays ${d.name}${play.target && s.cards[play.target] ? ` on ${cardName(s, play.target)}` : ''}.`, playerId);
-  const ctx = s.attack;
+  // A Plot answering a card's roll held in the middle of an attack waits for counters like any event response.
+  const ctx = heldRoll(s) ? undefined : s.attack;
   if (s.window?.kind === 'plot') {
     // A counter to the Plot waiting to resolve.
     s.window.plays!.push(pp);
@@ -2977,6 +2988,11 @@ function resolvePendingPlot(s: GameState) {
   if (!isCancelled(w.plays!, pp.iid)) raiseEvent(s, { type: 'plotResolved', card: pp.iid, player: pp.player });
   // A Plot played in response to an event: the event's window reopens so others may respond too.
   if (w.event) {
+    // A held roll (cardRoll) is answered in the middle of what it interrupted: its window reopens at once.
+    if (w.event.data?.held && !s.window) {
+      s.window = { kind: 'event', event: w.event, passed: [], deadline: Date.now() + s.settings.responseHours * 3600_000 };
+      return;
+    }
     // If resolving started an attack (Opportunity Knocks), the event window reopens once it is over.
     if (s.attack || s.window) { (s.events ??= []).unshift(w.event); return; }
     s.window = { kind: 'event', event: w.event, passed: [], deadline: Date.now() + s.settings.responseHours * 3600_000 };
@@ -3527,18 +3543,56 @@ export const ROLL_RESULTS: Record<string, (s: GameState, player: string, total: 
 export function registerRollResult(table: typeof ROLL_RESULTS) { Object.assign(ROLL_RESULTS, table); }
 
 /**
- * A card rolls one or two dice outside an attack (MWOWM, the Janor Device's roll-off). The roll is made
- * now and announced as a 'dieRoll' event, which the cards that change "any die roll" may answer
- * (changeRoll); once its window closes the handler registered for `key` gets the final result. With
- * nobody able to answer, that happens at once.
+ * A card rolls one or two dice (MWOWM, the Janor Device's roll-off, OPEC, Bill Clinton, Imelda Marcos).
+ * The roll is made now and announced as a 'dieRoll' event, which the cards that change "any die roll"
+ * may answer (changeRoll); once its window closes the handler registered for `key` gets the final
+ * result. With nobody able to answer, that happens at once, exactly as if the handler had been called
+ * directly.
+ *
+ * A roll made in the middle of an attack (or, with `hold`, while a response window is waiting on the
+ * card that rolled: Killer Satellite answering an action) cannot wait for the attack or that window to
+ * be over. It is answered in a window of its own that opens at once on top of whatever was going on
+ * (a "held" roll); when it closes, the window it interrupted comes back (everyone may act again, since
+ * something changed) and the handler runs in that setting. Returns the dice as rolled.
  */
-export function cardRoll(s: GameState, playerId: string, count: 1 | 2, key: string, data: Record<string, unknown> = {}, opts: { quiet?: boolean } = {}) {
+export function cardRoll(s: GameState, playerId: string, count: 1 | 2, key: string, data: Record<string, unknown> = {},
+  opts: { quiet?: boolean; hold?: boolean; label?: string } = {}): number[] {
   const dice = count === 2 ? roll2d6(s) : [rollDie(s)];
-  if (!opts.quiet) log(s, `${player(s, playerId).name} rolls ${dice.length > 1 ? `${dice[0]} + ${dice[1]} = ${dice[0] + dice[1]}` : dice[0]}.`, playerId);
+  const shown = dice.length > 1 ? `${dice[0]} + ${dice[1]} = ${dice[0] + dice[1]}` : `${dice[0]}`;
+  if (!opts.quiet) log(s, `${player(s, playerId).name} rolls ${shown}.`, playerId);
   const e: GameEvent = { type: 'dieRoll', player: playerId, data: { ...data, key, dice, delta: 0 } };
-  // During an attack no response window can wait for a card's roll: it counts at once, as rolled.
-  if (s.attack) { finishCardRoll(s, e); return; }
+  if (s.attack || (opts.hold && s.window)) {
+    // Nobody could answer: the roll counts at once, as rolled (the game plays exactly as before).
+    if (!hasListeners(s, e)) { finishCardRoll(s, e); return dice; }
+    if (opts.quiet) log(s, `${opts.label ? `${opts.label}: ` : ''}${player(s, playerId).name} rolls ${shown}.`, playerId);
+    fireHooks(s, (h, self) => h.onEvent?.(s, self, e));
+    holdForRoll(s, e);
+    return dice;
+  }
   raiseEvent(s, e, 'dieRoll');
+  return dice;
+}
+
+/** The held roll being answered right now (see cardRoll), if any: its own window, or a Plot answering it. */
+export function heldRoll(s: GameState): GameEvent | undefined {
+  const w = s.window;
+  const e = w && (w.kind === 'event' || w.kind === 'plot') ? w.event : undefined;
+  return e?.type === 'dieRoll' && e.data?.held ? e : undefined;
+}
+
+/** Open a held roll's window on top of the current one, which is kept to come back to. */
+function holdForRoll(s: GameState, e: GameEvent) {
+  e.data = { ...e.data, then: 'dieRoll', held: true, resume: s.window };
+  s.window = { kind: 'event', event: e, passed: [], deadline: Date.now() + s.settings.responseHours * 3600_000 };
+}
+
+/** A held roll's window has closed: the window it interrupted comes back, unless its attack is over. */
+function resumeAfterRoll(s: GameState, e: GameEvent) {
+  const w = e.data?.resume as ResponseWindow | undefined;
+  if (e.data) e.data.resume = undefined;
+  if (!w || s.window) return;
+  if ((w.kind === 'attack' || w.kind === 'roll') && !s.attack) return;
+  s.window = { ...w, passed: [] };
 }
 
 /** The dice and total of a 'dieRoll' event as they stand now. */
@@ -3704,13 +3758,15 @@ export function checkAbility(s: GameState, playerId: string, card: string, abili
     (t === 'event' && ctxKind === 'event' && (ab.events ?? ['action']).includes(s.window!.event!.type)) ||
     (t === 'counter' && ctxKind === 'plot'));
   if (!ok) return `${ab.label} cannot be used right now.`;
-  if (s.attack && s.window && !participants(s).includes(playerId)) return 'This attack is Privileged.';
+  // Answering a card's roll held in the middle of an attack is not an act in that attack.
+  const atk = heldRoll(s) ? undefined : s.attack;
+  if (atk && s.window && !participants(s).includes(playerId)) return 'This attack is Privileged.';
   if (s.window && !waitingFor(s).includes(playerId)) return 'You have already passed.';
   if (ab.usesToken && (c.tokens < 1 || tokenBarred(s, card))) return `${cardName(s, card)} has no Action token.`;
   if (ab.oncePerTurn && c.abilityTurns?.[abilityId] === s.turn) return 'Already used this turn.';
-  const forbidden = forbiddenUse(s, playerId, card, params.target, s.attack);
+  const forbidden = forbiddenUse(s, playerId, card, params.target, atk);
   if (forbidden) return forbidden;
-  return ab.check(s, playerId, card, params, s.attack);
+  return ab.check(s, playerId, card, params, atk);
 }
 
 function useAbility(s: GameState, playerId: string, card: string, abilityId: string, params: AbilityParams) {
@@ -3735,9 +3791,10 @@ function useAbility(s: GameState, playerId: string, card: string, abilityId: str
     announce(s, playerId, 'ability', { type: 'useAbility', card, ability: abilityId, params }, ab.usesToken ? [card] : [], card);
     return;
   }
-  const effect = ab.apply(s, playerId, card, params, s.attack);
+  const atk = heldRoll(s) ? undefined : s.attack;
+  const effect = ab.apply(s, playerId, card, params, atk);
   const w = s.window;
-  if (s.attack) {
+  if (atk && s.attack) {
     // Recorded like a Plot so that it can be cancelled and undone live.
     s.attack.plays.push({ iid: `ability:${card}:${abilityId}:${s.version}`, player: playerId, play: { card }, effect: effect ?? { t: 'none' }, ability: card });
   } else if (w?.kind === 'event' && w.event?.type === 'action') {
@@ -3780,6 +3837,8 @@ function settleWindows(s: GameState) {
     }
     else if (w.kind === 'event') {
       s.window = undefined;
+      // A held roll (cardRoll): the window it interrupted comes back first, so its result is used there.
+      if (w.event?.data?.held) resumeAfterRoll(s, w.event);
       const then = w.event?.data?.then as string | undefined;
       if (then) runContinuation(s, then, w.event);
     }
@@ -4023,7 +4082,8 @@ function reportNameSlip(s: GameState, p: PlayerState, card: string, discard?: st
     if (!p.hand.includes(discard) || def(s, discard).type !== 'Plot') throw new RuleError('Discard one of your own Plot cards from hand.');
     discardCard(s, discard);
   } else {
-    const top = p.plotDeck.shift();
+    // The top card of the Plot deck he draws from (the shared one under SubGenius rules).
+    const top = plotDeckOf(s, p.id).shift();
     if (!top) throw new RuleError('You have no Plot card to discard.');
     s.cards[top].zone = 'hand'; p.hand.push(top); discardCard(s, top);
   }
@@ -4042,7 +4102,7 @@ function catchNameSlip(s: GameState, p: PlayerState, card: string) {
   if (!owner) throw new RuleError('The linked Group is no longer in play.');
   if (owner.id === p.id) throw new RuleError('You cannot catch your own slip this way.');
   if (!anyTime(s, p.id)) throw new RuleError('You can call out a slip whenever you may act, but not right now.');
-  const top = owner.plotDeck.shift();
+  const top = plotDeckOf(s, owner.id).shift();
   if (top) { s.cards[top].zone = 'hand'; s.cards[top].owner = p.id; p.hand.push(top); shieldFromGoFish(s, p.id); }
   log(s, `${p.name} catches ${owner.name} misnaming ${cardName(s, c.linkedTo!)}: ${owner.name} hands over ${top ? `the top card of their Plot deck` : 'nothing (their deck is empty)'}.`, p.id);
   if (s.window) s.window.passed = s.window.kind === 'plot' ? [p.id] : [];

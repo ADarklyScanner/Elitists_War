@@ -5,7 +5,7 @@ import { def, cardName } from '../cards';
 import { alignmentPairs, alignments, attributes, power } from '../stats';
 import { openArrows, sideOf, structureCards, subtree } from '../geometry';
 import { NWO_EFFECTS } from '../nwo';
-import { nextRandom, roll2d6, shuffle } from '../rng';
+import { nextRandom, shuffle } from '../rng';
 import {
   actionCancelled, announcedAction, announcedCancel, askChoice, attackCancelled, canAid, canOppose, cancelledGroups, controllerOf2,
   discardCard, drawGroup, drawPlot, isCancelled,
@@ -334,18 +334,27 @@ function relieve(s: GameState, place: string, by: string) {
   log(s, `${cardName(s, by)}: ${cardName(s, place)} receives Relief and is no longer Devastated.`, controllerOf2(s, by));
 }
 
-/** OPEC: printed Power is 2d6-2, +1 with Texas, +1 with Multinational Oil Companies. */
+/**
+ * OPEC: printed Power is 2d6-2, +1 with Texas, +1 with Multinational Oil Companies. The roll is announced
+ * (cardRoll), so cards that change any die roll may answer it, even when OPEC is captured in an attack.
+ */
 function rollOpec(s: GameState, self: string) {
   const pl = controllerOf2(s, self);
   if (!pl) return;
-  const dice = roll2d6(s);
-  const mine = structureCards(s, pl).map((g) => s.cards[g].cardId);
-  const v = dice[0] + dice[1] - 2 + (mine.includes('texas') ? 1 : 0) + (mine.includes('multinational-oil-companies') ? 1 : 0);
-  const c = s.cards[self];
-  c.mods = c.mods.filter((m) => !(m.source === self && m.kind === 'setPower'));
-  c.mods.push({ source: self, kind: 'setPower', value: v, until: 'permanent' });
-  log(s, `OPEC rolls ${dice[0]} + ${dice[1]}: its Power is now ${v}.`, pl);
+  cardRoll(s, pl, 2, 'opec', { self }, { quiet: true, label: 'OPEC' });
 }
+registerRollResult({
+  opec(s, pl, total, dice, d) {
+    const self = d.self as string;
+    const c = s.cards[self];
+    if (!c || controllerOf2(s, self) !== pl) return;
+    const mine = structureCards(s, pl).map((g) => s.cards[g].cardId);
+    const v = total - 2 + (mine.includes('texas') ? 1 : 0) + (mine.includes('multinational-oil-companies') ? 1 : 0);
+    c.mods = c.mods.filter((m) => !(m.source === self && m.kind === 'setPower'));
+    c.mods.push({ source: self, kind: 'setPower', value: v, until: 'permanent' });
+    log(s, `OPEC rolls ${dice[0]} + ${dice[1]}: its Power is now ${v}.`, pl);
+  },
+});
 
 const SPACE_DISASTERS = ['meteor-strike'];
 const cancelsOwnSide = (ctx: AttackCtx, self: string) => cancelledGroups(ctx).has(self);
