@@ -15,6 +15,7 @@ import './content/resources';
 import './content/assassins';
 import './content/subgenius';
 import './content/subgenius3';
+import './content/subgenius1';
 
 export * from './types';
 export * from './game';

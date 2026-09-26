@@ -115,6 +115,16 @@ export function openArrows(s: GameState, iid: string, ignore: Set<string> = new 
   return outSides(s, iid).filter((side) => !occupied(s, c.controller!, attachRect(s, iid, side), new Set([...ignore, iid])));
 }
 
+/**
+ * Every physically free side of `iid`, whether or not it has a printed outgoing arrow (Yetis: "any
+ * open side of its master's card, even if there is no outgoing control arrow there").
+ */
+export function openSides(s: GameState, iid: string, ignore: Set<string> = new Set()): Side[] {
+  const c = s.cards[iid];
+  if (c.zone !== 'structure' || !c.controller) return [];
+  return SIDES.filter((side) => !occupied(s, c.controller!, attachRect(s, iid, side), new Set([...ignore, iid])));
+}
+
 /** Rotation that makes `cardId`'s incoming arrow face a master lying on `sideOfMaster`. */
 export function rotationFor(arrowIn: Side, sideOfMaster: Side): number {
   const want = OPPOSITE_SIDE[sideOfMaster]; // child's incoming must point back at master
