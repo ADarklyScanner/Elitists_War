@@ -113,7 +113,7 @@ registerAbilities({
   'supreme-court': [],
   'survivalists': [],
   'tabloids': [
-    // +3 on any attempt to take over Convenience Stores, a card outside this set: it never matches here.
+    // +3 on any attempt to take over Convenience Stores (Assassins pack): it matches once that pack is in the game.
     { kind: 'attackBonus', on: 'control', target: { names: ['convenience-stores'] }, value: 3, scope: 'any' },
   ],
   // Telephone Psychics' +6 is scripted below (it depends on the target's current Power).

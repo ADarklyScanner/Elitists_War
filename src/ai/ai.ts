@@ -9,6 +9,7 @@ import {
   type AiLevel, declareOptions, type GoalOption,
   type Deal, type DealGroup, I_LIED, sideEmpty, dealsAllowed, tokenBarred, offersFrom,
   GOAL_PROGRESS, moveSubtree, placeGroup, isPrivileged, agentProblem, reliefPledgesFor,
+  plotDeckOf, groupDeckOf, uncontrolledCards, zapsOn, paralysesOn,
 } from '../engine';
 import { OPPOSITE } from '../engine/cards';
 import { matches } from '../engine/abilities';
@@ -145,6 +146,8 @@ function planAttacks(s: GameState, pl: string): AttackPlan[] {
     }
   }
   for (const h of me.hand) if (def(s, h).type === 'Group' && s.cards[h].failedTakeoverTurn !== s.turn) targets.push({ iid: h, type: 'control' });
+  // SubGenius rules: the uncontrolled area, to capture (or to deny a rival).
+  for (const u of uncontrolledCards(s)) if (def(s, u).type === 'Group') targets.push({ iid: u, type: 'control' }, { iid: u, type: 'destroy' });
   const behind = rivalsOf(s, pl).some((r) => goalCount(s, r.id) >= goalNeeded(s, r.id) - 2);
   // Hit the leader hardest, and above all a rival about to win.
   const scores = new Map(rivalsOf(s, pl).map((r) => [r.id, standing(s, r.id)]));
@@ -295,6 +298,9 @@ function fixedDeclarePlots(s: GameState, pl: string, a: Extract<Action, { type: 
 
 function mainPhase(s: GameState, pl: string): Action {
   const me = player(s, pl);
+  // 00. Assassins conditions: shake off Zaps, and free a Paralyzed Group, with a spare Illuminati action.
+  const cond = conditionMove(s, pl);
+  if (cond) return cond;
   // 0. Free moves under way (a reorganization): finish the reorganization first.
   if (s.turnFlags.freeMoves === pl && P.reorganize) {
     const mv = bestMove(s, pl, true, 0.4);
@@ -326,7 +332,7 @@ function mainPhase(s: GameState, pl: string): Action {
   // 1b. A New World Order, only when it leaves us better off.
   if (P.judgeNwo) { const n = nwoMove(s, pl); if (n) return n; }
   // 1c. The Collector draws Group cards before spending the Illuminati's action on anything else.
-  if (S.collector && s.cards[me.illuminati].tokens > 0 && !s.turnFlags.illumGroupDraw && me.groupDeck.length
+  if (S.collector && !s.common && s.cards[me.illuminati].tokens > 0 && !s.turnFlags.illumGroupDraw && groupDeckOf(s, pl).length
       && me.hand.filter((h) => def(s, h).type === 'Group').length <= 2) {
     const a: Action = { type: 'drawGroup' };
     if (tryAction(s, pl, a)) return a;
@@ -386,7 +392,8 @@ function mainPhase(s: GameState, pl: string): Action {
   }
   // 3. Resources: bring one into play with the Illuminati's action, and link where a card wants it.
   if (s.cards[me.illuminati].tokens > 0 && !s.turnFlags.resourcePlayed) {
-    const r = me.hand.find((h) => def(s, h).type === 'Resource' && canEnterPlay(s, h, pl));
+    // SubGenius rules: Resources are taken from the uncontrolled area.
+    const r = (s.common ? uncontrolledCards(s) : me.hand).find((h) => def(s, h).type === 'Resource' && canEnterPlay(s, h, pl));
     if (r) { const a: Action = { type: 'playResource', card: r }; if (tryAction(s, pl, a)) return a; }
   }
   for (const r of resourcesOf(s, pl)) {
@@ -397,7 +404,13 @@ function mainPhase(s: GameState, pl: string): Action {
   }
   for (const a of abilityMoves(s, pl, 'draw', [undefined])) if (tryAction(s, pl, a)) return a;
   // 3b. Short of Group cards: the Illuminati's spare action draws one (fuel for takeovers).
-  if ((P.drawGroups || S.collector) && s.cards[me.illuminati].tokens > 0 && !s.turnFlags.illumGroupDraw && me.groupDeck.length
+  if (s.common) {
+    // SubGenius rules: buy a Group into the uncontrolled area when it runs short, keeping some Slack.
+    if (s.cards[me.illuminati].tokens > 1 && uncontrolledCards(s).filter((c) => def(s, c).type === 'Group').length < 3) {
+      const a: Action = { type: 'drawGroup', payWith: [me.illuminati] };
+      if (tryAction(s, pl, a)) return a;
+    }
+  } else if ((P.drawGroups || S.collector) && s.cards[me.illuminati].tokens > 0 && !s.turnFlags.illumGroupDraw && groupDeckOf(s, pl).length
       && me.hand.filter((h) => def(s, h).type === 'Group').length <= (S.collector ? 3 : 1)) {
     const a: Action = { type: 'drawGroup' };
     if (tryAction(s, pl, a)) return a;
@@ -408,7 +421,7 @@ function mainPhase(s: GameState, pl: string): Action {
   const deal = dealOffer(s, pl);
   if (deal) return deal;
   // 4. Buy a Plot with a spare Illuminati token.
-  if (s.cards[me.illuminati].tokens > 0 && plotsInHand(s, pl).length < S.plotHand && me.plotDeck.length) {
+  if (s.cards[me.illuminati].tokens > 0 && plotsInHand(s, pl).length < S.plotHand && plotDeckOf(s, pl).length) {
     const a: Action = { type: 'buyPlot', payWith: [me.illuminati] };
     if (tryAction(s, pl, a)) return a;
   }
@@ -420,10 +433,27 @@ function mainPhase(s: GameState, pl: string): Action {
   return { type: 'endTurn' };
 }
 
+/** Remove the Zaps on us, or free one of our Paralyzed Groups, when the Illuminati has an action to spare. */
+function conditionMove(s: GameState, pl: string): Action | undefined {
+  const me = player(s, pl);
+  if (s.cards[me.illuminati].tokens < 1) return undefined;
+  if (zapsOn(s, pl).length) {
+    const a: Action = { type: 'removeZaps', player: pl };
+    if (tryAction(s, pl, a)) return a;
+  }
+  const stuck = structureCards(s, pl).filter((g) => paralysesOn(s, g).length).sort((a, b) => power(s, b) - power(s, a))[0];
+  if (stuck) {
+    const a: Action = { type: 'freeGroup', group: stuck, payWith: me.illuminati };
+    if (tryAction(s, pl, a)) return a;
+  }
+  return undefined;
+}
+
 /** Two of our weakest Groups with tokens buy a Plot, if at least `keep` token-holding Groups would be left. */
+
 function pairBuy(s: GameState, pl: string, keep: number): Action | undefined {
   const me = player(s, pl);
-  if (!me.plotDeck.length || plotsInHand(s, pl).length >= Math.min(handLimit(s, pl), S.plotHand + 1)) return undefined;
+  if (!plotDeckOf(s, pl).length || plotsInHand(s, pl).length >= Math.min(handLimit(s, pl), S.plotHand + 1)) return undefined;
   const spare = structureCards(s, pl).filter((g) => g !== me.illuminati && s.cards[g].tokens > 0).sort((a, b) => power(s, a) - power(s, b));
   if (spare.length < 2 + keep) return undefined;
   const a: Action = { type: 'buyPlot', payWith: spare.slice(0, 2) };
@@ -451,7 +481,7 @@ function cashInMove(s: GameState, pl: string): Action | undefined {
   if (!level || s.window?.kind !== 'endOfTurn' || s.players[s.active].id === pl || nextPlayer(s) !== pl) return undefined;
   const me = player(s, pl);
   const limit = Math.min(handLimit(s, pl), level >= 2 ? 99 : Math.max(3, S.plotHand));
-  if (!me.plotDeck.length || plotsInHand(s, pl).length >= limit) return undefined;
+  if (!plotDeckOf(s, pl).length || plotsInHand(s, pl).length >= limit) return undefined;
   if (s.cards[me.illuminati].tokens > 0) {
     const a: Action = { type: 'buyPlot', payWith: [me.illuminati] };
     if (tryAction(s, pl, a)) return a;
@@ -949,7 +979,7 @@ function stopClaim(s: GameState, pl: string): Action | undefined {
   // Nothing in hand stops it: spend spare actions on more Plot cards and look again (Normal and Hard).
   if (!P.tricks) return undefined;
   const me = player(s, pl);
-  if (!me.plotDeck.length || s.turnFlags.noPlotDraws?.includes(pl)) return undefined;
+  if (!plotDeckOf(s, pl).length || s.turnFlags.noPlotDraws?.includes(pl)) return undefined;
   const spare = structureCards(s, pl).filter((g) => g !== me.illuminati && s.cards[g].tokens > 0).sort((x, y) => power(s, x) - power(s, y));
   const buys: Action[] = [{ type: 'buyPlot', payWith: [me.illuminati] }];
   if (spare.length >= 2) buys.push({ type: 'buyPlot', payWith: spare.slice(0, 2) });

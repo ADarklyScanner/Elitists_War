@@ -2,7 +2,7 @@
 // session; the function works out who they are and returns only what that player may see.
 import { deleteOrLeave, joinTable, newTable, setOrders, submit, tick, viewFor, type GameRecord, type Notifier, type Store } from './service';
 import { normalizePhone } from './sms';
-import type { AiLevel } from '../engine/types';
+import type { AiLevel, GameSettings } from '../engine/types';
 import { normalizeProfile, profileSummary } from '../ai/profile';
 
 /** Reading and saving a player's text-alert settings. */
@@ -10,7 +10,7 @@ export interface AlertSettings {
   get(userId: string): Promise<{ phone: string; optedIn: boolean } | null>;
   set(userId: string, phone: string, optedIn: boolean): Promise<void>;
 }
-import { RuleError, goalCount, goalNeeded, waitingFor, cardName, type Action } from '../engine';
+import { RuleError, goalCount, goalNeeded, waitingFor, cardName, packSelectable, type Action } from '../engine';
 
 export interface ApiRequest {
   op: 'list' | 'new' | 'join' | 'view' | 'move' | 'orders' | 'tick' | 'alerts' | 'delete' | 'profile';
@@ -21,6 +21,10 @@ export interface ApiRequest {
   seats?: number;
   computerSeats?: number;
   quick?: boolean;
+  /** Expansion packs to play with; a pack not yet selectable (EXPANSIONS_READY) is ignored. */
+  expansions?: { assassins?: boolean; subgenius?: boolean };
+  /** The stand-alone SubGenius game (needs the SubGenius pack to be selectable). */
+  subgeniusRules?: boolean;
   /** Basic Goal agreed before the game (R016); omitted means the book's number for the table size. */
   basicGoal?: number;
   /** Difficulty of the computer seats: 'easy' | 'normal' | 'hard'. */
@@ -61,7 +65,16 @@ function reply(rec: GameRecord, userId: string) {
   return { game: summary(rec, userId), state: rec.state && seat ? viewFor(rec.state, seat.id) : null, orders: seat ? rec.orders[seat.id] : undefined };
 }
 
-export async function handle(store: Store, userId: string, req: ApiRequest, notifier?: Notifier, alertSettings?: AlertSettings): Promise<unknown> {
+/** The expansion settings a new online game asks for, keeping only packs players may choose yet. */
+function packSettings(req: ApiRequest): Partial<GameSettings> {
+  const assassins = !!req.expansions?.assassins && packSelectable('assassins');
+  const subgenius = !!(req.expansions?.subgenius || req.subgeniusRules) && packSelectable('subgenius');
+  if (!assassins && !subgenius) return {};
+  return { expansions: { assassins, subgenius }, ...(req.subgeniusRules && subgenius ? { subgeniusRules: true } : {}) };
+}
+
+export async function handle(
+store: Store, userId: string, req: ApiRequest, notifier?: Notifier, alertSettings?: AlertSettings): Promise<unknown> {
   const name = (req.name ?? 'Player').slice(0, 24);
   switch (req.op) {
     case 'list':
@@ -71,7 +84,7 @@ export async function handle(store: Store, userId: string, req: ApiRequest, noti
       const lv = (x?: string): AiLevel => (x === 'easy' || x === 'hard' ? x : 'normal');
       const rec = await newTable(store, { userId, name, illuminati: req.illuminati ?? 'bavarian-illuminati' }, {
         seats, computerSeats: Math.min(seats - 1, req.computerSeats ?? 0),
-        settings: { houseRules: req.quick ? ['quickGame'] : [], ...(agreedGoal(req.basicGoal) ? { basicGoal: agreedGoal(req.basicGoal) } : {}) },
+        settings: { houseRules: req.quick ? ['quickGame'] : [], ...(agreedGoal(req.basicGoal) ? { basicGoal: agreedGoal(req.basicGoal) } : {}), ...packSettings(req) },
         aiLevel: lv(req.level), aiLevels: req.bots ? req.bots.map((b) => lv(b.level)) : req.levels?.map(lv), bots: req.bots,
       }, notifier);
       return reply(rec, userId);

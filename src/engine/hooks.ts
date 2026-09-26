@@ -1,7 +1,8 @@
 // Card scripting: behaviour that is too specific for the declarative Ability list.
 // A card's hooks are active while the card is in play: a Group in a Power Structure, a Resource
 // beside it, or a Plot that stays on the table linked to something.
-import type { Alignment, AttackCtx, GameState, GameEvent, PlotEffect } from './types';
+import type { Alignment, AttackCtx, GameState, GameEvent, PlayedPlot, PlotEffect } from './types';
+import { PLOTS } from './plotTypes';
 
 export type Side2 = 'attack' | 'defense';
 
@@ -102,8 +103,13 @@ export interface CardHooks {
   noTokens?: (s: GameState, self: string, iid: string) => boolean;
   /** Plots and NWOs on the table only: switch off `iid`'s special abilities. */
   disablesAbilities?: (s: GameState, self: string, iid: string) => boolean;
-  /** Called before a player draws from a deck: 'skip' cancels the draw, 'bottom' takes the bottom card. */
-  beforeDraw?: (s: GameState, self: string, player: string, deck: 'plot' | 'group') => 'skip' | 'bottom' | undefined;
+  /**
+   * Called before a player draws from a deck: 'skip' cancels the draw, 'bottom' takes the bottom card,
+   * 'plotInstead' turns a Group draw into a Plot draw (Back to the Drawing Board).
+   */
+  beforeDraw?: (s: GameState, self: string, player: string, deck: 'plot' | 'group') => 'skip' | 'bottom' | 'plotInstead' | undefined;
+  /** This Power Structure's Groups get no defense bonus for being close to their Illuminati (Sorry, Wrong Number). */
+  noProximityBonus?: (s: GameState, self: string, target: string) => boolean;
   /** Called after a card is drawn. */
   onDraw?: (s: GameState, self: string, player: string, deck: 'plot' | 'group', card: string) => void;
   /** Called for every game event (after it happens, before its response window). */
@@ -186,10 +192,15 @@ export function registerHooks(table: Record<string, CardHooks>) {
 export function activeHookCards(s: GameState): string[] {
   const out: string[] = [];
   const table: string[] = [];
+  const paralyzed = paralyzedGroups(s);
   for (const c of Object.values(s.cards)) {
     if (!HOOKS[c.cardId] || c.hiddenUnder) continue; // face down under Warehouse 23: inactive
-    if (c.zone === 'table' && c.linkedTo) table.push(c.iid);
-    else if (c.zone === 'structure' || c.zone === 'resources') out.push(c.iid);
+    if (c.zone === 'table' && c.linkedTo) { if (linkedPlotLive(s, c.iid)) table.push(c.iid); }
+    else if (c.zone === 'structure' || c.zone === 'resources') {
+      // A Paralyzed Group uses neither its own ability nor the Resources linked to it (Assassins).
+      if (paralyzed.size && (paralyzed.has(c.iid) || (c.zone === 'resources' && !!c.linkedTo && paralyzed.has(c.linkedTo)))) continue;
+      out.push(c.iid);
+    }
   }
   // Table cards (Plots, NWOs) may switch off Groups' abilities (World Hunger); they are never switched off themselves.
   const off = table.filter((t) => HOOKS[s.cards[t].cardId].disablesAbilities);
@@ -197,14 +208,49 @@ export function activeHookCards(s: GameState): string[] {
   return [...live, ...table];
 }
 
-/** Is `iid`'s special ability switched off by a card on the table? */
+/** Is `iid`'s special ability switched off by a card on the table (or by a Paralysis)? */
 export function abilitiesDisabled(s: GameState, iid: string): boolean {
   for (const c of Object.values(s.cards)) {
     if (c.zone !== 'table' || !c.linkedTo) continue;
+    if (c.linkedTo === iid && PLOTS[c.cardId]?.condition === 'paralysis' && linkedPlotLive(s, c.iid)) return true;
     const h = HOOKS[c.cardId];
     if (h?.disablesAbilities?.(s, c.iid, iid)) return true;
   }
   return false;
+}
+
+// ---- Linked Plots of the expansions (Zaps, Paralysis, SubGenius links)
+
+/** Plays of an attack in progress: a play counts unless a later, itself uncancelled play cancels it (R010). */
+export function isCancelled(plays: PlayedPlot[], iid: string): boolean {
+  const i = plays.findIndex((p) => p.iid === iid);
+  if (plays[i]?.voided) return true; // made illegal before it resolved: as if it never happened
+  const part = plays[i]?.partOf;
+  if (part && part !== iid && isCancelled(plays, part)) return true;
+  return plays.some((q, j) => j > i && q.effect.t === 'cancelPlot' && q.effect.target === iid && !isCancelled(plays, q.iid));
+}
+
+/**
+ * Does a linked Plot on the table have its effect now? Not while its link is (temporarily) illegal
+ * (`linkLegal` said 'inactive', stored after each action as `data.linkInactive`), and a Zap or
+ * Paralysis played during an attack stops working as soon as it is cancelled there.
+ */
+export function linkedPlotLive(s: GameState, iid: string): boolean {
+  const c = s.cards[iid];
+  if (!c || c.zone !== 'table' || !c.linkedTo) return false;
+  if (c.data?.linkInactive) return false;
+  const h = PLOTS[c.cardId];
+  if ((h?.condition || h?.linkLegal) && s.attack?.plays.some((p) => p.iid === iid) && isCancelled(s.attack.plays, iid)) return false;
+  return true;
+}
+
+/** Groups held by a live Paralysis (Assassins). */
+export function paralyzedGroups(s: GameState): Set<string> {
+  const out = new Set<string>();
+  for (const c of Object.values(s.cards)) {
+    if (c.zone === 'table' && c.linkedTo && PLOTS[c.cardId]?.condition === 'paralysis' && linkedPlotLive(s, c.iid)) out.add(c.linkedTo);
+  }
+  return out;
 }
 
 export function hooksOf(s: GameState, iid: string): CardHooks | undefined {

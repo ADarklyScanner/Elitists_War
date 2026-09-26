@@ -1044,10 +1044,10 @@ describe('S.M.O.F.: control bonuses', () => {
 });
 
 describe('Tabloids: Convenience Stores', () => {
-  it('has a +3 takeover bonus against Convenience Stores, a card missing from this set', () => {
+  it('has a +3 takeover bonus against Convenience Stores (Assassins pack)', () => {
     expect(GROUP_ABILITIES['tabloids']).toContainEqual(
       { kind: 'attackBonus', on: 'control', target: { names: ['convenience-stores'] }, value: 3, scope: 'any' });
-    expect(CARDS['convenience-stores']).toBeUndefined();
+    expect(CARDS['convenience-stores'].set).toBe('Assassins');
     expect(GROUP_ABILITIES['tabloids'].some((a) => a.kind === 'pending')).toBe(false);
   });
   it('gives nothing against other Groups', () => {

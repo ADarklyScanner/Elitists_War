@@ -32,13 +32,26 @@ export interface CardDef {
   arrowsOut?: Side[];
   attackPower?: string | null;
   variableStats?: boolean;
+  /** Which box the card comes from: missing means the base game ('Base'). */
+  set?: CardSet;
+  /** Printed Plot keywords (Zap, Freeze, Paralysis, Disaster, Assassination, Instant, Special). */
+  keywords?: string[];
+  /** NWO cards of the expansions: the colour printed on the card. */
+  nwoColor?: 'red' | 'blue' | 'yellow';
 }
+
+/** The boxes the cards come from. */
+export type CardSet = 'Base' | 'Assassins' | 'SubGenius';
+/** The optional expansion packs a game may use. */
+export type ExpansionId = 'assassins' | 'subgenius';
 
 /**
  * 'agents': a spare Illuminati card played from hand as an agent inside a rival Illuminati (R044). It
  * lies beside its player's Resources but is not a Resource.
  */
-export type Zone = 'plotDeck' | 'groupDeck' | 'hand' | 'structure' | 'resources' | 'discard' | 'destroyed' | 'table' | 'removed' | 'agents';
+export type Zone = 'plotDeck' | 'groupDeck' | 'hand' | 'structure' | 'resources' | 'discard' | 'destroyed' | 'table' | 'removed' | 'agents'
+  /** SubGenius rules: face up in the middle of the table, owned by nobody, for anyone to capture or destroy. */
+  | 'uncontrolled';
 
 /** A temporary or permanent change to a card. */
 export interface Modifier {
@@ -90,6 +103,14 @@ export interface CardInstance {
   benefitTurn?: number;
   /** Set aside for its owner after a duplicate copy replaced it in a capture: out of the game (R031). */
   setAside?: boolean;
+  /**
+   * Action tokens the card still has but cannot spend right now (Paralysis, Freeze): they come back
+   * once the card is free again. Kept apart so no rule can spend them by mistake.
+   */
+  heldTokens?: number;
+  /** SubGenius rules: who put the card into the uncontrolled area, and on which turn (automatic takeovers). */
+  placedBy?: string;
+  placedTurn?: number;
 }
 
 /** Computer opponent difficulty. */
@@ -174,6 +195,8 @@ export interface AttackCtx {
   target: string;          // iid
   targetPlayer?: string;   // controller of target (undefined if from hand)
   fromHand: boolean;
+  /** SubGenius rules: the target lies in the uncontrolled area (no owner, no position bonus). */
+  fromArea?: boolean;
   arrow?: Side;            // world side of attacker to place captured group on
   privileged: boolean;
   aid: Contribution[];
@@ -255,7 +278,7 @@ export interface Choice {
 export interface GameEvent {
   type: 'turnStart' | 'drawn' | 'takeover' | 'destroyed' | 'devastated' | 'discarded' | 'plotResolved' | 'relief'
     | 'failedTakeover' // a Group played from hand failed to be taken over (Opportunity Knocks)
-    | 'action';        // an action outside an attack was announced and waits for responses before it happens
+    | 'action';       // an action outside an attack was announced and waits for responses before it happens
   player?: string;         // whose turn / who did it
   card?: string;           // card involved
   cards?: string[];
@@ -285,6 +308,14 @@ export interface GameSettings {
    * win and declare it, and nobody wins without declaring.
    */
   victoryReminder?: boolean;
+  /** Expansion packs whose cards this game uses (both off unless switched on). Missing = base game only. */
+  expansions?: { assassins?: boolean; subgenius?: boolean };
+  /**
+   * The stand-alone SubGenius game (SubGenius rulebook): everybody plays the Church of the SubGenius,
+   * all players share one Plot deck and one Group deck, and Groups are drawn into an uncontrolled area
+   * in the middle of the table instead of into hands. See docs/EXPANSIONS.md.
+   */
+  subgeniusRules?: boolean;
 }
 
 /** One Goal a player can claim: the Basic Goal, his Illuminati's Special Goal, or a Goal card in hand. */
@@ -351,8 +382,36 @@ export interface GameState {
   /** Agreed deals whose I Lied is still waiting to resolve: the liar's side is held back until then. */
   dealWaits?: DealWait[];
   dealCounter?: number;
+  /** SubGenius rules: the shared decks, discard piles and the uncontrolled area (top of a deck = index 0). */
+  common?: CommonDecks;
+  /** Attribute Freezes in effect (Assassins): they last until the end of the turn they were played in. */
+  freezes?: Freeze[];
   /** How each person has played this game so far (counters kept by src/ai/profile.ts; people only). */
   habits?: Record<string, Record<string, unknown>>;
+}
+
+/** The shared piles of the stand-alone SubGenius game. */
+export interface CommonDecks {
+  plotDeck: string[];
+  groupDeck: string[];
+  plotDiscard: string[];
+  groupDiscard: string[];
+  /** Group and Resource cards face up in the middle of the table, controlled by nobody. */
+  uncontrolled: string[];
+}
+
+/**
+ * An Attribute Freeze (Assassins): until the end of `turn`, Groups matching `match` (and Resources whose
+ * card id is listed) may spend no Action tokens except to defend themselves.
+ */
+export interface Freeze {
+  card: string;            // the Freeze Plot's instance id
+  player: string;          // who played it
+  turn: number;
+  match: import('./abilities').Match | import('./abilities').Match[]; // several: any of them
+  resources?: string[];    // Resource card ids frozen as well (Satellites, the Orbital Mind Control Lasers)
+  exempt?: string[];       // players whose cards it no longer affects (Enough is Enough)
+  label: string;           // what is frozen, in words
 }
 
 // ---------------- Deals, trades and gifts (R040, R022, R038) ----------------
@@ -404,6 +463,8 @@ export interface PlotPlay {
   helper?: string;               // optional group joining an Instant Attack
   targets?: string[];            // several Groups (reload cards)
   march?: string;                // a March on Washington card in hand standing in for one required action
+  /** Plot cards from hand discarded to pay a cost declared with `requires` (see costs.ts). */
+  discards?: string[];
 }
 
 export type Action =
@@ -413,7 +474,8 @@ export type Action =
   | { type: 'move'; group: string; onto: string; side: Side; payWith?: string }
   | { type: 'playPlot'; play: PlotPlay }
   | { type: 'buyPlot'; payWith: string[] }
-  | { type: 'drawGroup' }
+  /** The Illuminati's once-per-turn Group draw; under SubGenius rules any time, paid by `payWith` (1 Illuminati or 2 other Groups). */
+  | { type: 'drawGroup'; payWith?: string[] }
   | { type: 'draw'; deck: 'plot' | 'group' } // start-of-turn draw, made by hand (people only)
   | { type: 'skipDraw' }                     // the start-of-turn draws are optional
   | { type: 'playResource'; card: string }
@@ -428,6 +490,10 @@ export type Action =
   | { type: 'playAgent'; card: string }
   /** Leave the game for good: it counts as being eliminated (R049). */
   | { type: 'resign' }
+  /** Spend one of your Illuminati's actions to remove every Zap from one player (Assassins). */
+  | { type: 'removeZaps'; player: string }
+  /** Free a Paralyzed Group: pay with its master (if you control it) or with your Illuminati (Assassins). */
+  | { type: 'freeGroup'; group: string; payWith: string }
   /** Rearranging Groups a capture or move brought in: put `group` on `side` of `onto` (its own master). */
   | { type: 'placeCaptured'; group: string; onto: string; side: Side }
   | { type: 'placeCapturedDone' }

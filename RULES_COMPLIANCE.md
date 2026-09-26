@@ -267,6 +267,13 @@ Calls the engine makes where the book is silent or a screen needs a rule:
   could use (Instant attacks included, weighed by their odds) and use the one most likely to stop every
   claim; with nothing in hand, Normal and Hard buy Plots with spare tokens and look again.
 
+## Expansion packs
+
+The rules the Assassins and SubGenius packs add (Zaps, Paralysis, Freezes, "Requires ... Action" costs,
+Slack, the stand-alone SubGenius game with shared decks and an uncontrolled area, SubGenius links) and
+every decision taken for them are in `docs/EXPANSIONS.md`, tested in `tests/expansions.test.ts` and
+`tests/expansionGames.test.ts`. Both packs are off by default and do not change base games.
+
 ## Known gaps
 
 None. Every item listed in earlier audits is now handled (see *Fixed in this audit*). Where the rulebook

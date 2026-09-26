@@ -1,7 +1,7 @@
 // New World Order cards: global rule changes that stay on the table (R045).
 import type { Alignment, GameState } from './types';
 import { alignments } from './stats';
-import { def } from './cards';
+import { CARDS, def } from './cards';
 
 export interface NwoEffect {
   color: 'red' | 'blue' | 'yellow';
@@ -66,5 +66,6 @@ export const NWO_COLOR: Record<string, 'red' | 'blue' | 'yellow'> = {
 };
 
 export function nwoColor(cardId: string): 'red' | 'blue' | 'yellow' {
-  return NWO_EFFECTS[cardId]?.color ?? NWO_COLOR[cardId] ?? 'red';
+  // Expansion NWOs carry their printed colour in the card data.
+  return NWO_EFFECTS[cardId]?.color ?? NWO_COLOR[cardId] ?? CARDS[cardId]?.nwoColor ?? 'red';
 }

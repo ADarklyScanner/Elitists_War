@@ -2,6 +2,7 @@
 import type { Alignment, AttackCtx, GameState, PlotEffect, PlotPlay } from '../types';
 import type { PlotHandler } from '../plotTypes';
 import { registerPlots } from '../plotTypes';
+import { assassinationPlot } from './families';
 import { registerChoice, registerHooks } from '../hooks';
 import { def } from '../cards';
 import { type Match, matches } from '../abilities';
@@ -193,20 +194,9 @@ function disaster(opts: { power: (s: GameState, t: string) => number; destroyMar
 
 /** Assassination: Instant Attack to Destroy a Personality; one qualifying Group may join (any of the matches). */
 function assassination(base: number, helper: Match | Match[]): PlotHandler {
-  const helpers = Array.isArray(helper) ? helper : [helper];
-  return {
-    timing: ['instant'],
-    needs: { target: 'personality', helper: true },
-    check(s, pl, play) {
-      if (!inPlay(s, play.target) || def(s, play.target!).subtype !== 'Personality') return 'Choose a Personality in play.';
-      if (play.helper && (!own(s, pl, play.helper) || s.cards[play.helper].tokens < 1 || !helpers.some((m) => matches(s, play.helper!, m)))) return `The helping Group must be your ${helpers.map(describe).join(' or ')} Group with an Action token.`;
-      return null;
-    },
-    apply(s, pl, play) {
-      startInstantAttack(s, pl, { plot: play.card, target: play.target!, power: base, assassination: true, helper: play.helper });
-    },
-  };
+  return assassinationPlot({ power: base, helper });
 }
+
 
 /** Cancel another Plot just played (in the counter window or during an attack). */
 function counter(opts: { check: (s: GameState, pl: string, play: PlotPlay) => string | null; pay: (s: GameState, pl: string, play: PlotPlay) => void }): PlotHandler {

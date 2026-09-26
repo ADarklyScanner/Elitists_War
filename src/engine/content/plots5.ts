@@ -3,6 +3,8 @@
 import type { Alignment, AttackCtx, GameState, PlotEffect, PlotPlay } from '../types';
 import type { PlotHandler } from '../plotTypes';
 import { registerPlots } from '../plotTypes';
+import { assassinationPlot } from './families';
+
 import { registerChoice, registerHooks } from '../hooks';
 import { def, OPPOSITE } from '../cards';
 import { type Match, matches } from '../abilities';
@@ -109,18 +111,7 @@ function disaster(opts: { power: number; destroyMargin: number; hugeAllowed: boo
 }
 
 function assassination(base: number, helper: Match): PlotHandler {
-  return {
-    timing: ['instant'],
-    needs: { target: 'personality', helper: true },
-    check(s, pl, play) {
-      if (!inPlay(s, play.target) || def(s, play.target!).subtype !== 'Personality') return 'Choose a Personality in play.';
-      if (play.helper && (!own(s, pl, play.helper) || s.cards[play.helper].tokens < 1 || !matches(s, play.helper, helper))) return `The helping Group must be your ${describe(helper)} Group with an Action token.`;
-      return null;
-    },
-    apply(s, pl, play) {
-      startInstantAttack(s, pl, { plot: play.card, target: play.target!, power: base, assassination: true, helper: play.helper });
-    },
-  };
+  return assassinationPlot({ power: base, helper });
 }
 
 /** "Right after placing Action tokens": in your own main phase before anything else has happened this turn. */

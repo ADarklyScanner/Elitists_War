@@ -1,0 +1,1451 @@
+[
+ {
+  "id": "13013",
+  "name": "13013",
+  "set": "SubGenius",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Uncommon",
+  "text": "Raises one SubGenius Group's Power to 6 and stays linked to it; counts as that Group's action. At any time. One per player in play.",
+  "playRequirement": "Requires Action"
+ },
+ {
+  "id": "advanced-supersonic-aluminum-nazi-hell-creatures-from-beneath-the-hollow-earth",
+  "name": "Advanced Supersonic Aluminum Nazi Hell Creatures from Beneath the Hollow Earth",
+  "set": "SubGenius",
+  "type": "Group",
+  "subtype": "Organization",
+  "rarity": "Uncommon",
+  "text": "When they take part in a successful Attack to Destroy a rival's Group, you may draw a Plot.",
+  "power": 4,
+  "globalPower": 2,
+  "resistance": 6,
+  "alignments": [
+   "Violent"
+  ],
+  "attributes": [
+   "Secret",
+   "Science"
+  ],
+  "arrowIn": "TOP",
+  "arrowsOut": [
+   "BOTTOM",
+   "RIGHT"
+  ],
+  "uniqueness": "One copy in play at a time (base rule)"
+ },
+ {
+  "id": "anti-slack",
+  "name": "Anti-Slack",
+  "set": "SubGenius",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Uncommon",
+  "text": "At any time, on a rival whose Illuminati holds two or more tokens: remove one. No player can be hit by more than one Anti-Slack per turn."
+ },
+ {
+  "id": "arise",
+  "name": "Arise!",
+  "set": "SubGenius",
+  "type": "Plot",
+  "subtype": "Goal",
+  "rarity": "Uncommon",
+  "text": "Goal: when a rival removes your last puppet, show this card: you stay in until the end of the turn, and if you still have no puppets then, you win. This victory may be shared, even with a player of the same Illuminati."
+ },
+ {
+  "id": "attitude-mutation",
+  "name": "Attitude Mutation",
+  "set": "SubGenius",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Uncommon",
+  "text": "At any time: add, remove or reverse one alignment of a Group you control until the end of the turn. Free for a Group your Illuminati controls directly; otherwise it costs its master's action. One per turn.",
+  "playRequirement": "May Require Action"
+ },
+ {
+  "id": "bobbies",
+  "name": "\"Bobbies\"",
+  "set": "SubGenius",
+  "type": "Group",
+  "subtype": "Organization",
+  "rarity": "Uncommon",
+  "text": "When you take them over you may hang them on any rival's open arrow. They never count toward a Goal and raise their owner's Basic Goal by one Group. A successful attack on them makes the attacker discard them or give them to a rival; nothing else moves them except losing their master.",
+  "power": 1,
+  "globalPower": 0,
+  "resistance": 0,
+  "alignments": [
+   "Straight",
+   "Fanatic"
+  ],
+  "attributes": [],
+  "arrowIn": "TOP",
+  "arrowsOut": [],
+  "uniqueness": "One copy in play at a time (base rule)"
+ },
+ {
+  "id": "brag-of-the-subgenius",
+  "name": "Brag of the SubGenius",
+  "set": "SubGenius",
+  "type": "Plot",
+  "subtype": "Goal",
+  "rarity": "Uncommon",
+  "text": "Goal: each SubGenius Group of Power 3 or more you control counts as two Groups for the Basic Goal."
+ },
+ {
+  "id": "bulldada",
+  "name": "Bulldada",
+  "set": "SubGenius",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Uncommon",
+  "text": "Right after any die roll: that roll becomes a 12. Costs three other Plot discards.",
+  "playRequirement": "Requires Three Discards"
+ },
+ {
+  "id": "cast-out-false-prophets",
+  "name": "Cast Out False Prophets!",
+  "set": "SubGenius",
+  "type": "Plot",
+  "subtype": "Goal",
+  "rarity": "Uncommon",
+  "text": "Goal: eliminate a player with the same Illuminati as yours by taking their last Group. Or play it as a Plot: +10 to destroy the False Prophets, one of their puppets, or their master unless the Illuminati controls them directly."
+ },
+ {
+  "id": "church-of-middle-america",
+  "name": "Church of Middle America",
+  "set": "SubGenius",
+  "type": "Group",
+  "subtype": "Organization",
+  "rarity": "Uncommon",
+  "text": "A SubGenius Group controlling it gets +2 Power (and +2 Global Power if it has any).",
+  "power": 3,
+  "globalPower": 1,
+  "resistance": 4,
+  "alignments": [
+   "Straight",
+   "Peaceful",
+   "Conservative"
+  ],
+  "attributes": [
+   "Church"
+  ],
+  "arrowIn": "TOP",
+  "arrowsOut": [
+   "LEFT",
+   "RIGHT"
+  ],
+  "uniqueness": "One copy in play at a time (base rule)"
+ },
+ {
+  "id": "church-of-the-subgenius",
+  "name": "Church of the SubGenius",
+  "set": "SubGenius",
+  "type": "Illuminati",
+  "subtype": "Illuminati",
+  "rarity": "Illuminati (fixed)",
+  "text": "Power 7/7. Keeps its Action tokens from turn to turn (Slack) and spends one per action. It and your SubGenius Groups get +2 on direct Attacks to Control SubGenius Groups. Special Goal: up to 3 Slack (tokens on this card) count as Groups toward the Basic Goal; this cannot be combined with any other Goal.",
+  "power": 7,
+  "globalPower": 7,
+  "resistance": null,
+  "alignments": [],
+  "attributes": [],
+  "arrowIn": null,
+  "arrowsOut": [
+   "TOP",
+   "RIGHT",
+   "BOTTOM",
+   "LEFT"
+  ],
+  "uniqueness": "One copy in play at a time (base rule)"
+ },
+ {
+  "id": "citizens-for-normalcy",
+  "name": "Citizens for Normalcy",
+  "set": "SubGenius",
+  "type": "Group",
+  "subtype": "Organization",
+  "rarity": "Uncommon",
+  "text": "The Church of the SubGenius, the Discordian Society and Weird or SubGenius Groups cannot attack it directly to control, take it over automatically or have it moved under them. Spend its token and an Illuminati token: cancel any Plot.",
+  "power": 2,
+  "globalPower": 0,
+  "resistance": 2,
+  "alignments": [
+   "Straight",
+   "Conservative",
+   "Fanatic"
+  ],
+  "attributes": [],
+  "arrowIn": "TOP",
+  "arrowsOut": [
+   "RIGHT"
+  ],
+  "uniqueness": "One copy in play at a time (base rule)"
+ },
+ {
+  "id": "comet-hail-bob",
+  "name": "Comet Hail-Bob",
+  "set": "SubGenius",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Uncommon",
+  "text": "Right after a rival takes a Group from hand or the uncontrolled area into play: that Group is destroyed, not counting for any Goal. Costs an Illuminati action or two Church actions. Once per game per player.",
+  "playRequirement": "Requires an Illuminati action, or actions from two Church groups",
+  "notes": "Follows the official errata."
+ },
+ {
+  "id": "connie-dobbs",
+  "name": "Connie Dobbs",
+  "set": "SubGenius",
+  "type": "Group",
+  "subtype": "Personality",
+  "rarity": "Uncommon",
+  "text": "While she is both Straight and SubGenius, neither she nor any Group she controls can be destroyed.",
+  "power": 2,
+  "globalPower": 2,
+  "resistance": 4,
+  "alignments": [
+   "Straight"
+  ],
+  "attributes": [
+   "SubGenius"
+  ],
+  "arrowIn": "TOP",
+  "arrowsOut": [
+   "LEFT",
+   "BOTTOM"
+  ],
+  "uniqueness": "One copy in play at a time (base rule)"
+ },
+ {
+  "id": "corrective-phrenologists",
+  "name": "Corrective Phrenologists",
+  "set": "SubGenius",
+  "type": "Group",
+  "subtype": "Organization",
+  "rarity": "Uncommon",
+  "text": "When they attack or defend in an attack involving a rival's Violent Group, they get a fresh Action token as soon as the dice are rolled.",
+  "power": 2,
+  "globalPower": 0,
+  "resistance": 3,
+  "alignments": [
+   "Violent",
+   "Criminal"
+  ],
+  "attributes": [
+   "Science"
+  ],
+  "arrowIn": "TOP",
+  "arrowsOut": [
+   "RIGHT"
+  ],
+  "uniqueness": "One copy in play at a time (base rule)"
+ },
+ {
+  "id": "dallas-catacombs",
+  "name": "Dallas Catacombs",
+  "set": "SubGenius",
+  "type": "Group",
+  "subtype": "Place",
+  "rarity": "Uncommon",
+  "text": "Your Groups may hang on any side of their master and switch sides at any time, arrows or not, but no master may have more puppets than outgoing arrows. If you lose the Catacombs, move everything back onto real arrows (free); what does not fit is discarded.",
+  "power": 1,
+  "globalPower": 0,
+  "resistance": 6,
+  "alignments": [],
+  "attributes": [
+   "SubGenius"
+  ],
+  "arrowIn": "TOP",
+  "arrowsOut": [
+   "LEFT"
+  ],
+  "uniqueness": "One copy in play at a time (base rule)"
+ },
+ {
+  "id": "decency-is-ok",
+  "name": "Decency is OK!",
+  "set": "SubGenius",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Uncommon",
+  "text": "Cancel an action taken or aided by a rival's Weird Group."
+ },
+ {
+  "id": "devival",
+  "name": "Devival",
+  "set": "SubGenius",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Uncommon",
+  "text": "+10 Power or Resistance to a SubGenius Group you control. With an action: played when it is declared, for that action only. On defense: until the end of the turn, not for Goals. One per action or defense."
+ },
+ {
+  "id": "divine-mail-order",
+  "name": "Divine Mail Order",
+  "set": "SubGenius",
+  "type": "Group",
+  "subtype": "Organization",
+  "rarity": "Uncommon",
+  "text": "Its action: draw a Plot. Its action plus an Illuminati action: draw three Plots.",
+  "power": 2,
+  "globalPower": 0,
+  "resistance": 3,
+  "alignments": [
+   "Corporate"
+  ],
+  "attributes": [
+   "Media",
+   "SubGenius"
+  ],
+  "arrowIn": "TOP",
+  "arrowsOut": [
+   "BOTTOM"
+  ],
+  "uniqueness": "One copy in play at a time (base rule)"
+ },
+ {
+  "id": "dobbstown",
+  "name": "Dobbstown",
+  "set": "SubGenius",
+  "type": "Group",
+  "subtype": "Place",
+  "rarity": "Uncommon",
+  "text": "+5 on any attempt to control a SubGenius Personality.",
+  "power": 3,
+  "globalPower": 0,
+  "resistance": 4,
+  "alignments": [
+   "Weird",
+   "Fanatic"
+  ],
+  "attributes": [
+   "SubGenius"
+  ],
+  "arrowIn": "TOP",
+  "arrowsOut": [
+   "LEFT",
+   "BOTTOM"
+  ],
+  "uniqueness": "One copy in play at a time (base rule)"
+ },
+ {
+  "id": "dokstok",
+  "name": "Dokstok",
+  "set": "SubGenius",
+  "type": "Group",
+  "subtype": "Place",
+  "rarity": "Uncommon",
+  "text": "Its controller gets one extra token at token placement, which must first go to another player's Illuminati (as a gift or trade) or be thrown away.",
+  "power": 1,
+  "globalPower": 0,
+  "resistance": 1,
+  "alignments": [
+   "Peaceful",
+   "Weird"
+  ],
+  "attributes": [
+   "SubGenius"
+  ],
+  "arrowIn": "TOP",
+  "arrowsOut": [
+   "RIGHT"
+  ],
+  "uniqueness": "One copy in play at a time (base rule)"
+ },
+ {
+  "id": "dr-k-taden-legume",
+  "name": "Dr. K'Taden Legume",
+  "set": "SubGenius",
+  "type": "Group",
+  "subtype": "Personality",
+  "rarity": "Uncommon",
+  "text": "While he is yours and SubGenius, no attack of any kind may be made on your other SubGenius Personalities.",
+  "power": 2,
+  "globalPower": 0,
+  "resistance": 3,
+  "alignments": [
+   "Violent"
+  ],
+  "attributes": [
+   "SubGenius"
+  ],
+  "arrowIn": "TOP",
+  "arrowsOut": [
+   "RIGHT"
+  ],
+  "uniqueness": "One copy in play at a time (base rule)"
+ },
+ {
+  "id": "drs-for-bob",
+  "name": "Drs. for \"Bob\"",
+  "set": "SubGenius",
+  "type": "Group",
+  "subtype": "Organization",
+  "rarity": "Dirt",
+  "text": "May add their Power to the defense of any SubGenius Group you control as a free move, without a token.",
+  "power": 2,
+  "globalPower": 0,
+  "resistance": 4,
+  "alignments": [
+   "Weird"
+  ],
+  "attributes": [
+   "SubGenius"
+  ],
+  "arrowIn": "BOTTOM",
+  "arrowsOut": [
+   "TOP",
+   "RIGHT"
+  ],
+  "uniqueness": "One copy in play at a time (base rule)"
+ },
+ {
+  "id": "eternal-salvation-or-triple-your-money-back",
+  "name": "Eternal Salvation or Triple your Money Back",
+  "set": "SubGenius",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Uncommon",
+  "text": "With a SubGenius action, at any time: draw Plots until you hold five. Once per game.",
+  "playRequirement": "Requires a SubGenius group action"
+ },
+ {
+  "id": "excremeditation",
+  "name": "Excremeditation",
+  "set": "SubGenius",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Uncommon",
+  "text": "Illuminati action, at any time: an Action token for one SubGenius Group, or for several with 5 total Power or less. Not for Groups holding a token or barred from tokens.",
+  "playRequirement": "Requires an Illuminati action"
+ },
+ {
+  "id": "fake-healing",
+  "name": "Fake Healing",
+  "set": "SubGenius",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Uncommon",
+  "text": "On your turn: one Group in the uncontrolled area (or your hand) has Resistance 0 until the end of the turn."
+ },
+ {
+  "id": "false-overman",
+  "name": "False Overman",
+  "set": "SubGenius",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Uncommon",
+  "text": "Outside an attack, link to any Personality in play, controlled or not, that is not an OverMan: Power 3, Violent and Straight, never Peaceful or Weird."
+ },
+ {
+  "id": "false-prophets",
+  "name": "False Prophets",
+  "set": "SubGenius",
+  "type": "Group",
+  "subtype": "Organization",
+  "rarity": "Uncommon",
+  "text": "+4 on any attempt to control or destroy a rival's Church Group.",
+  "power": 2,
+  "globalPower": 2,
+  "resistance": 2,
+  "alignments": [
+   "Straight",
+   "Fanatic"
+  ],
+  "attributes": [
+   "Church"
+  ],
+  "arrowIn": "TOP",
+  "arrowsOut": [
+   "LEFT"
+  ],
+  "uniqueness": "One copy in play at a time (base rule)"
+ },
+ {
+  "id": "false-slack",
+  "name": "False Slack",
+  "set": "SubGenius",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Uncommon",
+  "text": "Illuminati action, at any time: remove every token from one rival Group (not an Illuminati) and from all Groups below it. One per victim per turn.",
+  "playRequirement": "Requires Illuminati Action"
+ },
+ {
+  "id": "frop-farm",
+  "name": "'Frop Farm",
+  "set": "SubGenius",
+  "type": "Group",
+  "subtype": "Place",
+  "rarity": "Uncommon",
+  "text": "Its action: remove every Action token from one Personality.",
+  "power": 2,
+  "globalPower": 1,
+  "resistance": 5,
+  "alignments": [
+   "Peaceful"
+  ],
+  "attributes": [
+   "Secret",
+   "SubGenius"
+  ],
+  "arrowIn": "TOP",
+  "arrowsOut": [
+   "RIGHT"
+  ],
+  "uniqueness": "One copy in play at a time (base rule)"
+ },
+ {
+  "id": "give-me-slack-or-give-me-food",
+  "name": "Give Me Slack, Or Give Me Food",
+  "set": "SubGenius",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Uncommon",
+  "text": "Right after you play a Plot: instead of letting it resolve, discard this and one more card and take that Plot back into your hand.",
+  "playRequirement": "Requires Discards"
+ },
+ {
+  "id": "glorps",
+  "name": "Glorps",
+  "set": "SubGenius",
+  "type": "Group",
+  "subtype": "Organization",
+  "rarity": "Uncommon",
+  "text": "Double Power when attacking or aiding an Attack to Destroy a SubGenius Group; triple if their controller has exposed The Anti\"Bob\".",
+  "power": 3,
+  "globalPower": 0,
+  "resistance": 3,
+  "alignments": [
+   "Straight",
+   "Fanatic"
+  ],
+  "attributes": [],
+  "arrowIn": "TOP",
+  "arrowsOut": [
+   "RIGHT"
+  ],
+  "uniqueness": "One copy in play at a time (base rule)"
+ },
+ {
+  "id": "good-sex-for-mutants-dating-league",
+  "name": "Good Sex for Mutants Dating League",
+  "set": "SubGenius",
+  "type": "Group",
+  "subtype": "Organization",
+  "rarity": "Dirt",
+  "text": "Rivals' attempts to control a Weird Group it controls get -2.",
+  "power": 1,
+  "globalPower": 0,
+  "resistance": 3,
+  "alignments": [
+   "Weird",
+   "Liberal"
+  ],
+  "attributes": [
+   "SubGenius"
+  ],
+  "arrowIn": "TOP",
+  "arrowsOut": [
+   "LEFT",
+   "RIGHT"
+  ],
+  "uniqueness": "One copy in play at a time (base rule)"
+ },
+ {
+  "id": "head-launching",
+  "name": "Head Launching",
+  "set": "SubGenius",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Dirt",
+  "text": "At any time: a Group's Global Power becomes equal to its permanent Power; linked to it. Costs that Group's action and two other Plot discards.",
+  "playRequirement": "Needs an action from the group affected, plus discarding two other Plot cards."
+ },
+ {
+  "id": "inherently-bogus",
+  "name": "Inherently Bogus",
+  "set": "SubGenius",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Uncommon",
+  "text": "Outside an attack: a Church of the SubGenius Illuminati with no SubGenius Groups in its Power Structure loses one token. One per victim per turn."
+ },
+ {
+  "id": "janor-device",
+  "name": "Janor Device",
+  "set": "SubGenius",
+  "type": "Resource",
+  "subtype": "Resource",
+  "rarity": "Dirt",
+  "text": "Unique. Its holder may change any die roll by 1 up or down. A natural 11 or 12 rolled by the holder ends their turn and the Device goes to a rival: every rival rolls two dice and the highest takes it. One per player.",
+  "uniqueness": "Unique Gadget"
+ },
+ {
+  "id": "jesus-b",
+  "name": "Jesus B.",
+  "set": "SubGenius",
+  "type": "Group",
+  "subtype": "Personality",
+  "rarity": "Uncommon",
+  "text": "Once per game while he is yours, buy one Slack by mailing a real dollar to the SubGenius Foundation.",
+  "power": 3,
+  "globalPower": 0,
+  "resistance": 3,
+  "alignments": [
+   "Weird",
+   "Corporate"
+  ],
+  "attributes": [
+   "SubGenius"
+  ],
+  "arrowIn": "BOTTOM",
+  "arrowsOut": [
+   "TOP",
+   "LEFT"
+  ],
+  "uniqueness": "One copy in play at a time (base rule)"
+ },
+ {
+  "id": "jhvh-1",
+  "name": "JHVH-1",
+  "set": "SubGenius",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Uncommon",
+  "text": "Illuminati action, at any time: a rival discards half their Plots (round up), their choice.",
+  "playRequirement": "Needs an action from your Illuminati."
+ },
+ {
+  "id": "kill-bob",
+  "name": "Kill \"Bob\"!",
+  "set": "SubGenius",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Uncommon",
+  "text": "During an Attack to Destroy a SubGenius Group, after the roll: if it succeeded, every player on the attacking side gets an Illuminati token. If the target was yours, you get one either way. Once per turn."
+ },
+ {
+  "id": "league-for-obvious-decency",
+  "name": "League for Obvious Decency",
+  "set": "SubGenius",
+  "type": "Group",
+  "subtype": "Organization",
+  "rarity": "Dirt",
+  "text": "Its action: put up to two exposed Plots on top of the shared Plot deck (in standard play, their owner's deck).",
+  "power": 1,
+  "globalPower": 0,
+  "resistance": 3,
+  "alignments": [
+   "Weird",
+   "Conservative"
+  ],
+  "attributes": [],
+  "arrowIn": "TOP",
+  "arrowsOut": [],
+  "uniqueness": "One copy in play at a time (base rule)"
+ },
+ {
+  "id": "local-clenches",
+  "name": "Local Clenches",
+  "set": "SubGenius",
+  "type": "Group",
+  "subtype": "Organization",
+  "rarity": "Uncommon",
+  "text": "Get an extra Action token each turn while they are SubGenius.",
+  "power": 0,
+  "globalPower": 0,
+  "resistance": 2,
+  "alignments": [],
+  "attributes": [
+   "SubGenius",
+   "Church"
+  ],
+  "arrowIn": "TOP",
+  "arrowsOut": [],
+  "uniqueness": "One copy in play at a time (base rule)"
+ },
+ {
+  "id": "luck-plane",
+  "name": "Luck Plane",
+  "set": "SubGenius",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Uncommon",
+  "text": "Right after any die roll: that roll becomes a 2. An attack of strength below 2 still fails without a roll. Costs three other Plot discards.",
+  "playRequirement": "Needs discarding three other Plot cards."
+ },
+ {
+  "id": "martyr-meter",
+  "name": "Martyr Meter",
+  "set": "SubGenius",
+  "type": "Resource",
+  "subtype": "Resource",
+  "rarity": "Dirt",
+  "text": "Unique. At token placement one Personality you control gets an extra Action token. Its holder is safe from cards aimed at false Jesii.",
+  "uniqueness": "Unique Gadget"
+ },
+ {
+  "id": "mediocretinism",
+  "name": "Mediocretinism",
+  "set": "SubGenius",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Dirt",
+  "text": "At any time: a Group loses SubGenius until the end of the turn."
+ },
+ {
+  "id": "miraculous-manifestation",
+  "name": "Miraculous Manifestation",
+  "set": "SubGenius",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Uncommon",
+  "text": "At any time: every player draws a Group into the uncontrolled area. In standard play each draws a Group into hand and shows it to you."
+ },
+ {
+  "id": "more-slack",
+  "name": "More Slack",
+  "set": "SubGenius",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Uncommon",
+  "text": "At any time, pay one Slack: every player shows all their Plots face up. Once per game per player."
+ },
+ {
+  "id": "mwowm",
+  "name": "MWOWM",
+  "set": "SubGenius",
+  "type": "Group",
+  "subtype": "Organization",
+  "rarity": "Uncommon",
+  "text": "When anyone discards a Plot, spend its action and roll a die: on 3 or less you take that Plot.",
+  "power": 2,
+  "globalPower": 1,
+  "resistance": 4,
+  "alignments": [],
+  "attributes": [
+   "Science",
+   "Computer"
+  ],
+  "arrowIn": "TOP",
+  "arrowsOut": [
+   "LEFT"
+  ],
+  "uniqueness": "One copy in play at a time (base rule)"
+ },
+ {
+  "id": "nental-ife",
+  "name": "Nental Ife",
+  "set": "SubGenius",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Uncommon",
+  "text": "Link to a SubGenius Personality at any time: its Global Power equals its printed Power. Costs that Personality's action.",
+  "playRequirement": "Requires Personality Action"
+ },
+ {
+  "id": "nhgh",
+  "name": "NHGH",
+  "set": "SubGenius",
+  "type": "Group",
+  "subtype": "Personality",
+  "rarity": "Uncommon",
+  "text": "Cannot be destroyed. Only a player who exposed The Anti\"Bob\" may control it. While uncontrolled, its Power of 5 is added to every Attack to Destroy. In standard play it may be played as a Plot for +5 to one Attack to Destroy on a rival, who then takes it into hand.",
+  "power": 5,
+  "globalPower": 0,
+  "resistance": 2,
+  "alignments": [
+   "Criminal"
+  ],
+  "attributes": [],
+  "arrowIn": "TOP",
+  "arrowsOut": [
+   "BOTTOM"
+  ],
+  "uniqueness": "One copy in play at a time (base rule)"
+ },
+ {
+  "id": "official-all-inclusive-divine-excuse",
+  "name": "Official, all Inclusive, Divine Excuse",
+  "set": "SubGenius",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Uncommon",
+  "text": "When a Personality is attacked, before the roll: the attack fails."
+ },
+ {
+  "id": "or-kill-me",
+  "name": ". . . Or Kill Me!",
+  "set": "SubGenius",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Uncommon",
+  "text": "When your Illuminati has no Slack, pick a rival who has some: they give your Illuminati one token or discard a Group from their Power Structure. For the rest of the turn you may only defend."
+ },
+ {
+  "id": "overman",
+  "name": "OverMan",
+  "set": "SubGenius",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Uncommon",
+  "text": "Outside an attack, link to any Personality in play, controlled or not, that is not a False OverMan: Power and Global Power 3."
+ },
+ {
+  "id": "overman-philo-drummond",
+  "name": "OverMan Philo Drummond",
+  "set": "SubGenius",
+  "type": "Group",
+  "subtype": "Personality",
+  "rarity": "Uncommon",
+  "text": "His Weird puppets are SubGenius. OverMan and False OverMan cannot affect him.",
+  "power": 3,
+  "globalPower": 3,
+  "resistance": 4,
+  "alignments": [],
+  "attributes": [
+   "SubGenius"
+  ],
+  "arrowIn": "TOP",
+  "arrowsOut": [
+   "LEFT",
+   "RIGHT"
+  ],
+  "uniqueness": "One copy in play at a time (base rule)"
+ },
+ {
+  "id": "phlegm-elementals",
+  "name": "Phlegm Elementals",
+  "set": "SubGenius",
+  "type": "Group",
+  "subtype": "Organization",
+  "rarity": "Uncommon",
+  "text": "When they take part in an attack, the target is marked once the dice are rolled: it skips its next token placement.",
+  "power": 2,
+  "globalPower": 1,
+  "resistance": 4,
+  "alignments": [
+   "Violent"
+  ],
+  "attributes": [
+   "Secret"
+  ],
+  "arrowIn": "TOP",
+  "arrowsOut": [],
+  "uniqueness": "One copy in play at a time (base rule)"
+ },
+ {
+  "id": "pinks",
+  "name": "Pinks",
+  "set": "SubGenius",
+  "type": "Group",
+  "subtype": "Organization",
+  "rarity": "Uncommon",
+  "text": "Whenever they have no token they may take one from another Straight Group you control.",
+  "power": 3,
+  "globalPower": 1,
+  "resistance": 0,
+  "alignments": [
+   "Straight"
+  ],
+  "attributes": [],
+  "arrowIn": "TOP",
+  "arrowsOut": [],
+  "uniqueness": "One copy in play at a time (base rule)"
+ },
+ {
+  "id": "psychic-pstench",
+  "name": "Psychic Pstench",
+  "set": "SubGenius",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Uncommon",
+  "text": "With a SubGenius Personality's action, at any time: a rival shows all their Plots, or discards one exposed Goal.",
+  "playRequirement": "Requires SubGenius Personality Action"
+ },
+ {
+  "id": "rain-of-prairie-squid",
+  "name": "Rain of Prairie Squid",
+  "set": "SubGenius",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Uncommon",
+  "text": "Outside an attack: shuffle the whole uncontrolled area into the Group deck and deal the same number of new cards there. In standard play, discard any Groups from your hand and draw as many."
+ },
+ {
+  "id": "random-jesii",
+  "name": "Random Jesii",
+  "set": "SubGenius",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Uncommon",
+  "text": "Outside an attack, with a SubGenius or Church action: a rival exposes all but one of their Plots. Not against the Martyr Meter's holder.",
+  "playRequirement": "Needs the action of a SubGenius or Church group."
+ },
+ {
+  "id": "rant",
+  "name": "Rant!",
+  "set": "SubGenius",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Endemic",
+  "text": "On your turn after token placement, spend the action of a Personality with an open outgoing arrow: take a Group or Resource from the uncontrolled area (your hand in standard play) into play without a roll; a Group goes under that Personality. Your turn then ends.",
+  "playRequirement": "Needs the action of a Personality that has a free outgoing control arrow; your turn then ends"
+ },
+ {
+  "id": "repent",
+  "name": "Repent!",
+  "set": "SubGenius",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Uncommon",
+  "text": "Right after your token placement: your turn ends at once and your Illuminati gets one more token."
+ },
+ {
+  "id": "reverend-ivan-stang",
+  "name": "Reverend Ivan Stang",
+  "set": "SubGenius",
+  "type": "Group",
+  "subtype": "Personality",
+  "rarity": "Uncommon",
+  "text": "May give his token to another SubGenius Group without one, at any time.",
+  "power": 3,
+  "globalPower": 2,
+  "resistance": 4,
+  "alignments": [],
+  "attributes": [
+   "Media",
+   "SubGenius"
+  ],
+  "arrowIn": "BOTTOM",
+  "arrowsOut": [
+   "TOP",
+   "LEFT",
+   "RIGHT"
+  ],
+  "uniqueness": "One copy in play at a time (base rule)"
+ },
+ {
+  "id": "robo-bob",
+  "name": "Robo \"Bob\"",
+  "set": "SubGenius",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Uncommon",
+  "text": "On your turn, link for good to a SubGenius Place you control (counts as its action): nobody else may ever control it, and it has +5 against attempts to destroy it. One per player.",
+  "keywords": [
+   "Special"
+  ],
+  "playRequirement": "Requires Action"
+ },
+ {
+  "id": "rogue-subgenii",
+  "name": "Rogue SubGenii",
+  "set": "SubGenius",
+  "type": "Group",
+  "subtype": "Organization",
+  "rarity": "Uncommon",
+  "text": "When they have no token, their controller may discard a Plot to give them one, once per turn.",
+  "power": 2,
+  "globalPower": 2,
+  "resistance": 5,
+  "alignments": [
+   "Criminal"
+  ],
+  "attributes": [
+   "SubGenius"
+  ],
+  "arrowIn": "TOP",
+  "arrowsOut": [
+   "LEFT"
+  ],
+  "uniqueness": "One copy in play at a time (base rule)"
+ },
+ {
+  "id": "s-c-a-m",
+  "name": "S.C.A.M",
+  "set": "SubGenius",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Dirt",
+  "text": "Right after a rival rolls any die: the roll is void and made again. Costs the action of one of your Personalities.",
+  "playRequirement": "Needs an action from a Personality group to play."
+ },
+ {
+  "id": "s-l-a-k",
+  "name": "S.L.A.K.",
+  "set": "SubGenius",
+  "type": "Group",
+  "subtype": "Organization",
+  "rarity": "Dirt",
+  "text": "Gets an Action token at each rival's token placement if it has none.",
+  "power": 2,
+  "globalPower": 0,
+  "resistance": 5,
+  "alignments": [
+   "Violent",
+   "Fanatic"
+  ],
+  "attributes": [
+   "SubGenius"
+  ],
+  "arrowIn": "TOP",
+  "arrowsOut": [
+   "BOTTOM"
+  ],
+  "uniqueness": "One copy in play at a time (base rule)"
+ },
+ {
+  "id": "s-p-u-t-u-m",
+  "name": "S.P.U.T.U.M.",
+  "set": "SubGenius",
+  "type": "Group",
+  "subtype": "Organization",
+  "rarity": "Dirt",
+  "text": "Triple Power in any attack on a Personality.",
+  "power": 1,
+  "globalPower": 0,
+  "resistance": 2,
+  "alignments": [
+   "Weird",
+   "Violent"
+  ],
+  "attributes": [
+   "SubGenius",
+   "Computer"
+  ],
+  "arrowIn": "TOP",
+  "arrowsOut": [
+   "RIGHT"
+  ],
+  "uniqueness": "One copy in play at a time (base rule)"
+ },
+ {
+  "id": "sacred-jests",
+  "name": "Sacred Jests",
+  "set": "SubGenius",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Uncommon",
+  "text": "At any time: a rival picks one of their Plots at random and must play it at once or discard it; a Goal picked is shown instead."
+ },
+ {
+  "id": "sacred-stencil",
+  "name": "Sacred Stencil",
+  "set": "SubGenius",
+  "type": "Resource",
+  "subtype": "Resource",
+  "rarity": "Uncommon",
+  "text": "Unique. Against a rival's Attack to Destroy on any Group of yours, your defense may add +5 (in standard play, against Instant attacks too).",
+  "uniqueness": "Unique Artifact"
+ },
+ {
+  "id": "saucer-landing-strip",
+  "name": "Saucer Landing Strip",
+  "set": "SubGenius",
+  "type": "Group",
+  "subtype": "Place",
+  "rarity": "Uncommon",
+  "text": "When its controller holds no Plots, its token may be traded at any time for two Plots.",
+  "power": 1,
+  "globalPower": 1,
+  "resistance": 3,
+  "alignments": [],
+  "attributes": [
+   "Secret",
+   "SubGenius",
+   "Space"
+  ],
+  "arrowIn": "BOTTOM",
+  "arrowsOut": [
+   "TOP",
+   "RIGHT"
+  ],
+  "uniqueness": "One copy in play at a time (base rule)"
+ },
+ {
+  "id": "schizm",
+  "name": "Schizm",
+  "set": "SubGenius",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Uncommon",
+  "text": "With your attack on a rival's Group: +10, even against Groups immune to control or destruction. On success the target and its puppets become uncontrolled (in standard play: the target is discarded and its puppets go to their owners' hands)."
+ },
+ {
+  "id": "science-cannot-remove-the-terror-of-the-gods",
+  "name": "Science Cannot Remove the Terror of the Gods!",
+  "set": "SubGenius",
+  "type": "Plot",
+  "subtype": "Goal",
+  "rarity": "Uncommon",
+  "text": "Goal: control Church Groups and have destroyed Science or Church Groups in one of these pairs: 5 and 2, 4 and 3, 3 and 4, 2 and 5, 1 and 6. Cannot be combined with another Goal."
+ },
+ {
+  "id": "secret-fistemple",
+  "name": "Secret FisTemple",
+  "set": "SubGenius",
+  "type": "Group",
+  "subtype": "Organization",
+  "rarity": "Uncommon",
+  "text": "Can control only Personalities; each Personality it controls is SubGenius. May pass its token to its master or a puppet that is SubGenius by its own card. Always has its master's alignments.",
+  "power": 2,
+  "globalPower": 0,
+  "resistance": 4,
+  "alignments": [],
+  "attributes": [
+   "Secret",
+   "SubGenius",
+   "Church"
+  ],
+  "arrowIn": "TOP",
+  "arrowsOut": [
+   "LEFT",
+   "RIGHT",
+   "BOTTOM"
+  ],
+  "uniqueness": "One copy in play at a time (base rule)"
+ },
+ {
+  "id": "shordurpersav",
+  "name": "Shordurpersav",
+  "set": "SubGenius",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Endemic",
+  "text": "Right after you roll: roll again. Costs an Illuminati action or two SubGenius actions.",
+  "playRequirement": "Costs an Illuminati action or two SubGenius group actions."
+ },
+ {
+  "id": "slackfusion",
+  "name": "Slackfusion",
+  "set": "SubGenius",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Dirt",
+  "text": "At any time: for the rest of the turn Illuminati tokens may be given and traded in deals, between Illuminati only."
+ },
+ {
+  "id": "smite-them-all",
+  "name": "Smite Them All!",
+  "set": "SubGenius",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Uncommon",
+  "text": "Outside an attack, if you hold two or more Groups: each rival puts one card from the uncontrolled area at the bottom of the Group deck, then you put two. In standard play, each puts cards from hand at the bottom of their own deck."
+ },
+ {
+  "id": "speakers-in-tongues",
+  "name": "Speakers in Tongues",
+  "set": "SubGenius",
+  "type": "Group",
+  "subtype": "Organization",
+  "rarity": "Uncommon",
+  "text": "+3 on any attempt to control a Church Group.",
+  "power": 1,
+  "globalPower": 0,
+  "resistance": 3,
+  "alignments": [
+   "Weird",
+   "Conservative",
+   "Fanatic"
+  ],
+  "attributes": [],
+  "arrowIn": "TOP",
+  "arrowsOut": [],
+  "uniqueness": "One copy in play at a time (base rule)"
+ },
+ {
+  "id": "st-janor-hypercleats",
+  "name": "St. Janor Hypercleats",
+  "set": "SubGenius",
+  "type": "Group",
+  "subtype": "Personality",
+  "rarity": "Uncommon",
+  "text": "In attacks he makes or aids, a roll of 11 does not fail automatically, but a natural 2 counts as 12 and his Illuminati loses a token if it has one. He may attack, or help attack, Secret Groups whatever their alignments.",
+  "power": 2,
+  "globalPower": 0,
+  "resistance": 1,
+  "alignments": [
+   "Weird"
+  ],
+  "attributes": [
+   "Magic",
+   "SubGenius"
+  ],
+  "arrowIn": "TOP",
+  "arrowsOut": [
+   "LEFT"
+  ],
+  "uniqueness": "One copy in play at a time (base rule)"
+ },
+ {
+  "id": "stark-fist-of-removal",
+  "name": "Stark Fist of Removal",
+  "set": "SubGenius",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Uncommon",
+  "text": "On your turn: your Illuminati keeps only one token, and a rival's Illuminati loses all of its tokens. Your turn then ends.",
+  "playRequirement": "Requires spending all your Illuminati's tokens, and ends your turn."
+ },
+ {
+  "id": "subgenius-fistemples",
+  "name": "SubGenius FisTemples",
+  "set": "SubGenius",
+  "type": "Group",
+  "subtype": "Organization",
+  "rarity": "Rare",
+  "text": "Every Group it controls gets +5 Resistance.",
+  "power": 2,
+  "globalPower": 0,
+  "resistance": 3,
+  "alignments": [
+   "Weird"
+  ],
+  "attributes": [
+   "SubGenius",
+   "Church"
+  ],
+  "arrowIn": "TOP",
+  "arrowsOut": [
+   "LEFT",
+   "RIGHT"
+  ],
+  "uniqueness": "One copy in play at a time (base rule)"
+ },
+ {
+  "id": "sultan-of-slack",
+  "name": "Sultan of Slack",
+  "set": "SubGenius",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Uncommon",
+  "text": "At any time except while a victory is being contested: until your next turn, nobody wins by their Illuminati's Special Goal unless their Illuminati holds at least as many tokens as yours. Once per game."
+ },
+ {
+  "id": "tape-runs-out",
+  "name": "Tape Runs Out...",
+  "set": "SubGenius",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Dirt",
+  "text": "Right after any Plot is played: cancel it and discard both. Costs an Illuminati action or three other Plot discards.",
+  "playRequirement": "Requires Illuminati Action or Discards"
+ },
+ {
+  "id": "the-13th-apostle",
+  "name": "The 13th Apostle",
+  "set": "SubGenius",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Uncommon",
+  "text": "Illuminati action, at any time: an Action token for one Personality, or for several with 5 total Power or less. Not for Groups holding a token or barred from tokens.",
+  "playRequirement": "Requires Illuminati Action"
+ },
+ {
+  "id": "the-anti-bob",
+  "name": "The Anti\"Bob\"",
+  "set": "SubGenius",
+  "type": "Plot",
+  "subtype": "Goal",
+  "rarity": "Uncommon",
+  "text": "Goal: control at least 6 SubGenius Groups and have destroyed at least 2 of your rivals' SubGenius or Weird Groups. Expose it yourself for one extra Illuminati token (once per game); it can then never be hidden or leave your hand."
+ },
+ {
+  "id": "the-hour-of-slack",
+  "name": "The Hour of Slack",
+  "set": "SubGenius",
+  "type": "Group",
+  "subtype": "Organization",
+  "rarity": "Uncommon",
+  "text": "When a rival declares an attack on a Group in your Power Structure, draw a Plot.",
+  "power": 2,
+  "globalPower": 1,
+  "resistance": 3,
+  "alignments": [
+   "Weird"
+  ],
+  "attributes": [
+   "Media",
+   "SubGenius"
+  ],
+  "arrowIn": "TOP",
+  "arrowsOut": [
+   "RIGHT",
+   "BOTTOM"
+  ],
+  "uniqueness": "One copy in play at a time (base rule)"
+ },
+ {
+  "id": "the-prescriptures",
+  "name": "The Prescriptures",
+  "set": "SubGenius",
+  "type": "Resource",
+  "subtype": "Resource",
+  "rarity": "Dirt",
+  "text": "Unique. Once on each of your turns, spend an Illuminati action or the actions of all your Personalities (at least one): look at the top three cards of two decks, or at a rival's Plots.",
+  "uniqueness": "Unique Artifact"
+ },
+ {
+  "id": "the-saint-of-sales",
+  "name": "The Saint of Sales",
+  "set": "SubGenius",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Uncommon",
+  "text": "On your turn, with an Illuminati action or SubGenius actions of 4 total Power: take one Resource from the uncontrolled area or your hand into play without a roll.",
+  "playRequirement": "Needs a SubGenius or Illuminati action"
+ },
+ {
+  "id": "the-true-pipe",
+  "name": "The True Pipe",
+  "set": "SubGenius",
+  "type": "Resource",
+  "subtype": "Resource",
+  "rarity": "Endemic",
+  "text": "Unique. Your Illuminati gets +2 Power and +2 Global Power; does not stack with other Resources that raise your Illuminati's Power.",
+  "uniqueness": "Unique Artifact"
+ },
+ {
+  "id": "the-world-ends-tomorrow-and-you-may-die",
+  "name": "The World Ends Tomorrow and You May Die!",
+  "set": "SubGenius",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Uncommon",
+  "text": "With an attack on a Group in the uncontrolled area (in standard play, a Group in hand): the attacker spends its token and must share an alignment with the target or be Media; the attack succeeds at once. Your turn then ends.",
+  "playRequirement": "Ends Turn"
+ },
+ {
+  "id": "they-may-be-pink",
+  "name": "They May Be Pink. . .",
+  "set": "SubGenius",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Dirt",
+  "text": "When a Straight Group is attacked: all your Weird and SubGenius Groups may help defend it."
+ },
+ {
+  "id": "three-fisted-tales-of-bob",
+  "name": "Three-Fisted Tales of \"Bob\"",
+  "set": "SubGenius",
+  "type": "Resource",
+  "subtype": "Resource",
+  "rarity": "Uncommon",
+  "text": "Unique. Link to a SubGenius Place: +2 Power and Global Power equal to its new Power.",
+  "uniqueness": "Unique Artifact"
+ },
+ {
+  "id": "time-control",
+  "name": "Time Control",
+  "set": "SubGenius",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Uncommon",
+  "text": "On your turn: your Illuminati makes one direct attack at its normal Power without spending a token. You may spend no Illuminati tokens this turn, before or after, except to buy Plots.",
+  "keywords": [
+   "Special"
+  ],
+  "playRequirement": "Spend No Illuminati Tokens"
+ },
+ {
+  "id": "www-subgenius-com",
+  "name": "www.subgenius.com",
+  "set": "SubGenius",
+  "type": "Group",
+  "subtype": "Organization",
+  "rarity": "Uncommon",
+  "text": "At the start of each of your turns, draw an extra Group into the uncontrolled area. In standard play, spend its action at any time to draw a Group card.",
+  "power": 3,
+  "globalPower": 3,
+  "resistance": 2,
+  "alignments": [],
+  "attributes": [
+   "SubGenius",
+   "Computer",
+   "Church"
+  ],
+  "arrowIn": "TOP",
+  "arrowsOut": [
+   "LEFT"
+  ],
+  "uniqueness": "One copy in play at a time (base rule)"
+ },
+ {
+  "id": "x-day",
+  "name": "X-Day",
+  "set": "SubGenius",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Uncommon",
+  "text": "At any time: discard all your Plots and draw as many new ones, four at most. Once per turn."
+ },
+ {
+  "id": "xists",
+  "name": "Xists",
+  "set": "SubGenius",
+  "type": "Group",
+  "subtype": "Organization",
+  "rarity": "Uncommon",
+  "text": "Cannot really be controlled. When destroyed they go to the uncontrolled area (to the destroyer's hand in standard play) and never count as destroyed for other cards.",
+  "power": 5,
+  "globalPower": 5,
+  "resistance": 5,
+  "alignments": [],
+  "attributes": [
+   "Space"
+  ],
+  "arrowIn": "TOP",
+  "arrowsOut": [
+   "LEFT",
+   "RIGHT",
+   "BOTTOM"
+  ],
+  "uniqueness": "One copy in play at a time (base rule)"
+ },
+ {
+  "id": "yacatisma",
+  "name": "Yacatisma",
+  "set": "SubGenius",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Uncommon",
+  "text": "Outside an attack, with a SubGenius action: two random hidden Plots of one rival are discarded.",
+  "playRequirement": "Requires SubGenius Action"
+ },
+ {
+  "id": "yetis",
+  "name": "Yetis",
+  "set": "SubGenius",
+  "type": "Group",
+  "subtype": "Organization",
+  "rarity": "Endemic",
+  "text": "May hang on any open side of its master, arrow or not; any Group with an open side may attack to control it.",
+  "power": 2,
+  "globalPower": 2,
+  "resistance": 3,
+  "alignments": [
+   "Peaceful"
+  ],
+  "attributes": [
+   "Green"
+  ],
+  "arrowIn": "TOP",
+  "arrowsOut": [
+   "LEFT",
+   "RIGHT"
+  ],
+  "uniqueness": "One copy in play at a time (base rule)"
+ },
+ {
+  "id": "you-d-pay-to-know-what-you-really-think",
+  "name": "You'd Pay to Know What You Really Think!",
+  "set": "SubGenius",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Uncommon",
+  "text": "Outside an attack: send one of your Groups with no puppets (not your Illuminati) to the uncontrolled area (discard it in standard play) and put the top Group card in its place with its tokens. A Resource goes to your Resources; a Group that cannot legally hang there is discarded and you draw a Plot."
+ }
+]

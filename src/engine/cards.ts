@@ -1,11 +1,23 @@
 import rawCards from '../data/cards.json';
-import type { Alignment, CardDef, CardInstance, GameState } from './types';
+import assassinsCards from '../data/expansions/assassins.json';
+import subgeniusCards from '../data/expansions/subgenius.json';
+import type { Alignment, CardDef, CardInstance, CardSet, GameState } from './types';
 
-export const CARDS: Record<string, CardDef> = Object.fromEntries(
-  (rawCards as CardDef[]).map((c) => [c.id, c]),
-);
+/** The base game's cards (412). */
+export const BASE_CARDS: CardDef[] = rawCards as CardDef[];
+/** The expansion packs' cards, by pack (see docs/EXPANSIONS.md). */
+export const EXPANSION_CARDS: Record<'Assassins' | 'SubGenius', CardDef[]> = {
+  Assassins: assassinsCards as CardDef[],
+  SubGenius: subgeniusCards as CardDef[],
+};
 
-export const ALL_CARDS: CardDef[] = rawCards as CardDef[];
+/** Every card of every set: base cards first, in their original order, then Assassins, then SubGenius. */
+export const ALL_CARDS: CardDef[] = [...BASE_CARDS, ...EXPANSION_CARDS.Assassins, ...EXPANSION_CARDS.SubGenius];
+
+export const CARDS: Record<string, CardDef> = Object.fromEntries(ALL_CARDS.map((c) => [c.id, c]));
+
+/** Which box a card comes from (base cards carry no `set`). */
+export const cardSet = (d: CardDef | undefined): CardSet => d?.set ?? 'Base';
 
 // Face-down cards in an online player's view of a rival's hand or a deck.
 CARDS['hidden-plot'] = { id: 'hidden-plot', name: 'Plot card', type: 'Plot', subtype: 'Hidden', rarity: null, text: 'A face-down Plot card.' };

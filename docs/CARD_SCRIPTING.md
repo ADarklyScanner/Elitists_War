@@ -147,3 +147,148 @@ their first turn, empty structures, 1 Illuminati token each) and `give(s, player
 from `tests/helpers.ts` to set up positions, then drive the game with `applyAction`. Force dice by
 setting `s.attack.roll = [a, b]` while the roll window is open. Test the card's main effect and at
 least one restriction for every card you encode.
+
+## Expansions (Assassins, SubGenius)
+
+The rules decisions behind everything below are in `docs/EXPANSIONS.md`. The rules themselves are
+already in the engine and tested in `tests/expansions.test.ts`; a card script only picks options.
+
+### Where things live
+
+- **Card data**: `src/data/expansions/assassins.json` (125 cards) and `subgenius.json` (97). Same
+  schema as `src/data/cards.json`, plus `set` (`'Assassins' | 'SubGenius'`; base cards have none, read
+  it with `cardSet(def)`), `keywords` (printed Plot keywords: `Zap`, `Freeze`, `Paralysis`, `Disaster`,
+  `Assassination`, `Instant`, `Special`), `nwoColor` on NWOs and `playRequirement` (the printed
+  requirement line, as a hint). Gadget/Artifact and Unique live in `uniqueness`, as for base Resources.
+  Ids are slugs of the names; no expansion card collides with a base id (a collision would get a
+  `-assassins` / `-subgenius` suffix).
+- **Scripts**: `src/engine/content/assassins.ts` and `src/engine/content/subgenius.ts`. When a file
+  grows, add `assassins2.ts`, `subgenius2.ts`, … and import them in `src/engine/index.ts` right after the
+  existing expansion imports. Use the same three mechanisms as base cards (abilities, hooks, Plot
+  handlers). The Church of the SubGenius is already encoded (it carries the Slack rule).
+- **Families** (`src/engine/content/families.ts`, also exported from the engine index):
+  `assassinationPlot`, `zapPlot` / `registerZap`, `paralysisPlot`, `freezePlot`.
+- **Tests**: `tests/content/assassins*.test.ts` and `tests/content/subgenius*.test.ts`, written like
+  the other content tests (`scenario()`, `give()`, `applyAction`). `scenario()` is a base game; the
+  engine plays any card you `give()` whatever the game's settings say, so no pack switch is needed.
+  For the stand-alone SubGenius game build one with
+  `createGame({ seed, players, settings: { subgeniusRules: true } })` (see the SubGenius tests in
+  `tests/expansions.test.ts`).
+
+### Marking a card implemented, and switching a pack on
+
+`cardImplemented(id)` (`src/engine/expansions.ts`) decides: Groups and Illuminati need an ability entry
+with no `pending` part (`registerAbilities`, even `[]` for a vanilla Group plus hooks); Resources need
+hooks (`registerHooks`, `{}` is enough for a Resource with no effect); Goal cards need `registerGoals`;
+other Plots and NWOs need `registerPlots`. If a Resource or Plot is only partly done, call
+`markPending(id, 'what is missing')`. `tests/expansions.test.ts › pack implementation progress` prints
+`implemented/total` for each pack. When a pack reaches 100%, set its flag in `EXPANSIONS_READY`
+(`src/engine/expansions.ts`): the test then insists on 100%, and the interface starts offering the pack
+(new-game page, offline and online). Until then random decks leave unimplemented expansion cards out.
+
+### "Requires ... Action": declare the cost, the engine pays it
+
+Give the Plot handler a `requires` (`src/engine/costs.ts`) instead of paying in `apply`:
+
+```ts
+import { anyOf, illuminatiAction, groupActions, targetAction, plotDiscards, targetResistance } from '../costs';
+'yacatisma': { timing: ['anytime'], requires: anyOf(groupActions({ attributes: ['SubGenius'] })), … }
+'comet-hail-bob': { requires: anyOf(illuminatiAction(), groupActions({ attributes: ['Church'] }, { count: 2 })), … }
+'13013': { requires: anyOf(targetAction()), … }                 // "counts as the action of the Group it affects"
+'tape-runs-out': { requires: anyOf(illuminatiAction(), plotDiscards(3)), … }
+'whistle-blowers' (a Paralysis): groupActions({ alignments: ['Corporate'] }, { power: targetResistance })
+```
+
+The player names the payers in `play.payWith` (Groups spending an action) or `play.discards` (Plots from
+hand). `checkPlot` refuses a play that does not pay exactly one alternative, `playPlot` spends the
+tokens and discards the cards before `apply` runs, and `plotOptions` / the computer players offer one
+play per affordable alternative (`costPlays`). A token held back by a Paralysis or Freeze cannot pay.
+Illuminati tokens are "Slack" on the Church of the SubGenius: an Illuminati action spends one of them.
+
+### Zaps
+
+```ts
+registerZap('brushfire-war', { noTakeover: { alignments: ['Peaceful'] } });
+registerZap('a-brief-attack-of-conscience', { noInstants: true });
+registerZap('fickle-finger-of-fate', {
+  canTarget: (s) => (s.players.filter((p) => !p.eliminated).length === 2 ? 'Not in a two-player game.' : null),
+  hooks: { forbidAttack: (s, self, _a, _t, type, pl) => (type === 'takeover' && pl === zappedPlayer(s, self) ? 'No automatic takeovers.' : null), … },
+});
+```
+
+`zapPlot` gives the Plot (played on a rival's Illuminati, `needs.target: 'rival'`, an Illuminati action,
+never in a Privileged attack, `condition: 'zap'`) and hooks that restrict the victim's whole Power
+Structure. `noTakeover` covers Attacks to Control and automatic takeovers (the `'takeover'` type of
+`forbidAttack`, which the Resource play also consults, so a "no Resources" Zap is
+`forbidAttack(…, type === 'takeover' && def(s, target).type === 'Resource')`). Extra hooks receive
+`self` = the Zap card; `zappedPlayer(s, self)` is its victim. Useful hook points: `beforeDraw` may return
+`'plotInstead'` (Back to the Drawing Board), `noProximityBonus` (Sorry, Wrong Number), `onDraw`
+(Security Leak), `forbidUse`. Played during an attack a Zap links at once, so an attack it forbids
+becomes illegal and is cancelled. Removal is an engine action: `{type: 'removeZaps', player}` (any
+player, one Illuminati action, any time except during an Instant attack); `zapsOn(s, player)` lists
+them; `clearConditions(s, player)` removes Zaps, Paralysis and Freezes (Enough is Enough).
+Reverse Whammy redirects a Zap by changing its `linkedTo` to the Zapper's Illuminati.
+
+### Paralysis
+
+```ts
+registerPlots({ 'cat-juggling': paralysisPlot({ on: { alignments: ['Peaceful'] }, pay: { alignments: ['Violent'] } }) });
+```
+
+The Plot links to a Group (in a Power Structure or in the uncontrolled area). While linked, the engine
+holds back the Group's tokens (`heldTokens`), switches off its abilities, hooks and linked Resources,
+lets it get no new puppets and leaves it out of Goal counts (`goalCount`, Special Goals). It is
+discarded as soon as the Group no longer matches `on` (its `linkLegal`), or when someone frees it
+with `{type: 'freeGroup', group, payWith}` (its master, paid by its controller, or the payer's own
+Illuminati; at any time, victory claims included). `isParalyzed(s, g)` and `paralysesOn(s, g)` read it.
+Goal cards that count Groups themselves must skip `isParalyzed` Groups.
+
+### Freezes
+
+```ts
+registerPlots({ 'junk-bonds': freezePlot({ match: { attributes: ['Bank'] }, label: 'Bank' }) });
+registerPlots({ 'hubble-trouble': freezePlot({ match: { attributes: ['Space', 'Science'] }, resources: ['killer-satellite', 'power-satellite', 'spy-satellite', 'orbital-mind-control-lasers'], label: 'Space and Science',
+  pay: [illuminatiAction(), groupActions({ attributes: ['Space', 'Science'] })] }) });
+registerPlots({ 'school-prayer': freezePlot({ match: [{ attributes: ['Church'] }, { alignments: ['Liberal', 'Conservative'] }],
+  cancel: { attributes: ['Church'] }, label: 'Church, Liberal and Conservative' }) });
+```
+
+Mode `'freeze'` (no target) puts `s.freezes` in effect until the end of the turn: matching Groups (and
+listed Resources) hold their tokens back and may spend them only to defend themselves (`canOppose`
+allows the held token for self-defense). Mode `'cancel'` with `play.target` = a matching Group that is
+acting right now (attacking, aiding, opposing, or an announced action) cancels that action. `match`
+and `cancel` may be a list of Matches (any of them); a single Match with both `attributes` and
+`alignments` needs both. The default cost is an Illuminati action or an action of a matching Group.
+`frozen(s, iid)` reads it; `addFreeze(s, {...})` starts one from any script.
+
+### Assassinations, Disasters, killed Personalities
+
+- `assassinationPlot({ power: 10 | (s, target) => n, helper?: Match | Match[] })` (the base game's
+  Assassinations use it too). A successful Assassination marks the Personality `killed`.
+- `killPersonality(s, iid, by)` destroys and marks killed; `isKilled(s, iid)`. The rules treat "killed"
+  and "assassinated" as the same thing.
+- Disasters: `startInstantAttack` / `startCardAttack` as for base cards. Who may help against them is
+  the Plot handler's `joinRule(s, ctx, group, 'aid' | 'oppose')` (true = may join whatever its
+  alignments, even an Instant attack; false = may not; undefined = normal rules) and
+  `joinMultiplier(s, ctx, group)` (the Center for Disease Control's triple Power).
+- Truck Bomb, General Disorder and similar cards change attacks through the usual `attackMod`,
+  `beforeAttackResult` and `ctx` fields.
+
+### SubGenius: Slack, the uncontrolled area, links
+
+- **Slack** is the Church's Action tokens: `{ kind: 'slack' }` keeps them from turn to turn;
+  `{ kind: 'specialGoal', goal: 'slack', value: 3 }` counts up to 3 toward the Basic Goal
+  (`slackCount(s, player)`). Cards that give or take Slack just change the Illuminati's `tokens`.
+- **The uncontrolled area** exists only in the stand-alone game (`s.common`, `sgRules(s)`):
+  `uncontrolledCards(s)`; `putUncontrolled(s, iid, by)` puts a card there (in a standard game it goes to
+  that player's hand instead, as the official rulings say for SubGenius cards in standard INWO). The
+  shared decks: `plotDeckOf(s, player)` / `groupDeckOf(s, player)` (always use these instead of
+  `player.plotDeck` in new code). Cards in the area have zone `'uncontrolled'`, no controller, and
+  `placedBy` / `placedTurn`. Attacks may target them (`ctx.fromArea`); a Resource there is taken with
+  the normal `playResource` action. A card that says "from your hand or the uncontrolled area" should
+  accept both zones; one that says "in standard INWO, instead …" should branch on `sgRules(s)`.
+- **Links**: a linked Plot's `linkLegal(s, plot, group)` returns `'inactive'` while the link is
+  temporarily illegal (no effect, may not move) or `'discard'` once it is illegal for good (13013 when the
+  Group stops being SubGenius for good). Linked Plots stay with their Group when it changes hands or goes
+  to the uncontrolled area. A link is re-checked after every action (`syncConditions`).
+- **The SubGenius attribute** is plain card data: match it with `{ attributes: ['SubGenius'] }`.

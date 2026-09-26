@@ -44,7 +44,13 @@ export type Ability =
   /** Draw a Plot whenever you destroy a (matching) Group. */
   | { kind: 'drawPlotOnDestroy'; match?: Match }
   | { kind: 'canOnlyDestroy'; match: Match }
-  | { kind: 'specialGoal'; goal: 'totalPower' | 'bermuda' | 'destroyCount' | 'peacefulPower'; value: number }
+  /**
+   * 'slack' (Church of the SubGenius): up to `value` tokens on the Illuminati count as Groups toward the
+   * Basic Goal; it cannot be combined with any other Goal.
+   */
+  | { kind: 'specialGoal'; goal: 'totalPower' | 'bermuda' | 'destroyCount' | 'peacefulPower' | 'slack'; value: number }
+  /** Slack (Church of the SubGenius): the Illuminati keeps its Action tokens from turn to turn and gets its new ones on top. */
+  | { kind: 'slack' }
   | { kind: 'noTokens' }
   /** A failed Attack to Control on a Group from your hand returns it to hand instead of discarding it. */
   | { kind: 'failedHandReturns' }

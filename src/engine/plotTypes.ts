@@ -34,6 +34,30 @@ export interface PlotHandler {
   events?: import('./types').GameEvent['type'][];
   /** Card stays on the table linked to a Group after resolving. */
   linked?: boolean;
+  /**
+   * "Requires ... Action" (costs.ts): what playing it costs. The engine checks the play's `payWith` /
+   * `discards` against it and pays before `apply`, so `apply` must not spend these again.
+   */
+  requires?: import('./costs').ActionCost;
+  /**
+   * A lasting condition this Plot puts on the card it is linked to (Assassins): 'zap' (linked to the
+   * victim's Illuminati: a restriction on that player's whole Power Structure) or 'paralysis' (linked to
+   * a Group, which can then do nothing). See conditions.ts.
+   */
+  condition?: 'zap' | 'paralysis';
+  /**
+   * Links as the SubGenius rules use them: is this Plot's link to `group` still legal? 'inactive': it
+   * has no effect until it becomes legal again (and may not be moved meanwhile); 'discard': it became
+   * illegal for good and is discarded. Checked after every action. Default 'ok'.
+   */
+  linkLegal?: (s: GameState, plot: string, group: string) => 'ok' | 'inactive' | 'discard';
+  /**
+   * Attacks launched by this card (Disasters, Assassinations): may `group` aid or oppose it? true lets
+   * it join whatever its alignments (and even an Instant attack), false forbids it, undefined leaves the
+   * normal rules. `joinMultiplier` multiplies the Power it adds (the Center for Disease Control: 3).
+   */
+  joinRule?: (s: GameState, ctx: AttackCtx, group: string, as: 'aid' | 'oppose') => boolean | undefined;
+  joinMultiplier?: (s: GameState, ctx: AttackCtx, group: string) => number;
   /** Short hint for the UI about what the play needs (target, mode, payWith). */
   needs?: {
     /** What `play.target` is: a Group in play, a Resource, a card in your hand, a destroyed Group, a card

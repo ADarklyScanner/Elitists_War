@@ -1,0 +1,1700 @@
+[
+ {
+  "id": "a-brief-attack-of-conscience",
+  "name": "A Brief Attack of Conscience",
+  "set": "Assassins",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Common",
+  "text": "Zap. Played on a rival Illuminati: that player can no longer use Assassinations or Disasters. Stays until removed. Zap rule: any player may spend an Illuminati action at any time to remove every Zap from one player.",
+  "keywords": [
+   "Zap"
+  ],
+  "playRequirement": "Requires an Illuminati action to play"
+ },
+ {
+  "id": "al-amarja",
+  "name": "Al Amarja",
+  "set": "Assassins",
+  "type": "Group",
+  "subtype": "Place",
+  "rarity": "Rare",
+  "text": "Its controller is unaffected by I Lied. When a Disaster strikes Al Amarja, its controller or any of its puppets, the controller may discard undrawn Plots before the roll for +4 defense each.",
+  "power": 2,
+  "globalPower": 0,
+  "resistance": 8,
+  "alignments": [
+   "Weird"
+  ],
+  "attributes": [
+   "Coastal",
+   "Nation"
+  ],
+  "arrowIn": "BOTTOM",
+  "arrowsOut": [
+   "LEFT"
+  ],
+  "uniqueness": "One copy in play at a time (base rule)"
+ },
+ {
+  "id": "alien-abduction",
+  "name": "Alien Abduction",
+  "set": "Assassins",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Rare",
+  "text": "Put on any Personality: until the end of the turn it has no alignments and cannot gain any. Or, outside an attack, spend an action of the UFOs or of a Space Group: a Personality you hold in hand, or one lying uncontrolled, joins your Power Structure without a roll.",
+  "notes": "Follows the official errata."
+ },
+ {
+  "id": "anarchists-unite",
+  "name": "Anarchists Unite!",
+  "set": "Assassins",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Common",
+  "text": "Zap. Played on a rival Illuminati: no Group in that Power Structure may take over Government Groups. Stays until removed. Zap rule: any player may spend an Illuminati action at any time to remove every Zap from one player.",
+  "keywords": [
+   "Zap"
+  ],
+  "playRequirement": "Illuminati Action"
+ },
+ {
+  "id": "antitrust-legislation",
+  "name": "Antitrust Legislation",
+  "set": "Assassins",
+  "type": "Plot",
+  "subtype": "NWO",
+  "rarity": "Rare",
+  "text": "Yellow NWO. On entry every player rearranges so no Corporate Group controls another; what cannot fit is discarded. No Corporate Group may take over another; a Corporate master of a Corporate puppet must move it free or discard it.",
+  "nwoColor": "yellow"
+ },
+ {
+  "id": "anything-worth-doing-is-worth-overdoing",
+  "name": "Anything Worth Doing Is Worth Overdoing",
+  "set": "Assassins",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Common",
+  "text": "Zap. Played on a rival Illuminati: no Group in that Power Structure may take over Conservative Groups. Stays until removed. Zap rule: any player may spend an Illuminati action at any time to remove every Zap from one player.",
+  "keywords": [
+   "Zap"
+  ],
+  "playRequirement": "Illuminati Action"
+ },
+ {
+  "id": "apathy",
+  "name": "Apathy",
+  "set": "Assassins",
+  "type": "Plot",
+  "subtype": "NWO",
+  "rarity": "Rare",
+  "text": "Red NWO. No Group may aid an attack made by another Group.",
+  "nwoColor": "red"
+ },
+ {
+  "id": "arms-dealers",
+  "name": "Arms Dealers",
+  "set": "Assassins",
+  "type": "Group",
+  "subtype": "Organization",
+  "rarity": "Rare",
+  "text": "Spend its action: trade any number of your Plots for the same number of one rival's exposed Plots. Plots you get may be hidden; Plots you give stay exposed.",
+  "power": 2,
+  "globalPower": 0,
+  "resistance": 4,
+  "alignments": [
+   "Violent",
+   "Criminal"
+  ],
+  "attributes": [],
+  "arrowIn": "BOTTOM",
+  "arrowsOut": [
+   "RIGHT"
+  ],
+  "uniqueness": "One copy in play at a time (base rule)"
+ },
+ {
+  "id": "australia",
+  "name": "Australia",
+  "set": "Assassins",
+  "type": "Group",
+  "subtype": "Place",
+  "rarity": "Rare",
+  "text": "While controlled, its printed Resistance counts double (four times on weekends, local holidays or after 5 p.m.). +10 against Attacks to Destroy; its controller's other Organizations get +4 against Attacks to Destroy.",
+  "power": 3,
+  "globalPower": 0,
+  "resistance": 6,
+  "alignments": [
+   "Conservative",
+   "Government"
+  ],
+  "attributes": [
+   "Huge",
+   "Coastal",
+   "Nation"
+  ],
+  "arrowIn": "TOP",
+  "arrowsOut": [
+   "BOTTOM"
+  ],
+  "uniqueness": "One copy in play at a time (base rule)"
+ },
+ {
+  "id": "australian-rules",
+  "name": "Australian Rules",
+  "set": "Assassins",
+  "type": "Plot",
+  "subtype": "NWO",
+  "rarity": "Common",
+  "text": "Red NWO. Attacking a rival, or aiding such an attack, earns an extra Plot draw; capturing or destroying a rival's Group earns an extra Group draw.",
+  "nwoColor": "red"
+ },
+ {
+  "id": "back-to-the-drawing-board",
+  "name": "Back to the Drawing Board",
+  "set": "Assassins",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Uncommon",
+  "text": "Zap. Played on a rival Illuminati: whenever that player could draw a Group card, a Plot card is drawn instead. Stays until removed. Zap rule: any player may spend an Illuminati action at any time to remove every Zap from one player.",
+  "keywords": [
+   "Zap"
+  ],
+  "playRequirement": "Illuminati Action"
+ },
+ {
+  "id": "back-to-the-salt-mines",
+  "name": "Back to the Salt Mines",
+  "set": "Assassins",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Uncommon",
+  "text": "When a Place is attacked (not by an Instant attack), +10 to the side of whoever plays it. One per attack: if the defender plays it, an attacker's copy goes back to hand. If the side that played it wins, it returns to that hand, exposed."
+ },
+ {
+  "id": "backfire",
+  "name": "Backfire",
+  "set": "Assassins",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Uncommon",
+  "text": "Freeze on Magic: until the end of the turn no Magic Group may spend Action tokens except to defend itself. Or, right after a Magic Group acts, cancel that action.",
+  "keywords": [
+   "Freeze"
+  ],
+  "playRequirement": "Illuminati or Magic Action"
+ },
+ {
+  "id": "backmasquerade",
+  "name": "Backmasquerade",
+  "set": "Assassins",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Common",
+  "text": "Link for good to a Magic Group; that Group may then spend its action at any time to remove one Zap from any Illuminati. Only one may be in play: a new one discards the old."
+ },
+ {
+  "id": "bait-and-switch",
+  "name": "Bait and Switch",
+  "set": "Assassins",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Common",
+  "text": "Zap. Played on a rival Illuminati: no Group in that Power Structure may take over Corporate Groups. Stays until removed. Zap rule: any player may spend an Illuminati action at any time to remove every Zap from one player.",
+  "keywords": [
+   "Zap"
+  ],
+  "playRequirement": "Illuminati Action"
+ },
+ {
+  "id": "bar-codes",
+  "name": "Bar Codes",
+  "set": "Assassins",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Uncommon",
+  "text": "With the action of a Computer Group, look through a rival's Group deck for ten seconds, without reordering or showing it; that rival may shuffle it afterwards.",
+  "playRequirement": "Computer Action"
+ },
+ {
+  "id": "beach-party",
+  "name": "Beach Party",
+  "set": "Assassins",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Common",
+  "text": "At any time, a Devastated Coastal Place gets Relief and an Action token at once. It stays linked to the Place: +5 against later Disasters."
+ },
+ {
+  "id": "bite-the-wax-tadpole",
+  "name": "Bite the Wax Tadpole",
+  "set": "Assassins",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Common",
+  "text": "Freeze on Media: until the end of the turn no Media Group may spend Action tokens except to defend itself. Or, right after a Media Group acts, cancel that action.",
+  "keywords": [
+   "Freeze"
+  ],
+  "playRequirement": "Illuminati or Media Action"
+ },
+ {
+  "id": "black-helicopters",
+  "name": "Black Helicopters",
+  "set": "Assassins",
+  "type": "Resource",
+  "subtype": "Resource",
+  "rarity": "Uncommon",
+  "text": "Unique. Link for good to a Secret or Government Group: all its attacks are Privileged. Discarded if the Group is neither Secret nor Government any more.",
+  "uniqueness": "Unique"
+ },
+ {
+  "id": "blinded-by-science",
+  "name": "Blinded by Science",
+  "set": "Assassins",
+  "type": "Plot",
+  "subtype": "Goal",
+  "rarity": "Common",
+  "text": "Goal: control at least 6 Science Groups with 30 or more total Power. Cannot be combined with another Goal.",
+  "notes": "Follows the official errata."
+ },
+ {
+  "id": "blivit",
+  "name": "Blivit",
+  "set": "Assassins",
+  "type": "Resource",
+  "subtype": "Resource",
+  "rarity": "Uncommon",
+  "text": "Its action cancels the action of another Resource that still holds an Action token. Its owner is safe from the Nuclear Power Companies. Only one may be in play: a newly played one destroys the old one.",
+  "uniqueness": "Gadget; not marked Unique"
+ },
+ {
+  "id": "brushfire-war",
+  "name": "Brushfire War",
+  "set": "Assassins",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Common",
+  "text": "Zap. Played on a rival Illuminati: no Group in that Power Structure may take over Peaceful Groups. Stays until removed. Zap rule: any player may spend an Illuminati action at any time to remove every Zap from one player.",
+  "keywords": [
+   "Zap"
+  ],
+  "playRequirement": "Illuminati Action"
+ },
+ {
+  "id": "cat-juggling",
+  "name": "Cat Juggling",
+  "set": "Assassins",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Common",
+  "text": "Paralysis on a Peaceful Group. Costs an Illuminati action, or Violent actions whose Power totals the target's Resistance. Paralysis: play at any time except in a Privileged attack; the Group cannot spend Action tokens, use its special ability or linked Resources, or gain new puppets, and does not count for Goals. It is freed when it loses that alignment, or when its master or any Illuminati spends an action.",
+  "keywords": [
+   "Paralysis"
+  ],
+  "playRequirement": "Illuminati or Violent Action(s)"
+ },
+ {
+  "id": "cease-fire",
+  "name": "Cease-Fire",
+  "set": "Assassins",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Common",
+  "text": "When two or more players are Zapped, remove every Zap in play. Costs the top card of your Plot or Group deck, discarded unseen.",
+  "playRequirement": "Requires Discard"
+ },
+ {
+  "id": "chain-letter",
+  "name": "Chain Letter",
+  "set": "Assassins",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Common",
+  "text": "Paralysis on a Straight Group. Costs an Illuminati action, or Weird actions whose Power totals the target's Resistance. Paralysis: play at any time except in a Privileged attack; the Group cannot spend Action tokens, use its special ability or linked Resources, or gain new puppets, and does not count for Goals. It is freed when it loses that alignment, or when its master or any Illuminati spends an action.",
+  "keywords": [
+   "Paralysis"
+  ],
+  "playRequirement": "Illuminati or Weird Action(s)"
+ },
+ {
+  "id": "church-of-violentology",
+  "name": "Church of Violentology",
+  "set": "Assassins",
+  "type": "Group",
+  "subtype": "Organization",
+  "rarity": "Rare",
+  "text": "Each Group that helps destroy it earns its controller a Plot. If an attack to destroy it fails, its controller draws a Plot per attacking Group and the weakest attacking Group (not an Illuminati; random on ties) is destroyed, credited to the Church's controller.",
+  "power": 2,
+  "globalPower": 0,
+  "resistance": 6,
+  "alignments": [
+   "Violent",
+   "Fanatic",
+   "Corporate"
+  ],
+  "attributes": [
+   "Church"
+  ],
+  "arrowIn": "BOTTOM",
+  "arrowsOut": [
+   "LEFT",
+   "TOP"
+  ],
+  "uniqueness": "One copy in play at a time (base rule)"
+ },
+ {
+  "id": "contract-on-america",
+  "name": "Contract on America",
+  "set": "Assassins",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Common",
+  "text": "Paralysis on a Liberal Group. Costs an Illuminati action, or Conservative actions whose Power totals the target's Resistance. Paralysis: play at any time except in a Privileged attack; the Group cannot spend Action tokens, use its special ability or linked Resources, or gain new puppets, and does not count for Goals. It is freed when it loses that alignment, or when its master or any Illuminati spends an action.",
+  "keywords": [
+   "Paralysis"
+  ],
+  "playRequirement": "Illuminati or Conservative Action(s)"
+ },
+ {
+  "id": "convenience-stores",
+  "name": "Convenience Stores",
+  "set": "Assassins",
+  "type": "Group",
+  "subtype": "Organization",
+  "rarity": "Special",
+  "text": "Any agents card you play gets +5 more, attacking or defending; you may grant the same +5 to another player's agents card. No effect on spare Illuminati agents. +10 against Attacks to Destroy.",
+  "power": 1,
+  "globalPower": 0,
+  "resistance": 2,
+  "alignments": [
+   "Corporate"
+  ],
+  "attributes": [],
+  "arrowIn": "TOP",
+  "arrowsOut": [
+   "RIGHT"
+  ],
+  "uniqueness": "One copy in play at a time (base rule)"
+ },
+ {
+  "id": "copy-shops",
+  "name": "Copy Shops",
+  "set": "Assassins",
+  "type": "Group",
+  "subtype": "Organization",
+  "rarity": "Uncommon",
+  "text": "At any time, spend its action and discard a Plot from hand to play a copy of a rival's exposed Plot that you could legally play now, paying its normal cost. The copy is used at once (a copied Goal only if it wins at once); a linked copy stays linked. The rival's card is untouched.",
+  "power": 1,
+  "globalPower": 0,
+  "resistance": 4,
+  "alignments": [],
+  "attributes": [],
+  "arrowIn": "BOTTOM",
+  "arrowsOut": [
+   "RIGHT"
+  ],
+  "uniqueness": "One copy in play at a time (base rule)"
+ },
+ {
+  "id": "crackdown-on-crime",
+  "name": "Crackdown on Crime",
+  "set": "Assassins",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Common",
+  "text": "Paralysis on a Criminal Group. Costs an Illuminati action, or Government actions whose Power totals the target's Resistance. Paralysis: play at any time except in a Privileged attack; the Group cannot spend Action tokens, use its special ability or linked Resources, or gain new puppets, and does not count for Goals. It is freed when it loses that alignment, or when its master or any Illuminati spends an action.",
+  "keywords": [
+   "Paralysis"
+  ],
+  "playRequirement": "Illuminati or Government Action(s)"
+ },
+ {
+  "id": "crusade",
+  "name": "Crusade",
+  "set": "Assassins",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Common",
+  "text": "+10 Power or Resistance to a Church Group you control. With an action: played when it is declared, for that action only. On defense: until the end of the turn, defense only, not for Goals."
+ },
+ {
+  "id": "day-care-centers",
+  "name": "Day Care Centers",
+  "set": "Assassins",
+  "type": "Group",
+  "subtype": "Organization",
+  "rarity": "Uncommon",
+  "text": "Always has exactly its master's alignments, and nothing else changes them. A Fanatic master's Fanatic counts as the same alignment. When destroyed it keeps the alignments it had at that moment.",
+  "power": 1,
+  "globalPower": 0,
+  "resistance": 2,
+  "alignments": [],
+  "attributes": [],
+  "arrowIn": "TOP",
+  "arrowsOut": [],
+  "uniqueness": "One copy in play at a time (base rule)",
+  "notes": "The scan shows only the incoming arrow (its lower edge is hidden), so no outgoing arrow is assumed."
+ },
+ {
+  "id": "death-to-all-fanatics",
+  "name": "Death To All Fanatics",
+  "set": "Assassins",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Common",
+  "text": "Paralysis on a Fanatic Group. Costs an Illuminati action, or Fanatic actions whose Power totals the target's Resistance. Paralysis: play at any time except in a Privileged attack; the Group cannot spend Action tokens, use its special ability or linked Resources, or gain new puppets, and does not count for Goals. It is freed when it loses that alignment, or when its master or any Illuminati spends an action.",
+  "keywords": [
+   "Paralysis"
+  ],
+  "playRequirement": "Illuminati or Fanatic Action(s)"
+ },
+ {
+  "id": "defection",
+  "name": "Defection",
+  "set": "Assassins",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Common",
+  "text": "At any time, with the action of a Nation: search your Group deck for a non-Unique Gadget (or a Clipper Chip) that copies a Resource a rival controls, and put it into play with all its tokens.",
+  "playRequirement": "Nation Action"
+ },
+ {
+  "id": "dittoheads",
+  "name": "Dittoheads",
+  "set": "Assassins",
+  "type": "Group",
+  "subtype": "Organization",
+  "rarity": "Uncommon",
+  "text": "Only a Personality may control it, on any side of the master, arrow or not; no Personality may control two. The master gets +2 Power and triple Resistance. Any number may be in play; never an agents card. Its alignments are its master's plus Fanatic.",
+  "power": 1,
+  "globalPower": 0,
+  "resistance": 4,
+  "alignments": [
+   "Fanatic"
+  ],
+  "attributes": [],
+  "arrowIn": "TOP",
+  "arrowsOut": [],
+  "uniqueness": "One copy in play at a time (base rule)"
+ },
+ {
+  "id": "dolphins",
+  "name": "Dolphins",
+  "set": "Assassins",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Common",
+  "text": "Illuminati action, at any time: an Action token for one Green Group, or for several Green Groups with 5 total Power or less. Not for Groups holding a token or barred from tokens.",
+  "playRequirement": "Illuminati Action"
+ },
+ {
+  "id": "don-t-rock-the-boat",
+  "name": "Don't Rock The Boat",
+  "set": "Assassins",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Common",
+  "text": "Zap. Played on a rival Illuminati: no Group in that Power Structure may take over Fanatic Groups. Stays until removed. Zap rule: any player may spend an Illuminati action at any time to remove every Zap from one player.",
+  "keywords": [
+   "Zap"
+  ],
+  "playRequirement": "Illuminati Action"
+ },
+ {
+  "id": "don-t-touch-that-dial",
+  "name": "Don't Touch That Dial!",
+  "set": "Assassins",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Uncommon",
+  "text": "With the action of a Media Group, play when an attack on a Media Group fails: the attacker's turn ends at once.",
+  "playRequirement": "Media Action"
+ },
+ {
+  "id": "drought",
+  "name": "Drought",
+  "set": "Assassins",
+  "type": "Plot",
+  "subtype": "Disaster",
+  "rarity": "Rare",
+  "text": "Disaster: an Attack to Destroy a Huge Place without an action (not Instant). Power 24 against a Coastal Place, 28 otherwise. Coastal Places and Groups able to send Relief may help defend. Success Devastates; beating the roll by more than 10 destroys it.",
+  "keywords": [
+   "Disaster"
+  ]
+ },
+ {
+  "id": "drug-companies",
+  "name": "Drug Companies",
+  "set": "Assassins",
+  "type": "Group",
+  "subtype": "Organization",
+  "rarity": "Ultra",
+  "text": "May attack a Group in play as if to control it, at +10: if it succeeds, the target loses one alignment of the attacker's choice for good.",
+  "power": 3,
+  "globalPower": 3,
+  "resistance": 3,
+  "alignments": [
+   "Corporate"
+  ],
+  "attributes": [
+   "Science"
+  ],
+  "arrowIn": "TOP",
+  "arrowsOut": [
+   "LEFT",
+   "RIGHT"
+  ],
+  "uniqueness": "One copy in play at a time (base rule)"
+ },
+ {
+  "id": "earth-first",
+  "name": "Earth First!",
+  "set": "Assassins",
+  "type": "Plot",
+  "subtype": "Goal",
+  "rarity": "Rare",
+  "text": "Goal: destroyed Corporate Groups and controlled Green Groups in one of these pairs: 2 and 6, 3 and 5, 4 and 4, 5 and 3, 6 and 1. Cannot be combined with another Goal."
+ },
+ {
+  "id": "end-of-the-world",
+  "name": "End of the World",
+  "set": "Assassins",
+  "type": "Plot",
+  "subtype": "NWO",
+  "rarity": "Common",
+  "text": "Yellow NWO. Church and Fanatic Groups get +2 Power (+3 for a Fanatic Church Group); Corporate and Government Groups get -2 Power.",
+  "nwoColor": "yellow"
+ },
+ {
+  "id": "enough-is-enough",
+  "name": "Enough is Enough",
+  "set": "Assassins",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Common",
+  "text": "On your own turn, before drawing Plots: remove every Zap, Paralysis and Freeze affecting your Power Structure. You draw no Plot this turn."
+ },
+ {
+  "id": "epa",
+  "name": "EPA",
+  "set": "Assassins",
+  "type": "Group",
+  "subtype": "Organization",
+  "rarity": "Uncommon",
+  "text": "While the EPA holds an Action token, the Nuclear Power Companies cannot use their special ability.",
+  "power": 3,
+  "globalPower": 0,
+  "resistance": 3,
+  "alignments": [
+   "Government"
+  ],
+  "attributes": [
+   "Green",
+   "Science"
+  ],
+  "arrowIn": "TOP",
+  "arrowsOut": [
+   "RIGHT"
+  ],
+  "uniqueness": "One copy in play at a time (base rule)"
+ },
+ {
+  "id": "every-year-is-worse",
+  "name": "Every Year Is Worse",
+  "set": "Assassins",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Common",
+  "text": "Paralysis on a Conservative Group. Costs an Illuminati action, or Liberal actions whose Power totals the target's Resistance. Paralysis: play at any time except in a Privileged attack; the Group cannot spend Action tokens, use its special ability or linked Resources, or gain new puppets, and does not count for Goals. It is freed when it loses that alignment, or when its master or any Illuminati spends an action.",
+  "keywords": [
+   "Paralysis"
+  ],
+  "playRequirement": "Illuminati or Liberal Action(s)"
+ },
+ {
+  "id": "exorcism",
+  "name": "Exorcism",
+  "set": "Assassins",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Common",
+  "text": "Remove every Zap from one player (you or another). Costs the top card of your Plot or Group deck, discarded unseen.",
+  "playRequirement": "Requires Discard"
+ },
+ {
+  "id": "family-values",
+  "name": "Family Values",
+  "set": "Assassins",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Common",
+  "text": "Zap. Played on a rival Illuminati: no Group in that Power Structure may take over Weird Groups. The Discordian Society is exempt. Stays until removed. Zap rule: any player may spend an Illuminati action at any time to remove every Zap from one player.",
+  "keywords": [
+   "Zap"
+  ],
+  "playRequirement": "Illuminati Action"
+ },
+ {
+  "id": "fickle-finger-of-fate",
+  "name": "Fickle Finger of Fate",
+  "set": "Assassins",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Uncommon",
+  "text": "Zap. Played on a rival Illuminati: that player loses the automatic takeover, but once each turn may add +10 to one attack. Not in two-player games. Stays until removed. Zap rule: any player may spend an Illuminati action at any time to remove every Zap from one player.",
+  "keywords": [
+   "Zap"
+  ],
+  "playRequirement": "Illuminati Action"
+ },
+ {
+  "id": "five-year-plan",
+  "name": "Five-Year Plan",
+  "set": "Assassins",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Uncommon",
+  "text": "Freeze on Communist: until the end of the turn no Communist Group may spend Action tokens except to defend itself. Or, right after a Communist Group acts, cancel that action.",
+  "keywords": [
+   "Freeze"
+  ],
+  "playRequirement": "Illuminati or Communist Action"
+ },
+ {
+  "id": "flesh-eating-bacteria",
+  "name": "Flesh-Eating Bacteria",
+  "set": "Assassins",
+  "type": "Plot",
+  "subtype": "Disaster",
+  "rarity": "Ultra",
+  "text": "Disaster: an Attack to Destroy any Place without an action, Power 20 (not Instant). Science Groups may help the target; the Center for Disease Control helps at triple Power. Success Devastates; beating the roll by more than 8 destroys it, and a Science action returns this card to your hand.",
+  "keywords": [
+   "Disaster"
+  ],
+  "notes": "Follows the official errata."
+ },
+ {
+  "id": "floating-point-error",
+  "name": "Floating Point Error",
+  "set": "Assassins",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Uncommon",
+  "text": "Freeze on Computer: until the end of the turn no Computer Group may spend Action tokens except to defend itself. Or, right after a Computer Group acts, cancel that action.",
+  "keywords": [
+   "Freeze"
+  ],
+  "playRequirement": "Requires Illuminati or Computer Action"
+ },
+ {
+  "id": "frankenfood",
+  "name": "Frankenfood",
+  "set": "Assassins",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Common",
+  "text": "With a Science action, give a Place you control one alignment of your choice that is not opposite to one it has. You may drop it whenever you like; a rival needs Science actions of 6 total Power to remove it.",
+  "playRequirement": "Requires Science Action"
+ },
+ {
+  "id": "general-disorder",
+  "name": "General Disorder",
+  "set": "Assassins",
+  "type": "Group",
+  "subtype": "Personality",
+  "rarity": "Rare",
+  "text": "Spend his action: +10 to a Disaster, which can then only Devastate. When killed or destroyed he stays gone only until the end of the turn; if nobody has won, he returns on an open arrow of his last master (or to hand), keeping linked Plots and changes. His puppets go to hand.",
+  "power": 1,
+  "globalPower": 0,
+  "resistance": 6,
+  "alignments": [
+   "Weird",
+   "Violent"
+  ],
+  "attributes": [
+   "Science"
+  ],
+  "arrowIn": "TOP",
+  "arrowsOut": [],
+  "uniqueness": "One copy in play at a time (base rule)",
+  "notes": "The scan shows only the incoming arrow (its lower edge is hidden), so no outgoing arrow is assumed."
+ },
+ {
+  "id": "global-warming",
+  "name": "Global Warming",
+  "set": "Assassins",
+  "type": "Plot",
+  "subtype": "NWO",
+  "rarity": "Common",
+  "text": "Blue NWO. Coastal Places get -2 Power (never below 1); every other Place except Space Places becomes Coastal; Green Groups get +2 Power.",
+  "nwoColor": "blue",
+  "notes": "Follows the official errata."
+ },
+ {
+  "id": "go-fish",
+  "name": "Go Fish",
+  "set": "Assassins",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Uncommon",
+  "text": "Name a Plot and a rival: that rival shows you all hidden Plots, gives you every copy of the named Plot and discards two undrawn Plots for each. If there is none, all your Plots are exposed. A player who recently had to show or hand over Plots is immune until the end of their next turn.",
+  "notes": "Follows the official errata."
+ },
+ {
+  "id": "go-lemmings-go",
+  "name": "Go, Lemmings, Go!",
+  "set": "Assassins",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Ultra",
+  "text": "When a rival discards cards from hand or deck to pay for a Plot or ability: they discard as many more of the same kind (two more if it was one card), from the same place, for no benefit."
+ },
+ {
+  "id": "grave-robbers",
+  "name": "Grave Robbers",
+  "set": "Assassins",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Rare",
+  "text": "When you may take over a Resource, search your Group deck for 30 seconds for an Artifact and put it into play with all its tokens. A Magic Artifact needs Magic actions of 6 total Power.",
+  "playRequirement": "May Require Magic Action(s)"
+ },
+ {
+  "id": "hubble-trouble",
+  "name": "Hubble Trouble",
+  "set": "Assassins",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Common",
+  "text": "Freeze on Space and Science Groups, Satellites and the Orbital Mind Control Lasers: none may spend Action tokens this turn except to defend. Or, right after a Space or Science action, cancel it.",
+  "keywords": [
+   "Freeze"
+  ],
+  "playRequirement": "Requires Illuminati, Space or Science Action"
+ },
+ {
+  "id": "illuminati-university",
+  "name": "Illuminati University",
+  "set": "Assassins",
+  "type": "Group",
+  "subtype": "Place",
+  "rarity": "Ultra",
+  "text": "At the end of each turn you must discard a Plot or Group from hand or deck top, or discard the University and return its puppets to hand. It, its master and its puppets are immune to Disasters and to Straight and Government Groups.",
+  "power": 2,
+  "globalPower": 0,
+  "resistance": 6,
+  "alignments": [
+   "Weird"
+  ],
+  "attributes": [
+   "Science",
+   "Magic"
+  ],
+  "arrowIn": "TOP",
+  "arrowsOut": [
+   "LEFT"
+  ],
+  "uniqueness": "One copy in play at a time (base rule)"
+ },
+ {
+  "id": "interesting-times",
+  "name": "Interesting Times",
+  "set": "Assassins",
+  "type": "Plot",
+  "subtype": "NWO",
+  "rarity": "Rare",
+  "text": "Red NWO. Its player chooses: only the Basic Goal can win (no Special Goals or Goal cards), or the Basic Goal needs two more Groups.",
+  "nwoColor": "blue"
+ },
+ {
+  "id": "junk-bonds",
+  "name": "Junk Bonds",
+  "set": "Assassins",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Common",
+  "text": "Freeze on Bank: until the end of the turn no Bank Group may spend Action tokens except to defend itself. Or, right after a Bank Group acts, cancel that action.",
+  "keywords": [
+   "Freeze"
+  ],
+  "playRequirement": "Requires Illuminati or Bank Action"
+ },
+ {
+  "id": "killer-satellite",
+  "name": "Killer Satellite",
+  "set": "Assassins",
+  "type": "Resource",
+  "subtype": "Resource",
+  "rarity": "Uncommon",
+  "text": "Its action tries to destroy a Satellite Resource or the Orbital Mind Control Lasers (an action it just declared is cancelled). Discard it for a sure kill, or roll a die: 1-3 kills; 4 kills unless the target is the Lasers (then this dies); 5 kills both; 6 kills only this. Or +5 to an attack on a Space Place, or discard it with its token for +15 to destroy one.",
+  "uniqueness": "Gadget; not marked Unique"
+ },
+ {
+  "id": "lab-explosion",
+  "name": "Lab Explosion",
+  "set": "Assassins",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Common",
+  "text": "Zap. Played on a rival Illuminati: that player can take over no more Resources. Stays until removed. Zap rule: any player may spend an Illuminati action at any time to remove every Zap from one player.",
+  "keywords": [
+   "Zap"
+  ],
+  "playRequirement": "Requires Illuminati Action"
+ },
+ {
+  "id": "lama-ramadingdong",
+  "name": "Lama Ramadingdong",
+  "set": "Assassins",
+  "type": "Group",
+  "subtype": "Personality",
+  "rarity": "Uncommon",
+  "text": "+1 Power for every other Green Group in play. May defend any Green Group at any time without spending an action.",
+  "power": 1,
+  "globalPower": 0,
+  "resistance": 1,
+  "alignments": [
+   "Peaceful",
+   "Weird",
+   "Corporate"
+  ],
+  "attributes": [
+   "Green"
+  ],
+  "arrowIn": "TOP",
+  "arrowsOut": [
+   "RIGHT"
+  ],
+  "uniqueness": "One copy in play at a time (base rule)"
+ },
+ {
+  "id": "lenin-s-body",
+  "name": "Lenin's Body",
+  "set": "Assassins",
+  "type": "Resource",
+  "subtype": "Resource",
+  "rarity": "Uncommon",
+  "text": "Unique. Link to any Group: +5 on its direct Attacks to Control Communist Groups; a Communist Group linked to it has Global Power equal to its Power.",
+  "uniqueness": "Unique"
+ },
+ {
+  "id": "let-the-sunshine-in",
+  "name": "Let the Sunshine In",
+  "set": "Assassins",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Common",
+  "text": "Freeze on Secret: until the end of the turn no Secret Group may spend Action tokens except to defend itself. Or, right after a Secret Group acts, cancel that action.",
+  "keywords": [
+   "Freeze"
+  ],
+  "playRequirement": "Requires Illuminati or Secret Action"
+ },
+ {
+  "id": "lyndon-larouche",
+  "name": "Lyndon LaRouche",
+  "set": "Assassins",
+  "type": "Group",
+  "subtype": "Personality",
+  "rarity": "Rare",
+  "text": "While his controller has a Government Group or a named party (Republicans, Democrats, Libertarians, Green Party), his Power is the highest printed Power among them. Each turn a roll of 1-3 means no token. His alignments never count for Goals.",
+  "power": 1,
+  "globalPower": 0,
+  "resistance": 8,
+  "alignments": [
+   "Weird",
+   "Conservative",
+   "Criminal",
+   "Fanatic"
+  ],
+  "attributes": [],
+  "arrowIn": "TOP",
+  "arrowsOut": [
+   "LEFT"
+  ],
+  "uniqueness": "One copy in play at a time (base rule)"
+ },
+ {
+  "id": "may-day",
+  "name": "May Day",
+  "set": "Assassins",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Common",
+  "text": "Illuminati action, at any time: an Action token for one Communist Group, or for several with 5 total Power or less. Not for Groups holding a token or barred from tokens.",
+  "playRequirement": "Requires Illuminati Action"
+ },
+ {
+  "id": "metric-system",
+  "name": "Metric System",
+  "set": "Assassins",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Common",
+  "text": "Paralysis on a Corporate Group. Costs an Illuminati action, or Government actions whose Power totals the target's Resistance. Paralysis: play at any time except in a Privileged attack; the Group cannot spend Action tokens, use its special ability or linked Resources, or gain new puppets, and does not count for Goals. It is freed when it loses that alignment, or when its master or any Illuminati spends an action.",
+  "keywords": [
+   "Paralysis"
+  ],
+  "playRequirement": "Requires Illuminati or Government Action(s)"
+ },
+ {
+  "id": "militia",
+  "name": "Militia",
+  "set": "Assassins",
+  "type": "Group",
+  "subtype": "Organization",
+  "rarity": "Ultra",
+  "text": "Its printed Power rises by 1 each time it makes or aids a successful Attack to Destroy, and drops by 1 (not below 1) after a failed one.",
+  "power": 1,
+  "globalPower": 0,
+  "resistance": 6,
+  "alignments": [
+   "Violent",
+   "Conservative",
+   "Fanatic"
+  ],
+  "attributes": [],
+  "arrowIn": "TOP",
+  "arrowsOut": [
+   "RIGHT"
+  ],
+  "uniqueness": "One copy in play at a time (base rule)"
+ },
+ {
+  "id": "my-karma-ran-over-your-dogma",
+  "name": "My Karma Ran Over Your Dogma",
+  "set": "Assassins",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Common",
+  "text": "Zap. Played on a rival Illuminati: no Group in that Power Structure may take over Straight Groups. Stays until removed. Zap rule: any player may spend an Illuminati action at any time to remove every Zap from one player.",
+  "keywords": [
+   "Zap"
+  ],
+  "playRequirement": "Requires Illuminati Action"
+ },
+ {
+  "id": "near-miss",
+  "name": "Near Miss",
+  "set": "Assassins",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Common",
+  "text": "Play when a Place would be destroyed: it is only Devastated instead. Or remove Devastation from a Place. Two copies cannot cancel a destruction entirely."
+ },
+ {
+  "id": "nevermore",
+  "name": "Nevermore!",
+  "set": "Assassins",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Uncommon",
+  "text": "Right after a Plot resolves, ban that Plot for the rest of the game (kept under this card). Once in play, anyone may ban further Plots the same way. Each ban costs an Illuminati action or two Plot discards from hand or deck.",
+  "playRequirement": "Requires Illuminati Action or Discards"
+ },
+ {
+  "id": "newt-gingrich",
+  "name": "Newt Gingrich",
+  "set": "Assassins",
+  "type": "Group",
+  "subtype": "Personality",
+  "rarity": "Rare",
+  "text": "While he is in any Power Structure, every Attack to Destroy a Liberal Group gets +3. His own direct attacks to destroy Liberal Groups get +5 more.",
+  "power": 3,
+  "globalPower": 0,
+  "resistance": 6,
+  "alignments": [
+   "Conservative",
+   "Government"
+  ],
+  "attributes": [
+   "Space",
+   "Science"
+  ],
+  "arrowIn": "TOP",
+  "arrowsOut": [
+   "LEFT",
+   "RIGHT"
+  ],
+  "uniqueness": "One copy in play at a time (base rule)"
+ },
+ {
+  "id": "no-beer",
+  "name": "No Beer!",
+  "set": "Assassins",
+  "type": "Plot",
+  "subtype": "Disaster",
+  "rarity": "Ultra",
+  "text": "Disaster: an Instant Attack to Destroy any Place without an action. Power 16; 24 against Australia, Germany or Texas; 8 against France or Italy. The Liquor Companies may spend their action to halve or double it. It can only Devastate.",
+  "keywords": [
+   "Disaster",
+   "Instant"
+  ]
+ },
+ {
+  "id": "nutrition-nazis",
+  "name": "Nutrition Nazis",
+  "set": "Assassins",
+  "type": "Group",
+  "subtype": "Organization",
+  "rarity": "Rare",
+  "text": "Science Groups may join any attack involving them regardless of alignment. Or, once per game, play it from hand as a Plot linked to a Group, which gains Science for good (not if already in play as a Group).",
+  "power": 1,
+  "globalPower": 0,
+  "resistance": 4,
+  "alignments": [
+   "Straight"
+  ],
+  "attributes": [
+   "Science"
+  ],
+  "arrowIn": "BOTTOM",
+  "arrowsOut": [
+   "LEFT"
+  ],
+  "uniqueness": "One copy in play at a time (base rule)"
+ },
+ {
+  "id": "oil-spill",
+  "name": "Oil Spill",
+  "set": "Assassins",
+  "type": "Plot",
+  "subtype": "Disaster",
+  "rarity": "Rare",
+  "text": "Disaster: an Instant Attack to Destroy a Coastal Place without an action. Power 14 against a Huge Place, 18 otherwise. Success Devastates; beating the roll by more than 6 destroys it. After a success you may put an extra token on every Green Group (once per game per player). Or +10 to an attack on OPEC or the Multinational Oil Companies.",
+  "keywords": [
+   "Disaster",
+   "Instant"
+  ],
+  "notes": "Follows the official errata."
+ },
+ {
+  "id": "orgone-grinder",
+  "name": "Orgone Grinder",
+  "set": "Assassins",
+  "type": "Resource",
+  "subtype": "Resource",
+  "rarity": "Uncommon",
+  "text": "Unique. Link to a Personality you control: Power 6 and Resistance 10, and it has no alignments or attributes and gains none, overriding every other card.",
+  "uniqueness": "Unique Gadget"
+ },
+ {
+  "id": "pale-people-in-black",
+  "name": "Pale People In Black",
+  "set": "Assassins",
+  "type": "Group",
+  "subtype": "Organization",
+  "rarity": "Rare",
+  "text": "In an Attack to Control it takes part in, the target's opposite-alignment effects are ignored. Cannot be destroyed.",
+  "power": 1,
+  "globalPower": 1,
+  "resistance": 2,
+  "alignments": [
+   "Weird"
+  ],
+  "attributes": [],
+  "arrowIn": "TOP",
+  "arrowsOut": [],
+  "uniqueness": "One copy in play at a time (base rule)",
+  "notes": "The scan shows only the incoming arrow (its lower edge is hidden), so no outgoing arrow is assumed."
+ },
+ {
+  "id": "partition",
+  "name": "Partition",
+  "set": "Assassins",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Common",
+  "text": "On your turn, with a copy of a Huge Place in play, take the copy over automatically or attack for it. On success it becomes a second, non-Huge Place: both halves have half the printed Power (round up) and +10 attacking each other. One player holding both may reunite them."
+ },
+ {
+  "id": "pave-the-earth",
+  "name": "Pave the Earth!",
+  "set": "Assassins",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Uncommon",
+  "text": "Freeze on Green: until the end of the turn no Green Group may spend Action tokens except to defend itself. Or, right after a Green Group acts, cancel that action.",
+  "keywords": [
+   "Freeze"
+  ],
+  "playRequirement": "Requires Illuminati or Green Action"
+ },
+ {
+  "id": "pizza-for-the-secret-meeting",
+  "name": "Pizza for the Secret Meeting",
+  "set": "Assassins",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Common",
+  "text": "At any time: one Secret Group is not Secret until the end of the turn."
+ },
+ {
+  "id": "population-reduction",
+  "name": "Population Reduction",
+  "set": "Assassins",
+  "type": "Plot",
+  "subtype": "Goal",
+  "rarity": "Rare",
+  "text": "Goal: each destroyed Huge Place (up to 3) counts as two Groups toward your Basic Goal, and no other destroyed Group counts. Or win outright with 5 Huge Places destroyed without World War III."
+ },
+ {
+  "id": "power-satellite",
+  "name": "Power Satellite",
+  "set": "Assassins",
+  "type": "Resource",
+  "subtype": "Resource",
+  "rarity": "Uncommon",
+  "text": "Link to a Space Place or a Nation: +2 Power and +5 to all its defenses, Disasters included. One per Place.",
+  "uniqueness": "Gadget; not marked Unique"
+ },
+ {
+  "id": "recycling-centers",
+  "name": "Recycling Centers",
+  "set": "Assassins",
+  "type": "Group",
+  "subtype": "Organization",
+  "rarity": "Uncommon",
+  "text": "Spend its action: a Group card or Gadget discarded this turn goes back to its owner's hand. First to claim a discard gets it.",
+  "power": 1,
+  "globalPower": 0,
+  "resistance": 3,
+  "alignments": [],
+  "attributes": [
+   "Green"
+  ],
+  "arrowIn": "BOTTOM",
+  "arrowsOut": [],
+  "uniqueness": "One copy in play at a time (base rule)"
+ },
+ {
+  "id": "regi-tered-trademark",
+  "name": "Regi$tered Trademark",
+  "set": "Assassins",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Rare",
+  "text": "Link for good to a Group in play. Everyone must call it by its full printed name; a slip costs a Plot from hand or deck. If its controller slips and a rival catches it, the controller gives that rival the top Plot of their deck."
+ },
+ {
+  "id": "reverse-whammy",
+  "name": "Reverse Whammy",
+  "set": "Assassins",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Common",
+  "text": "When a Zap is played on you, it hits the player who played it instead. Costs a Group card from hand or the top of your Group deck.",
+  "playRequirement": "Requires Discard"
+ },
+ {
+  "id": "school-prayer",
+  "name": "School Prayer",
+  "set": "Assassins",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Common",
+  "text": "Freeze on Church, Liberal and Conservative Groups: none may spend Action tokens this turn except to defend. Or, right after a Church action, cancel it. Costs an Illuminati, Church, Liberal or Conservative action.",
+  "keywords": [
+   "Freeze"
+  ],
+  "playRequirement": "Requires Illuminati, Church, Liberal or Conservative Action"
+ },
+ {
+  "id": "science-alarmists",
+  "name": "Science Alarmists",
+  "set": "Assassins",
+  "type": "Group",
+  "subtype": "Organization",
+  "rarity": "Rare",
+  "text": "While you control them, no rival may take over a Science or Green Group automatically without your permission.",
+  "power": 1,
+  "globalPower": 0,
+  "resistance": 4,
+  "alignments": [],
+  "attributes": [
+   "Green",
+   "Science"
+  ],
+  "arrowIn": "BOTTOM",
+  "arrowsOut": [
+   "RIGHT"
+  ],
+  "uniqueness": "One copy in play at a time (base rule)"
+ },
+ {
+  "id": "screaming-meme",
+  "name": "Screaming Meme",
+  "set": "Assassins",
+  "type": "Resource",
+  "subtype": "Resource",
+  "rarity": "Rare",
+  "text": "Link to an Organization (not an Illuminati): it cannot be taken away or moved, and the Organization cannot be destroyed by any means. Only one may be in play: a new one discards the old.",
+  "uniqueness": "No card-specific limit (base duplicate rules apply)"
+ },
+ {
+  "id": "secret-master",
+  "name": "Secret Master",
+  "set": "Assassins",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Ultra",
+  "text": "Link to a Personality your Illuminati controls directly. It can never be captured, can be destroyed only by an Assassination or another Illuminati's direct attack, and has +20 against Assassinations. It loses all its alignments and attributes."
+ },
+ {
+  "id": "security-leak",
+  "name": "Security Leak",
+  "set": "Assassins",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Uncommon",
+  "text": "Zap. Played on a rival Illuminati: every Plot that player draws is revealed as it is drawn. Stays until removed. Zap rule: any player may spend an Illuminati action at any time to remove every Zap from one player.",
+  "keywords": [
+   "Zap"
+  ],
+  "playRequirement": "Requires Illuminati Action"
+ },
+ {
+  "id": "shock-jocks",
+  "name": "Shock Jocks",
+  "set": "Assassins",
+  "type": "Group",
+  "subtype": "Organization",
+  "rarity": "Rare",
+  "text": "Count as Straight when attacking to control a Straight Group. They and their controller may join either side of any attack involving a Straight Group.",
+  "power": 1,
+  "globalPower": 0,
+  "resistance": 5,
+  "alignments": [
+   "Weird"
+  ],
+  "attributes": [
+   "Media"
+  ],
+  "arrowIn": "TOP",
+  "arrowsOut": [],
+  "uniqueness": "One copy in play at a time (base rule)"
+ },
+ {
+  "id": "society-of-assassins",
+  "name": "Society of Assassins",
+  "set": "Assassins",
+  "type": "Illuminati",
+  "subtype": "Illuminati",
+  "rarity": "Illuminati (fixed)",
+  "text": "Power 7/7. When one of your Fanatic Groups attacks or defends, its Fanatic may count as the same alignment as any other Fanatic Group you control. The Global Power of each of your Fanatic Groups equals its Power. Special Goal: each Secret Group you control counts as two Groups for the Basic Goal, as long as no rival controls a Secret Group with more Power.",
+  "power": 7,
+  "globalPower": 7,
+  "resistance": null,
+  "alignments": [],
+  "attributes": [],
+  "arrowIn": null,
+  "arrowsOut": [
+   "TOP",
+   "RIGHT",
+   "BOTTOM",
+   "LEFT"
+  ],
+  "uniqueness": "One copy in play at a time (base rule)",
+  "notes": "Follows the official errata."
+ },
+ {
+  "id": "sorry-wrong-number",
+  "name": "Sorry, Wrong Number",
+  "set": "Assassins",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Uncommon",
+  "text": "Zap. Played on a rival Illuminati: that Power Structure loses its defense bonus for closeness to the Illuminati. Stays until removed. Zap rule: any player may spend an Illuminati action at any time to remove every Zap from one player.",
+  "keywords": [
+   "Zap"
+  ],
+  "playRequirement": "Requires Illuminati Action"
+ },
+ {
+  "id": "spontaneous-combustion",
+  "name": "Spontaneous Combustion",
+  "set": "Assassins",
+  "type": "Plot",
+  "subtype": "Assassination",
+  "rarity": "Ultra",
+  "text": "Assassination: an Instant Attack to kill any Personality without an action. Power 10, 15 against a Magic Personality. One Magic Group may spend its action to add its Power.",
+  "keywords": [
+   "Assassination",
+   "Instant"
+  ]
+ },
+ {
+  "id": "spy-satellite",
+  "name": "Spy Satellite",
+  "set": "Assassins",
+  "type": "Resource",
+  "subtype": "Resource",
+  "rarity": "Rare",
+  "text": "Its action, at any time: pick three Groups at random from a rival's hand, show them if you wish and give them back. Or expose one random Plot in a rival's hand. Has its own Action token.",
+  "uniqueness": "Gadget; not marked Unique"
+ },
+ {
+  "id": "state-lotteries",
+  "name": "State Lotteries",
+  "set": "Assassins",
+  "type": "Group",
+  "subtype": "Organization",
+  "rarity": "Uncommon",
+  "text": "Spend its action at any time: shuffle all your Group cards or all your Plots in hand back into that deck, then draw one fewer.",
+  "power": 2,
+  "globalPower": 0,
+  "resistance": 0,
+  "alignments": [
+   "Government"
+  ],
+  "attributes": [],
+  "arrowIn": "BOTTOM",
+  "arrowsOut": [],
+  "uniqueness": "One copy in play at a time (base rule)"
+ },
+ {
+  "id": "strange-bedfellows",
+  "name": "Strange Bedfellows",
+  "set": "Assassins",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Special",
+  "text": "At any time: reverse any or all alignments of a Group you control for one action, or for the whole token-placement step if played then. Not for Goals."
+ },
+ {
+  "id": "sudden-european-vacation",
+  "name": "Sudden European Vacation",
+  "set": "Assassins",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Rare",
+  "text": "At any time: move a Personality you control to another master in any Power Structure. Hostile Plots just played on it, Instants too, are cancelled, and it is immune to hostile Plots for the rest of the turn."
+ },
+ {
+  "id": "sufficiently-advanced-technology",
+  "name": "Sufficiently Advanced Technology",
+  "set": "Assassins",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Common",
+  "text": "Link to a Science Group you control: while it is Science it is also Magic. Or link it to a Magic Group: while it is Magic it is also Science."
+ },
+ {
+  "id": "supernova",
+  "name": "Supernova",
+  "set": "Assassins",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Common",
+  "text": "On your turn: for each Space action spent (at most two), take a Gadget Resource into play at once. Resources with actions arrive with all their tokens.",
+  "playRequirement": "Needs one or two Space actions, one per Resource taken"
+ },
+ {
+  "id": "supreme-court-nomination",
+  "name": "Supreme Court Nomination",
+  "set": "Assassins",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Uncommon",
+  "text": "An Attack to Destroy any Personality at any time without an action, Power 15; never Instant or Privileged. Anyone may aid either side; Republicans, Democrats and Media Groups count double. Success destroys (not kills). Failure makes the target Chief Justice: printed Power 4, Government, never Corporate; no more copies while it is in play."
+ },
+ {
+  "id": "swingers",
+  "name": "Swingers",
+  "set": "Assassins",
+  "type": "Group",
+  "subtype": "Organization",
+  "rarity": "Rare",
+  "text": "+1 Power per Liberal Group you control besides itself.",
+  "power": 1,
+  "globalPower": 0,
+  "resistance": 1,
+  "alignments": [
+   "Weird",
+   "Liberal"
+  ],
+  "attributes": [],
+  "arrowIn": "BOTTOM",
+  "arrowsOut": [
+   "LEFT"
+  ],
+  "uniqueness": "One copy in play at a time (base rule)",
+  "notes": "Follows the official errata."
+ },
+ {
+  "id": "take-the-money-and-run",
+  "name": "Take The Money And Run",
+  "set": "Assassins",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Common",
+  "text": "Zap. Played on a rival Illuminati: no Group in that Power Structure may take over Criminal Groups. Stays until removed. Zap rule: any player may spend an Illuminati action at any time to remove every Zap from one player.",
+  "keywords": [
+   "Zap"
+  ],
+  "playRequirement": "Costs an Illuminati action to play"
+ },
+ {
+  "id": "tanstaafl",
+  "name": "TANSTAAFL",
+  "set": "Assassins",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Common",
+  "text": "Zap. Played on a rival Illuminati: no Group in that Power Structure may take over Liberal Groups. Stays until removed. Zap rule: any player may spend an Illuminati action at any time to remove every Zap from one player.",
+  "keywords": [
+   "Zap"
+  ],
+  "playRequirement": "Costs an Illuminati action to play"
+ },
+ {
+  "id": "teddy-kennedy",
+  "name": "Teddy Kennedy",
+  "set": "Assassins",
+  "type": "Group",
+  "subtype": "Personality",
+  "rarity": "Uncommon",
+  "text": "His Liberal puppets cannot be taken over, can never be taken from him, and defend at +5 against Attacks to Destroy.",
+  "power": 4,
+  "globalPower": 0,
+  "resistance": 4,
+  "alignments": [
+   "Liberal",
+   "Government"
+  ],
+  "attributes": [],
+  "arrowIn": "TOP",
+  "arrowsOut": [
+   "RIGHT"
+  ],
+  "uniqueness": "One copy in play at a time (base rule)"
+ },
+ {
+  "id": "teflon-coating",
+  "name": "Teflon Coating",
+  "set": "Assassins",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Common",
+  "text": "When a Personality is attacked with a rival's Media Group taking part: every Media action in the attack is cancelled, and no more Media Groups may aid it."
+ },
+ {
+  "id": "the-big-prawn",
+  "name": "The Big Prawn",
+  "set": "Assassins",
+  "type": "Resource",
+  "subtype": "Resource",
+  "rarity": "Rare",
+  "text": "Unique. Link for good to a Coastal Place: double Power. As you link it you may add, remove or reverse one of the Place's alignments for good. If it is destroyed the Place is Devastated; it is destroyed with the Place, or if the Place is Devastated.",
+  "uniqueness": "Unique Gadget"
+ },
+ {
+  "id": "the-green-party",
+  "name": "The Green Party",
+  "set": "Assassins",
+  "type": "Group",
+  "subtype": "Organization",
+  "rarity": "Uncommon",
+  "text": "+4 on any attempt to control another Green Group. Your other Green Groups get +1 Power.",
+  "power": 4,
+  "globalPower": 2,
+  "resistance": 5,
+  "alignments": [
+   "Liberal"
+  ],
+  "attributes": [
+   "Green"
+  ],
+  "arrowIn": "TOP",
+  "arrowsOut": [
+   "LEFT",
+   "RIGHT"
+  ],
+  "uniqueness": "One copy in play at a time (base rule)",
+  "notes": "Follows the official errata."
+ },
+ {
+  "id": "the-irish-flu",
+  "name": "The Irish Flu",
+  "set": "Assassins",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Ultra",
+  "text": "Put on a Personality in play: it loses its Action token this turn and gets no new one. Killing it cures it; otherwise next turn it becomes immune and its owner passes the Flu to a Personality that is not immune yet. Discarded when nobody can catch it. The Center for Disease Control protects its whole Power Structure."
+ },
+ {
+  "id": "the-magic-goes-away",
+  "name": "The Magic Goes Away",
+  "set": "Assassins",
+  "type": "Plot",
+  "subtype": "NWO",
+  "rarity": "Rare",
+  "text": "Red NWO. Magic Resources do nothing and Magic Groups get -1 Power (both still count for Goals). Every Illuminati gets -1 Power and nobody makes automatic takeovers.",
+  "nwoColor": "red"
+ },
+ {
+  "id": "the-meek-shall-inherit",
+  "name": "The Meek Shall Inherit",
+  "set": "Assassins",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Common",
+  "text": "Zap. Played on a rival Illuminati: no Group in that Power Structure may take over Violent Groups. Stays until removed. Zap rule: any player may spend an Illuminati action at any time to remove every Zap from one player.",
+  "keywords": [
+   "Zap"
+  ],
+  "playRequirement": "Costs an Illuminati action to play"
+ },
+ {
+  "id": "the-thule-group",
+  "name": "The Thule Group",
+  "set": "Assassins",
+  "type": "Group",
+  "subtype": "Organization",
+  "rarity": "Ultra",
+  "text": "Spend its action at any time: discard Group cards from hand; their printed Power is added to any Power or Resistance total, Instant attacks included, whatever their alignments. With Hitler's Brain linked to it, it cannot be captured or destroyed.",
+  "power": 1,
+  "globalPower": 0,
+  "resistance": 6,
+  "alignments": [],
+  "attributes": [
+   "Secret",
+   "Magic"
+  ],
+  "arrowIn": "TOP",
+  "arrowsOut": [],
+  "uniqueness": "One copy in play at a time (base rule)"
+ },
+ {
+  "id": "this-was-only-a-test",
+  "name": "This Was Only A Test",
+  "set": "Assassins",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Common",
+  "text": "When a rival announces a Disaster: it is stopped and goes back to its player's hand, exposed, unusable until the end of their next turn."
+ },
+ {
+  "id": "truck-bomb",
+  "name": "Truck Bomb",
+  "set": "Assassins",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Uncommon",
+  "text": "With an Attack to Destroy an Organization: it becomes an Instant attack needing no action, made by one Violent Group, helped only by your Illuminati, with no other bonuses."
+ },
+ {
+  "id": "vile-secretions",
+  "name": "Vile Secretions",
+  "set": "Assassins",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Uncommon",
+  "text": "Paralysis on a Weird Group. Costs an Illuminati action, or Straight actions whose Power totals the target's Resistance. Paralysis: play at any time except in a Privileged attack; the Group cannot spend Action tokens, use its special ability or linked Resources, or gain new puppets, and does not count for Goals. It is freed when it loses that alignment, or when its master or any Illuminati spends an action.",
+  "keywords": [
+   "Paralysis"
+  ],
+  "playRequirement": "Costs an Illuminati action, or Straight action(s) totaling the target's Resistance"
+ },
+ {
+  "id": "visualize-whirled-peas",
+  "name": "Visualize Whirled Peas",
+  "set": "Assassins",
+  "type": "Plot",
+  "subtype": "NWO",
+  "rarity": "Rare",
+  "text": "Yellow NWO. Fanatic Groups are no longer opposite each other: Fanatic becomes one shared alignment. Fanatic Groups that are not Weird get +2 Power.",
+  "nwoColor": "yellow"
+ },
+ {
+  "id": "vladimir-zhirinovsky",
+  "name": "Vladimir Zhirinovsky",
+  "set": "Assassins",
+  "type": "Group",
+  "subtype": "Personality",
+  "rarity": "Uncommon",
+  "text": "+10 on his direct attempts to control Russia; +5 on his direct attempts to control any other Communist Group.",
+  "power": 2,
+  "globalPower": 0,
+  "resistance": 6,
+  "alignments": [
+   "Violent",
+   "Conservative"
+  ],
+  "attributes": [
+   "Communist"
+  ],
+  "arrowIn": "BOTTOM",
+  "arrowsOut": [
+   "RIGHT"
+  ],
+  "uniqueness": "One copy in play at a time (base rule)"
+ },
+ {
+  "id": "waiting-period",
+  "name": "Waiting Period",
+  "set": "Assassins",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Common",
+  "text": "Paralysis on a Violent Group. Costs an Illuminati action, or Peaceful actions whose Power totals the target's Resistance. Paralysis: play at any time except in a Privileged attack; the Group cannot spend Action tokens, use its special ability or linked Resources, or gain new puppets, and does not count for Goals. It is freed when it loses that alignment, or when its master or any Illuminati spends an action.",
+  "keywords": [
+   "Paralysis"
+  ],
+  "playRequirement": "Costs an Illuminati action, or Peaceful action(s) totaling the target's Resistance"
+ },
+ {
+  "id": "watermelons",
+  "name": "Watermelons",
+  "set": "Assassins",
+  "type": "Plot",
+  "subtype": "NWO",
+  "rarity": "Rare",
+  "text": "Blue NWO. Green Groups count as Communist and Communist Groups as Green. Or link it to a Green or Communist Group, which becomes both for good (then it counts as a Plot).",
+  "nwoColor": "blue"
+ },
+ {
+  "id": "whistle-blowers",
+  "name": "Whistle Blowers",
+  "set": "Assassins",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Common",
+  "text": "Paralysis on a Government Group. Costs an Illuminati action, or Corporate actions whose Power totals the target's Resistance. Paralysis: play at any time except in a Privileged attack; the Group cannot spend Action tokens, use its special ability or linked Resources, or gain new puppets, and does not count for Goals. It is freed when it loses that alignment, or when its master or any Illuminati spends an action.",
+  "keywords": [
+   "Paralysis"
+  ],
+  "playRequirement": "Costs an Illuminati action, or Corporate action(s) totaling the target's Resistance"
+ },
+ {
+  "id": "witch-hunt",
+  "name": "Witch Hunt",
+  "set": "Assassins",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Common",
+  "text": "Illuminati action, at any time: an Action token for one Church Group, or for several with 5 total Power or less. Not for Groups holding a token or barred from tokens.",
+  "playRequirement": "Requires Illuminati Action"
+ },
+ {
+  "id": "x-ray-specs",
+  "name": "X-Ray Specs",
+  "set": "Assassins",
+  "type": "Resource",
+  "subtype": "Resource",
+  "rarity": "Rare",
+  "text": "Unique. Link to a Science Group: its action looks at the top three cards of one deck in play. A Weird Science Group may look at the top three of two decks, or the top six of one.",
+  "uniqueness": "Unique Gadget"
+ },
+ {
+  "id": "you-are-what-you-eat",
+  "name": "You Are What You Eat",
+  "set": "Assassins",
+  "type": "Plot",
+  "subtype": "Plot",
+  "rarity": "Common",
+  "text": "Right after one of your Groups (not your Illuminati) destroys a Group: discard the attacker (it counts as destroyed, not for Goals) and put the destroyed Group in its place. Its puppets may be rehung on it, discarded or returned to hand."
+ }
+]

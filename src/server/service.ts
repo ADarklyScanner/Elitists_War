@@ -4,7 +4,7 @@
 // (database) and call these functions from its API routes and a periodic timer.
 import {
   type Action, type AiLevel, type GameState, type GameSettings, applyAction, createGame, hasResponse, player, waitingFor, randomDeck,
-  RuleError, def, HOOKS, canExpose,
+  RuleError, def, HOOKS, canExpose, CHURCH, enabledSets,
 } from '../engine';
 import { applyDealAnswer, chooseAction, computerDealAnswer } from '../ai/ai';
 import { seatComputers, styleById, WILD_CARDS } from '../ai/personas';
@@ -179,7 +179,10 @@ function maybeStart(rec: GameRecord) {
         ill = [...(s.preferIlluminati ? [s.preferIlluminati] : []), ...(styleById(s.aiStyle)?.favours ?? []), ...ALL_ILLUMINATI].find((x) => !used.has(x))!;
         used.add(ill);
       }
-      return { id: s.id, name: s.name, isAI: s.isAI, aiLevel: s.aiLevel, aiStyle: s.aiStyle, aiStyleData: s.isAI ? s.aiStyleData : undefined, deck: randomDeck(seed + i, ill) };
+      // The stand-alone SubGenius game: everybody is a faction of the Church, and the decks are shared.
+      if (rec.settings.subgeniusRules) ill = CHURCH;
+      return { id: s.id, name: s.name, isAI: s.isAI, aiLevel: s.aiLevel, aiStyle: s.aiStyle, aiStyleData: s.isAI ? s.aiStyleData : undefined, deck: randomDeck(seed + i, ill, { sets: enabledSets(rec.settings) }) };
+
     }),
   });
   rec.state = settle(rec, rec.state);
@@ -389,6 +392,8 @@ export function viewFor(s: GameState, viewer: string): GameState {
     if (p.id !== viewer) for (const iid of p.hand) if ((!v.cards[iid].exposed && !known.has(iid)) || !canExpose(s, iid)) hide(iid);
     if (p.id !== viewer) p.known = [];
   }
+  // SubGenius rules: the shared decks are face down too (the discards and the uncontrolled area are face up).
+  if (v.common) for (const iid of [...v.common.plotDeck, ...v.common.groupDeck]) if (!known.has(iid)) hide(iid);
   // Private log lines (what a player saw with a card) go only to that player.
   v.log = v.log.filter((l) => !l.to || l.to === viewer);
   // Someone else's decision may show their hidden cards as options: others only see that they are choosing.

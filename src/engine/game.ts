@@ -1,7 +1,7 @@
 // The Elitists War rules engine. Pure state transitions: applyAction(state, player, action)
 // validates the move against the rules, mutates a copy of the state and returns it.
 import type {
-  Action, Alignment, AttackCtx, CardInstance, Contribution, GameSettings, GameState, GoalOption, PlaceCapturedData, PlayedPlot,
+  Action, Alignment, AttackCtx, CardInstance, Contribution, Freeze, GameSettings, GameState, GoalOption, PlaceCapturedData, PlayedPlot,
   PlayerState, PlotPlay, Prompt, Side,
 } from './types';
 import { RuleError } from './types';
@@ -14,9 +14,11 @@ import { abilitiesOf, attackingGroups, matches } from './abilities';
 import { alignmentPairs, alignments, attributes, globalPower, power, resistance } from './stats';
 import { NWO_EFFECTS } from './nwo';
 import { PLOTS, GOALS } from './plotTypes';
-import { HOOKS, CHOICES, EVENT_ABILITY_CARDS, abilitiesDisabled, activeHookCards, anyHook, fireHooks, goalCheck, hooksOf, registerChoice, sumHooks, type AbilityParams, type ActivatedAbility, type CardHooks } from './hooks';
+import { HOOKS, CHOICES, EVENT_ABILITY_CARDS, isCancelled, linkedPlotLive, paralyzedGroups, abilitiesDisabled, activeHookCards, anyHook, fireHooks, goalCheck, hooksOf, registerChoice, sumHooks, type AbilityParams, type ActivatedAbility, type CardHooks } from './hooks';
 import type { AiLevel, AnnouncedKind, Choice, GameEvent, PlotEffect } from './types';
 import { dealAction, isDealAction, lapseDeals, tidyDeals } from './deals';
+import { CHURCH, cardsOfSets, groupDeckOf, plotDeckOf, sgRules } from './expansions';
+import { costProblem, payCost } from './costs';
 
 // ---------------------------------------------------------------- setup
 
@@ -25,7 +27,13 @@ export interface NewPlayer { id: string; name: string; isAI: boolean; aiLevel?: 
 
 export const DEFAULT_SETTINGS: GameSettings = { basicGoal: 12, responseHours: 24, houseRules: [] };
 
-export function createGame(opts: { id?: string; seed?: number; players: NewPlayer[]; settings?: Partial<GameSettings>; chooseLeads?: boolean }): GameState {
+/**
+ * `common`: the shared decks of a stand-alone SubGenius game (settings.subgeniusRules). Without it the
+ * whole SubGenius set is used: every Plot once and every Group and Resource once. The players' own
+ * deck lists then only name their Illuminati (normally the Church of the SubGenius).
+ */
+export function createGame(opts: { id?: string; seed?: number; players: NewPlayer[]; settings?: Partial<GameSettings>; chooseLeads?: boolean; common?: { plots: string[]; groups: string[] } }): GameState {
+  if (opts.settings?.subgeniusRules) return createSubGeniusGame(opts);
   const s: GameState = {
     id: opts.id ?? `g${Date.now().toString(36)}`,
     version: 0,
@@ -80,8 +88,72 @@ export function createGame(opts: { id?: string; seed?: number; players: NewPlaye
   return s;
 }
 
+/**
+ * The stand-alone SubGenius game (SubGenius rules, "Beginning the Game"): one shared Plot deck and one
+ * shared Group deck, each player dealt 3 Plots and 3 Group cards; a lead (a Group or a Resource) is
+ * chosen from those, and the other two go to the uncontrolled area at the start of the player's first
+ * turn. Basic Goal: 10 Groups, or 12 with two players.
+ */
+function createSubGeniusGame(opts: Parameters<typeof createGame>[0]): GameState {
+  const s: GameState = {
+    id: opts.id ?? `g${Date.now().toString(36)}`,
+    version: 0,
+    rng: opts.seed ?? Math.floor(Math.random() * 2 ** 31),
+    settings: { ...DEFAULT_SETTINGS, ...opts.settings, subgeniusRules: true, expansions: { ...opts.settings?.expansions, subgenius: true } },
+    players: [], cards: {}, turn: 0, round: 1, active: 0, phase: 'beginning',
+    turnFlags: { takeoverDone: false, resourcePlayed: false, illumGroupDraw: false, bavarianPrivilege: false },
+    nwo: {}, attackCounter: 0, firstPlayer: 0, log: [], layout: LAYOUT_VERSION,
+    common: { plotDeck: [], groupDeck: [], plotDiscard: [], groupDiscard: [], uncontrolled: [] },
+  };
+  const n = opts.players.length;
+  if (s.settings.houseRules.includes('quickGame')) s.settings.basicGoal = 8;
+  else s.settings.basicGoal = opts.settings?.basicGoal ?? (n === 2 ? 12 : 10);
+  const firstId = opts.players[0].id;
+  let k = 0;
+  const mk = (cardId: string, zone: CardInstance['zone'], owner: string) => {
+    if (!CARDS[cardId]) throw new Error(`Unknown card ${cardId}`);
+    const iid = `c-${++k}`;
+    s.cards[iid] = { iid, cardId, owner, zone, tokens: 0, mods: [] };
+    return iid;
+  };
+  const sg = cardsOfSets(['SubGenius']);
+  const common = opts.common ?? {
+    plots: sg.filter((c) => c.type === 'Plot').map((c) => c.id),
+    groups: sg.filter((c) => c.type === 'Group' || c.type === 'Resource').map((c) => c.id),
+  };
+  s.common!.plotDeck = shuffle(s, common.plots.map((c) => mk(c, 'plotDeck', firstId)));
+  s.common!.groupDeck = shuffle(s, common.groups.map((c) => mk(c, 'groupDeck', firstId)));
+  for (const p of opts.players) {
+    const ill = mk(p.deck.illuminati || CHURCH, 'structure', p.id);
+    Object.assign(s.cards[ill], { controller: p.id, x: 0, y: 0, rot: 0 });
+    s.players.push({
+      id: p.id, name: p.name, isAI: p.isAI, ...(p.isAI && p.aiLevel ? { aiLevel: p.aiLevel } : {}), ...(p.isAI && p.aiStyle ? { aiStyle: p.aiStyle } : {}), ...(p.isAI && p.aiStyleData ? { aiStyleData: { ...p.aiStyleData } } : {}), illuminati: ill,
+      plotDeck: [], groupDeck: [], hand: [], discard: [], destroyedCredit: [], turnsTaken: 0, eliminated: false, autoPass: false,
+    });
+  }
+  // Deal three Plots and three Group cards to each player (the Group cards stay in hand until the lead is chosen).
+  for (const p of s.players) {
+    for (let i = 0; i < 3; i++) drawPlot(s, p);
+    for (let i = 0; i < 3; i++) {
+      const c = s.common!.groupDeck.shift();
+      if (!c) break;
+      Object.assign(s.cards[c], { zone: 'hand', owner: p.id });
+      p.hand.push(c);
+    }
+  }
+  s.setup = { picks: {}, banned: [], setAside: [] };
+  if (opts.chooseLeads) s.phase = 'setup';
+  else for (const p of s.players) s.setup.picks[p.id] = bestLead(s, p.id);
+  promptNextLead(s);
+  advance(s);
+  syncConditions(s);
+  return s;
+}
+
 export function leadOptions(s: GameState, playerId: string): string[] {
   const banned = new Set(s.setup?.banned ?? []);
+  // SubGenius rules: the lead is one of the three Group cards dealt, and may be a Resource.
+  if (sgRules(s)) return player(s, playerId).hand.filter((iid) => ['Group', 'Resource'].includes(def(s, iid).type));
   return player(s, playerId).groupDeck.filter((iid) => def(s, iid).type === 'Group' && !banned.has(s.cards[iid].cardId));
 }
 export const bestLead = (s: GameState, playerId: string) => leadOptions(s, playerId).sort((a, b) => leadScore(s, b) - leadScore(s, a))[0];
@@ -120,6 +192,18 @@ function completeSetup(s: GameState) {
   s.phase = 'beginning';
   for (const p of s.players) {
     const lead = st.picks[p.id];
+    if (sgRules(s)) {
+      // SubGenius rules: every player shows his lead at once; the other two cards wait in hand until his first turn.
+      if (lead && def(s, lead).type === 'Resource') {
+        p.hand = p.hand.filter((x) => x !== lead);
+        Object.assign(s.cards[lead], { zone: 'resources', controller: p.id, linkedTo: p.illuminati, tokens: 0 });
+        log(s, `${p.name} leads with ${cardName(s, lead)} (a Resource).`, p.id);
+      } else if (lead) {
+        placeGroup(s, lead, p.id, p.illuminati, st.sides?.[p.id] ?? 'BOTTOM');
+        log(s, `${p.name} leads with ${cardName(s, lead)}.`, p.id);
+      }
+      continue;
+    }
     if (lead) {
       p.groupDeck = p.groupDeck.filter((x) => x !== lead);
       // Each player puts his lead on the Illuminati arrow he chose (R025); the bottom one by default.
@@ -173,21 +257,70 @@ export const livePlayers = (s: GameState) => s.players.filter((p) => !p.eliminat
 /** Draw from the top of a deck (cards may skip the draw or take the bottom card instead). Returns the cards drawn. */
 function drawFrom(s: GameState, p: PlayerState, deck: 'plot' | 'group', n: number): string[] {
   const out: string[] = [];
-  const pile = deck === 'plot' ? p.plotDeck : p.groupDeck;
   for (let i = 0; i < n; i++) {
+    let from = deck;
     if (deck === 'plot' && s.turnFlags?.noPlotDraws?.includes(p.id)) break;
     if (s.turnFlags?.extraTurn && s.players[s.active]?.id === p.id) break; // no draws during an extra turn (Seize the Time)
-    let how: 'skip' | 'bottom' | undefined;
-    for (const self of activeHookCards(s)) { how = HOOKS[s.cards[self].cardId].beforeDraw?.(s, self, p.id, deck) ?? how; if (how) break; }
+    let how: 'skip' | 'bottom' | 'plotInstead' | undefined;
+    for (const self of activeHookCards(s)) { how = HOOKS[s.cards[self].cardId].beforeDraw?.(s, self, p.id, from) ?? how; if (how) break; }
+    // A Zap may turn every Group draw of its victim into a Plot draw (Back to the Drawing Board).
+    if (how === 'plotInstead' && from === 'group') {
+      from = 'plot'; how = undefined;
+      if (s.turnFlags?.noPlotDraws?.includes(p.id)) break;
+    }
     if (how === 'skip') { log(s, `${p.name}'s draw is cancelled.`, p.id); continue; }
+    const pile = from === 'plot' ? plotDeckOf(s, p.id) : groupDeckOf(s, p.id);
+    // SubGenius rules: an empty shared deck is made again from its discard pile.
+    if (!pile.length && s.common) reshuffleCommon(s, from);
     const c = how === 'bottom' ? pile.pop() : pile.shift();
     if (!c) break;
+    if (s.common && from === 'group') {
+      // SubGenius rules: Group cards are drawn face up into the uncontrolled area, not into a hand.
+      putUncontrolled(s, c, p.id);
+      out.push(c);
+      fireHooks(s, (h, self) => h.onDraw?.(s, self, p.id, from, c));
+      continue;
+    }
     s.cards[c].zone = 'hand';
+    if (s.common) s.cards[c].owner = p.id;
     p.hand.push(c);
     out.push(c);
-    fireHooks(s, (h, self) => h.onDraw?.(s, self, p.id, deck, c));
+    fireHooks(s, (h, self) => h.onDraw?.(s, self, p.id, from, c));
   }
   return out;
+}
+
+/** SubGenius rules: shuffle a shared discard pile to make a new deck. */
+function reshuffleCommon(s: GameState, deck: 'plot' | 'group') {
+  const c = s.common!;
+  const pile = deck === 'plot' ? c.plotDiscard : c.groupDiscard;
+  if (!pile.length) return;
+  const fresh = shuffle(s, pile.splice(0));
+  for (const iid of fresh) Object.assign(s.cards[iid], { zone: deck === 'plot' ? 'plotDeck' : 'groupDeck', exposed: false, killed: false, mods: [] });
+  (deck === 'plot' ? c.plotDeck : c.groupDeck).push(...fresh);
+  log(s, `The ${deck === 'plot' ? 'Plot' : 'Group'} deck is empty: its discard pile is shuffled into a new deck.`);
+}
+
+/**
+ * Put a Group or Resource card into the uncontrolled area (SubGenius rules), face up and owned by
+ * nobody. `by` is the player who put it there (for his automatic takeover this turn). In a standard
+ * game there is no uncontrolled area: the card goes to that player's hand instead (the official rulings
+ * for SubGenius cards played in standard INWO).
+ */
+export function putUncontrolled(s: GameState, iid: string, by: string) {
+  const c = s.cards[iid];
+  removeFromPiles(s, iid);
+  if (!s.common) {
+    Object.assign(c, { zone: 'hand', controller: undefined, master: undefined, linkedTo: undefined, x: undefined, y: undefined, side: undefined, tokens: 0, heldTokens: undefined });
+    player(s, by).hand.push(iid);
+    return;
+  }
+  Object.assign(c, { zone: 'uncontrolled', controller: undefined, master: undefined, linkedTo: undefined, x: undefined, y: undefined, side: undefined,
+    tokens: 0, heldTokens: undefined, placedBy: by, placedTurn: s.turn, failedTakeoverTurn: undefined });
+  s.common.uncontrolled.push(iid);
+  // Resources linked to it go along (each lies in the area on its own). Linked Plots stay linked: the
+  // card remembers them (SubGenius rules, "The Cards Remember").
+  for (const o of Object.values(s.cards)) if (o.linkedTo === iid && o.zone === 'resources') putUncontrolled(s, o.iid, by);
 }
 export function drawPlot(s: GameState, p: PlayerState, n = 1): string[] { return drawFrom(s, p, 'plot', n); }
 export function drawGroup(s: GameState, p: PlayerState): string[] { return drawFrom(s, p, 'group', 1); }
@@ -424,8 +557,9 @@ function resolveAction(s: GameState, e: GameEvent) {
       break;
     }
     case 'playResource':
-      if (p.hand.includes(a.card) && canEnterPlay(s, a.card, pl)) playResourceCard(s, a.card, pl);
+      if ((s.common ? s.common.uncontrolled : p.hand).includes(a.card) && canEnterPlay(s, a.card, pl)) playResourceCard(s, a.card, pl);
       break;
+
     case 'link': doLink(s, pl, a.resource, a.to); break;
     case 'drawGroup': doDrawGroup(s, p); break;
   }
@@ -491,6 +625,9 @@ function removeFromHand(s: GameState, iid: string) {
 function removeFromPiles(s: GameState, iid: string) {
   removeFromHand(s, iid);
   for (const p of s.players) p.discard = p.discard.filter((x) => x !== iid);
+  // SubGenius rules: the shared piles and the uncontrolled area.
+  const c = s.common;
+  if (c) for (const k of ['plotDeck', 'groupDeck', 'plotDiscard', 'groupDiscard', 'uncontrolled'] as const) if (c[k].includes(iid)) c[k] = c[k].filter((x) => x !== iid);
 }
 
 /** A Group a rival failed to take over from his hand and discarded this turn (Opportunity Knocks, Vultures). */
@@ -527,11 +664,13 @@ export function discardCard(s: GameState, iid: string) {
   // Groups and Resources discarded from hand or from play are announced too (And STAY Dead!, Cover of Darkness).
   const wasCard = def(s, iid).type !== 'Plot' && def(s, iid).type !== 'Illuminati' && (c.zone === 'hand' || c.zone === 'structure' || c.zone === 'resources');
   const from = c.zone, by = c.controller;
-  removeFromHand(s, iid);
+  removeFromPiles(s, iid);
   c.zone = 'discard';
   c.controller = undefined; c.master = undefined; c.linkedTo = undefined;
-  c.tokens = 0;
-  player(s, c.owner).discard.push(iid);
+  c.tokens = 0; c.heldTokens = undefined;
+  // SubGenius rules: every discard goes face up onto the shared Plot or Group discard pile.
+  if (s.common) (def(s, iid).type === 'Plot' ? s.common.plotDiscard : s.common.groupDiscard).push(iid);
+  else player(s, c.owner).discard.push(iid);
   if ((wasPlot || wasCard) && s.turn > 0) raiseEvent(s, { type: 'discarded', card: iid, player: c.owner, by, data: { from } });
 }
 
@@ -602,7 +741,8 @@ export function tokenBarred(s: GameState, iid: string): boolean {
 }
 
 export function giveToken(s: GameState, iid: string) {
-  if (!tokenBarred(s, iid) && s.cards[iid].tokens === 0) s.cards[iid].tokens = 1;
+  // A Group whose token is held back (Paralysis, Freeze) already has its one token.
+  if (!tokenBarred(s, iid) && s.cards[iid].tokens === 0 && !s.cards[iid].heldTokens) s.cards[iid].tokens = 1;
 }
 
 function illuminatiOf(s: GameState, playerId: string) {
@@ -641,6 +781,13 @@ function turnDraws(s: GameState) {
   }
   const p = activePlayer(s);
   const drawn: string[] = [];
+  // SubGenius rules: on his first turn a player puts the two Group cards he still holds into the
+  // uncontrolled area (they count as placed by him this turn, for his automatic takeover).
+  if (s.common && p.turnsTaken === 0 && !s.turnFlags.extraTurn) {
+    for (const c of p.hand.filter((x) => ['Group', 'Resource'].includes(def(s, x).type))) { putUncontrolled(s, c, p.id); drawn.push(c); }
+  }
+  // SubGenius rules: the free Group draw happens only while fewer than 8 cards lie in the uncontrolled area.
+  const groupDraws = s.common && s.common.uncontrolled.length >= 8 ? 0 : 1;
   if (!s.turnFlags.extraTurn && !s.turnFlags.noDraws) {
     let extra = 0;
     for (const iid of structureCards(s, p.id)) for (const a of abilitiesOf(s, iid)) if (a.kind === 'extraPlotDraw') extra += a.value;
@@ -648,12 +795,12 @@ function turnDraws(s: GameState) {
     markResourceBenefits(s, (h, self) => controllerOf2(s, self) === p.id && (h.extraPlotDraws?.(s, self) ?? 0) > 0);
     if (!p.isAI) {
       // A person draws by hand, from each deck in turn, as at the table (the draws are optional).
-      const pr: Prompt = { player: p.id, kind: 'draw', data: { plot: 1 + extra, group: 1, drawn: [] } };
+      const pr: Prompt = { player: p.id, kind: 'draw', data: { plot: 1 + extra, group: groupDraws, drawn: [...drawn] } };
       if (s.prompt) (s.promptQueue ??= []).push(pr); else s.prompt = pr;
       return;
     }
     drawn.push(...drawPlot(s, p, 1 + extra));
-    drawn.push(...drawGroup(s, p));
+    if (groupDraws) drawn.push(...drawGroup(s, p));
   }
   afterDraws(s, drawn);
 }
@@ -691,9 +838,12 @@ function finishBeginning(s: GameState) {
     const d = def(s, iid);
     if (d.type === 'Illuminati') {
       let n = 1 + abilitiesOf(s, iid).filter((a) => a.kind === 'extraIlluminatiToken').reduce((k, a) => k + (a as { value: number }).value, 0);
-      if (s.players.length === 2 && s.turnFlags.takeoverDone) n -= 1; // two-player rule (R023)
+      // Two-player rule (R023); under SubGenius rules an automatic takeover always costs the Illuminati's token.
+      if ((s.players.length === 2 || s.common) && s.turnFlags.takeoverDone) n -= 1;
       if (s.turnFlags.extraTurn) n = 0; // extra turn: no new Illuminati token
-      s.cards[iid].tokens = Math.max(s.cards[iid].tokens, n);
+      // Slack (Church of the SubGenius): its tokens are kept from turn to turn and new ones are added.
+      if (hasAbility(s, iid, 'slack')) s.cards[iid].tokens += Math.max(0, n);
+      else s.cards[iid].tokens = Math.max(s.cards[iid].tokens, n);
     } else if (s.cards[iid].capturedTurn !== s.turn) {
       giveToken(s, iid);
     }
@@ -706,7 +856,7 @@ function finishBeginning(s: GameState) {
   }
   // Resources that have their own action get a token too.
   for (const r of resourcesOf(s, p.id)) if (HOOKS[s.cards[r].cardId]?.hasAction && s.cards[r].tokens === 0) s.cards[r].tokens = 1;
-  const twoPlayerRule = s.players.length === 2 && s.turnFlags.takeoverDone && !s.turnFlags.extraTurn;
+  const twoPlayerRule = (s.players.length === 2 || !!s.common) && s.turnFlags.takeoverDone && !s.turnFlags.extraTurn;
   s.log.push({ turn: s.turn, player: p.id, info: true, text: `${p.name}'s Groups get their Action tokens${twoPlayerRule ? ' (two-player rule: no Illuminati token this turn after an automatic takeover)' : ''}. Main phase.` });
   s.phase = 'main';
 }
@@ -714,8 +864,12 @@ function finishBeginning(s: GameState) {
 export function takeoverOptions(s: GameState, playerId: string): { card: string; onto: string; side: Side }[] {
   const out: { card: string; onto: string; side: Side }[] = [];
   const p = player(s, playerId);
-  const spots = structureCards(s, playerId).flatMap((m) => openArrows(s, m).map((side) => ({ onto: m, side })));
-  for (const card of p.hand) {
+  // A Paralyzed Group can get no new puppets (Assassins).
+  const para = paralyzedGroups(s);
+  const spots = structureCards(s, playerId).filter((m) => !para.has(m)).flatMap((m) => openArrows(s, m).map((side) => ({ onto: m, side })));
+  // SubGenius rules: any one Group or Resource the player put into the uncontrolled area this turn.
+  const candidates = s.common ? s.common.uncontrolled.filter((c) => s.cards[c].placedBy === playerId && s.cards[c].placedTurn === s.turn) : p.hand;
+  for (const card of candidates) {
     if (s.cards[card].data?.noTakeoverTurn === s.turn) continue; // returned by Botched Contact
     if (anyHook(s, (h, self) => !!h.forbidAttack?.(s, self, undefined, card, 'takeover', playerId))) continue;
     if (def(s, card).type === 'Resource' && canEnterPlay(s, card, playerId)) out.push({ card, onto: p.illuminati, side: 'TOP' });
@@ -775,7 +929,7 @@ export function playResourceCard(s: GameState, iid: string, controller: string, 
   // A rival holds a copy of this Unique Resource face down: he must show it now, or lose it (R041).
   const rival = opts.decided ? undefined : hiddenUniqueCopy(s, iid, controller);
   if (rival) { askShowdown(s, rival, { mode: 'play', card: iid, player: controller, hiddenUnder: opts.hiddenUnder, refund: opts.refund }); return; }
-  removeFromHand(s, iid);
+  removeFromPiles(s, iid); // from a hand, or from the uncontrolled area (SubGenius rules)
   Object.assign(s.cards[iid], { zone: 'resources', controller, linkedTo: player(s, controller).illuminati, tokens: 0, hiddenUnder: opts.hiddenUnder });
   if (opts.hiddenUnder) {
     log(s, `${player(s, controller).name} hides a Resource face down under ${cardName(s, opts.hiddenUnder)}.`, controller);
@@ -987,6 +1141,8 @@ export function goalCount(s: GameState, playerId: string, extraDouble?: (iid: st
 }
 
 function tokenBarredForGoals(s: GameState, iid: string) {
+  // A Paralyzed Group does not count toward any Goal (Assassins Paralysis cards).
+  if (paralyzedGroups(s).has(iid)) return true;
   let c: CardInstance | undefined = s.cards[iid];
   // A Devastated Place and everything below it do not count toward victory (R037).
   while (c) { if (c.devastated) return true; c = c.master ? s.cards[c.master] : undefined; }
@@ -1011,6 +1167,7 @@ const SPECIAL_GOAL_TEXT: Record<string, (v: number) => string> = {
   bermuda: (v) => `every alignment in your Power Structure and Power totalling ${v}`,
   destroyCount: (v) => `${v} Groups destroyed`,
   peacefulPower: (v) => `${v} Power of Peaceful Groups in play (anyone's)`,
+  slack: (v) => `the Basic Goal, counting up to ${v} Slack (tokens on your Illuminati) as Groups`,
 };
 
 /**
@@ -1052,6 +1209,7 @@ export function specialGoalProgress(s: GameState, playerId: string): { label: st
       return { label: a.goal === 'bermuda' ? 'Power (every alignment)' : 'Power', current: total, target: a.value };
     }
     if (a.goal === 'destroyCount') return { label: 'Groups destroyed', current: player(s, playerId).destroyedCredit.length, target: a.value };
+    if (a.goal === 'slack') return { label: 'Groups plus Slack', current: goalCount(s, playerId) + slackCount(s, playerId, a.value), target: goalNeeded(s, playerId) };
     if (a.goal === 'peacefulPower') {
       // Peaceful Groups in play count whoever controls them (Shangri-La).
       const inPlay = livePlayers(s).flatMap((p) => structureCards(s, p.id)).filter((iid) => !tokenBarredForGoals(s, iid));
@@ -1060,6 +1218,12 @@ export function specialGoalProgress(s: GameState, playerId: string): { label: st
     }
   }
   return null;
+}
+
+/** Slack that counts toward the Church of the SubGenius's Special Goal: its Illuminati's tokens, at most `max`. */
+export function slackCount(s: GameState, playerId: string, max = 3): number {
+  const ill = s.cards[illuminatiOf(s, playerId)];
+  return Math.min(max, ill.tokens + (ill.heldTokens ?? 0));
 }
 
 function specialGoal(s: GameState, playerId: string): GoalOption | undefined {
@@ -1076,6 +1240,10 @@ function specialGoal(s: GameState, playerId: string): GoalOption | undefined {
     if (['Government', 'Corporate', 'Liberal', 'Conservative', 'Peaceful', 'Violent', 'Straight', 'Weird', 'Criminal', 'Fanatic'].every((x) => all.has(x as never))) why = 'controls every alignment with 35 Power';
   }
   if (a.goal === 'destroyCount' && player(s, playerId).destroyedCredit.length >= a.value) why = `destroyed ${a.value} Groups`;
+  if (a.goal === 'slack') {
+    const slack = slackCount(s, playerId, a.value);
+    if (slack > 0 && goalCount(s, playerId) + slack >= goalNeeded(s, playerId)) why = `controls enough Groups counting ${slack} Slack`;
+  }
   if (a.goal === 'peacefulPower') {
     // Peaceful Groups in play count whoever controls them (Shangri-La).
     const inPlay = livePlayers(s).flatMap((p) => structureCards(s, p.id)).filter((iid) => !tokenBarredForGoals(s, iid));
@@ -1204,6 +1372,16 @@ function resolveClaims(s: GameState) {
 function eliminate(s: GameState, p: PlayerState) {
   p.eliminated = true;
   p.eliminatedBy = p.lastPuppetTakenBy;
+  if (s.common) {
+    // SubGenius rules: the player who took his last puppet gets his Plot hand (and, below, his
+    // Resources); otherwise his cards go to the shared discard piles.
+    const taker = p.eliminatedBy && !player(s, p.eliminatedBy).eliminated ? player(s, p.eliminatedBy) : undefined;
+    for (const iid of [...p.hand]) {
+      if (taker && def(s, iid).type === 'Plot') { p.hand = p.hand.filter((x) => x !== iid); taker.hand.push(iid); s.cards[iid].owner = taker.id; }
+      else discardCard(s, iid);
+    }
+    p.hand = [];
+  }
   // His hand and decks leave the game.
   for (const iid of [...p.hand, ...p.plotDeck, ...p.groupDeck]) s.cards[iid].zone = 'removed';
   p.hand = []; p.plotDeck = []; p.groupDeck = [];
@@ -1217,9 +1395,12 @@ function eliminate(s: GameState, p: PlayerState) {
     const c = s.cards[r];
     if (heir) { Object.assign(c, { controller: heir.id, linkedTo: heir.illuminati }); continue; }
     Object.assign(c, { controller: undefined, linkedTo: undefined, hiddenUnder: undefined, tokens: 0 });
-    if (c.owner === p.id) c.zone = 'removed';
+    if (s.common) discardCard(s, r);
+    else if (c.owner === p.id) c.zone = 'removed';
     else { c.zone = 'discard'; player(s, c.owner).discard.push(r); }
   }
+  // Zaps on him have nothing left to restrict.
+  for (const z of zapsOn(s, p.id)) discardCard(s, z);
 }
 
 /**
@@ -1254,7 +1435,8 @@ function resign(s: GameState, p: PlayerState) {
   for (const g of mine) {
     const c = s.cards[g];
     Object.assign(c, { controller: undefined, master: undefined, x: undefined, y: undefined, side: undefined, tokens: 0 });
-    if (c.owner === p.id) c.zone = 'removed';
+    if (s.common) { c.zone = 'hand'; discardCard(s, g); } // SubGenius rules: everything goes to the discard piles
+    else if (c.owner === p.id) c.zone = 'removed';
     else { c.zone = 'discard'; player(s, c.owner).discard.push(g); }
   }
   eliminate(s, p);
@@ -1382,7 +1564,8 @@ function playAgent(s: GameState, p: PlayerState, card: string) {
 
 // ---------------------------------------------------------------- attacks
 
-export const isSecret = (s: GameState, iid: string) => attributes(s, iid).includes('Secret');
+/** The Secret attribute's own rule (R014). It has no special effect in the stand-alone SubGenius game (SubGenius rules, p.15). */
+export const isSecret = (s: GameState, iid: string) => !s.common && attributes(s, iid).includes('Secret');
 
 /**
  * R014: non-Secret Groups may not attack a Secret Group, aid or oppose attacks on it, or aid its
@@ -1418,7 +1601,8 @@ function noteFirstTurnAttack(s: GameState, ctx: AttackCtx) {
 export function canAttackPlayer(s: GameState, attacker: string, defender: string | undefined): string | null {
   if (!defender || defender === attacker) return null;
   const a = player(s, attacker), d = player(s, defender);
-  if (d.turnsTaken < 1 || (s.players.length === 2 && a.turnsTaken < 1)) return 'Neither player may attack the other until both have finished a full turn.';
+  // The two-player addition does not exist under SubGenius rules ("no different for two-player games", p.15).
+  if (d.turnsTaken < 1 || (s.players.length === 2 && !s.common && a.turnsTaken < 1)) return 'Neither player may attack the other until both have finished a full turn.';
   return null;
 }
 
@@ -1463,7 +1647,10 @@ export function validateAttack(s: GameState, playerId: string, a: Extract<Action
   // opts.anyHand: a card lets you attack a Group another player failed to take over from his hand and
   // discarded, to control or destroy it (Opportunity Knocks).
   const fromHand = tgt.zone === 'hand' || (!!opts.anyHand && tgt.zone === 'discard');
-  if (fromHand) {
+  if (tgt.zone === 'uncontrolled') {
+    // SubGenius rules: anyone may attack a Group in the uncontrolled area, to control or to destroy it.
+    if (!s.common?.uncontrolled.includes(a.target)) return 'That card is not in the uncontrolled area.';
+  } else if (fromHand) {
     if (a.attackType !== 'control' && !opts.anyHand) return 'Groups in your hand can only be attacked to control.';
     if (!opts.anyHand && !player(s, playerId).hand.includes(a.target)) return 'You can only attack Groups from your own hand.';
     if (!canEnterPlay(s, a.target)) return 'That Group is already in play or was destroyed.';
@@ -1497,10 +1684,11 @@ export function startAttack(s: GameState, playerId: string, a: Extract<Action, {
   if (err) throw new RuleError(err);
   const tgt = s.cards[a.target];
   const fromHand = tgt.zone === 'hand' || (!!opts.anyHand && tgt.zone === 'discard');
+  const fromArea = tgt.zone === 'uncontrolled';
   s.cards[a.attacker].tokens--;
   const ctx: AttackCtx = {
     id: ++s.attackCounter, type: a.attackType, instant: false, attacker: a.attacker, attackerPlayer: playerId,
-    target: a.target, targetPlayer: fromHand ? undefined : tgt.controller, fromHand,
+    target: a.target, targetPlayer: fromHand || fromArea ? undefined : tgt.controller, fromHand, ...(fromArea ? { fromArea } : {}),
     arrow: a.attackType === 'control' ? a.side ?? openArrows(s, a.attacker)[0] : undefined,
     privileged: !!a.privileged, aid: [], oppose: [], attackBonus: [], defenseBonus: [], plays: [],
   };
@@ -1508,19 +1696,13 @@ export function startAttack(s: GameState, playerId: string, a: Extract<Action, {
   s.attack = ctx;
   noteFirstTurnAttack(s, ctx);
   fireHooks(s, (h, self) => h.onAttackStart?.(s, self, ctx));
-  log(s, `${cardName(s, a.attacker)} attacks to ${a.attackType} ${cardName(s, a.target)}${fromHand ? (tgt.zone === 'discard' ? ' (from the discard pile)' : ' (from hand)') : ''}${ctx.privileged ? ' — Privileged' : ''}.`, playerId);
+  log(s, `${cardName(s, a.attacker)} attacks to ${a.attackType} ${cardName(s, a.target)}${fromArea ? ' (in the uncontrolled area)' : fromHand ? (tgt.zone === 'discard' ? ' (from the discard pile)' : ' (from hand)') : ''}${ctx.privileged ? ' — Privileged' : ''}.`, playerId);
   for (const play of a.plots ?? []) playPlot(s, playerId, play, true);
   openWindow(s, 'attack');
 }
 
 // ---- live Plot effects: a Plot counts unless a later, itself uncancelled Plot cancels it (R010).
-export function isCancelled(plays: PlayedPlot[], iid: string): boolean {
-  const i = plays.findIndex((p) => p.iid === iid);
-  if (plays[i]?.voided) return true; // made illegal before it resolved: as if it never happened
-  const part = plays[i]?.partOf;
-  if (part && part !== iid && isCancelled(plays, part)) return true;
-  return plays.some((q, j) => j > i && q.effect.t === 'cancelPlot' && q.effect.target === iid && !isCancelled(plays, q.iid));
-}
+export { isCancelled };
 export function liveEffects(ctx: AttackCtx) {
   return ctx.plays.filter((p) => !isCancelled(ctx.plays, p.iid)).map((p) => ({ ...p.effect, by: p.player }));
 }
@@ -1558,7 +1740,8 @@ export function attackIllegal(s: GameState, ctx: AttackCtx): string | null {
   const att = ctx.attacker;
   if (ctx.instant) return null; // a Group's attack turned into an Instant attack (C.I.A.) keeps its own rules
   if (s.cards[att].zone !== 'structure' || s.cards[att].controller !== ctx.attackerPlayer) return null; // gone: the card that removed it decides
-  if (!['structure', 'hand', 'discard'].includes(s.cards[tgt].zone)) return null;
+  if (!['structure', 'hand', 'discard', 'uncontrolled'].includes(s.cards[tgt].zone)) return null;
+
   // Immunities and restrictions are judged as they would be for a fresh announcement (no attack under way).
   const saved = s.attack;
   s.attack = undefined;
@@ -1636,7 +1819,23 @@ function contributionPower(s: GameState, c: Contribution & { useGlobal?: boolean
   // target's defense value, so they are not counted again here (R028).
   const v = c.useGlobal ? globalPower(s, c.iid)
     : power(s, c.iid, c.selfDefense ? { defense: true, selfDefense: true, noDefenseAdds: true } : {});
-  return v + c.amount;
+  // The card launching the attack may multiply what a Group adds (Flesh-Eating Bacteria: the CDC triples).
+  const ctx = s.attack;
+  const h = ctx?.instantCard && s.cards[ctx.instantCard] ? PLOTS[s.cards[ctx.instantCard].cardId] : undefined;
+  const mul = ctx && h?.joinMultiplier ? h.joinMultiplier(s, ctx, c.iid) : 1;
+  return v * mul + c.amount;
+}
+
+/** The launching card's own rule on who may join its attack (Disasters that only some Groups may help against). */
+function plotJoin(s: GameState, ctx: AttackCtx, group: string, as: 'aid' | 'oppose'): boolean | undefined {
+  const card = ctx.instantCard && s.cards[ctx.instantCard];
+  return card ? PLOTS[card.cardId]?.joinRule?.(s, ctx, group, as) : undefined;
+}
+
+/** A Frozen Group may still spend its (held) token to defend itself (Assassins Freeze cards). */
+function selfDefenseTokens(s: GameState, group: string): number {
+  const c = s.cards[group];
+  return c.tokens + (frozen(s, group) && !paralyzedGroups(s).has(group) ? c.heldTokens ?? 0 : 0);
 }
 
 export interface StrengthBreakdown { attack: number; defense: number; strength: number; lines: string[] }
@@ -1735,7 +1934,8 @@ export function attackStrength(s: GameState, ctx: AttackCtx): StrengthBreakdown 
     }
   }
   // Position bonus (R006) — not when attacking your own Group, not from hand.
-  if (!ctx.fromHand && !ownTarget) {
+  // A Zap may take this bonus away from a whole Power Structure (Sorry, Wrong Number).
+  if (!ctx.fromHand && !ctx.fromArea && !ownTarget && !anyHook(s, (h, self) => !!h.noProximityBonus?.(s, self, tgt))) {
     const d = depth(s, tgt);
     add('d', d === 1 ? 10 : d === 2 ? 5 : 0, 'close to its Illuminati');
   }
@@ -2023,9 +2223,10 @@ function loseTree(s: GameState, child: string, layout: TreeLayout, overflow: 'di
     const c = s.cards[lost];
     c.tokens = 0;
     if (overflow === 'discard') { c.zone = 'hand'; discardCard(s, lost); }
+    else if (s.common) putUncontrolled(s, lost, handOf); // SubGenius rules: lost Groups go to the uncontrolled area
     else { c.zone = 'hand'; c.controller = undefined; player(s, handOf).hand.push(lost); }
   }
-  log(s, `${cardName(s, child)} does not fit and is ${overflow === 'discard' ? 'discarded' : 'returned to hand'}.`);
+  log(s, `${cardName(s, child)} does not fit and is ${overflow === 'discard' ? 'discarded' : s.common ? 'put in the uncontrolled area' : 'returned to hand'}.`);
 }
 
 /**
@@ -2099,8 +2300,9 @@ export function destroyGroup(s: GameState, iid: string, by: string) {
   for (const g of structureCards(s, by)) {
     for (const a of abilitiesOf(s, g)) if (a.kind === 'drawPlotOnDestroy' && (!a.match || matches(s, iid, a.match))) draws++;
   }
-  // Puppets go back to the hand of the destroyed Group's controller.
+  // Puppets go back to the hand of the destroyed Group's controller (SubGenius rules: to the uncontrolled area).
   for (const p of puppets(s, iid)) {
+    if (s.common) { for (const g of subtree(s, p)) putUncontrolled(s, g, prev); continue; }
     for (const g of subtree(s, p)) {
       const gc = s.cards[g];
       Object.assign(gc, { zone: 'hand', controller: undefined, master: undefined, x: undefined, y: undefined, tokens: 0 });
@@ -2124,7 +2326,19 @@ export function destroyGroup(s: GameState, iid: string, by: string) {
   noteLastPuppet(s, prev, by);
 }
 
+/**
+ * Kill a Personality: it is destroyed and marked `killed`. The rules treat "killed" and "assassinated"
+ * as the same thing (Rules FAQ); a successful Assassination kills its target automatically. Cards that
+ * bring back only killed Personalities, or that must never be killed, read isKilled().
+ */
+export function killPersonality(s: GameState, iid: string, by: string) {
+  if (def(s, iid).subtype === 'Personality') s.cards[iid].killed = true;
+  destroyGroup(s, iid, by);
+}
+export const isKilled = (s: GameState, iid: string) => !!s.cards[iid]?.killed;
+
 /** Remember who took a player's last Group (Fratricide credit, R049). */
+
 function noteLastPuppet(s: GameState, victim: string | undefined, by: string) {
   const v = victim ? s.players.find((x) => x.id === victim) : undefined;
   if (v && v.id !== by && puppets(s, v.illuminati).length === 0) {
@@ -2182,6 +2396,12 @@ export function checkPlot(s: GameState, playerId: string, play: PlotPlay, declar
   if (ctx && ctx.plays.some((p) => p.player === playerId && s.cards[p.iid]?.cardId === d.id && !isCancelled(ctx.plays, p.iid))) return `You already used ${d.name} in this attack.`;
   if (ctx?.barred?.includes(playerId)) return 'A card bars you from interfering in this attack.';
   if (ctx && isPrivileged(ctx) && !participants(s).includes(playerId) && !t.includes('roll') && d.id !== 'interference' && d.id !== 'deep-agent') return 'Only the two players involved may act in a Privileged attack.';
+  // "Requires ... Action": the declared cost must be paid by the Groups and discards the play names.
+  if (h.requires) {
+    if (play.march) return 'March on Washington cannot pay for this card.';
+    const why = costProblem(s, playerId, play, h.requires);
+    if (why) return why;
+  }
   if (play.march) return checkWithMarch(s, playerId, play, ctx);
   return h.check(s, playerId, play, ctx);
 }
@@ -2288,6 +2508,8 @@ export function playPlot(s: GameState, playerId: string, play: PlotPlay, declari
   removeFromHand(s, play.card);
   s.cards[play.card].zone = 'table';
   s.cards[play.card].controller = playerId;
+  // The engine pays a declared cost ("Requires ... Action") before the card does anything.
+  if (h.requires) payCost(s, play, discardCard);
   const pp: PlayedPlot = { iid: play.card, player: playerId, play, effect: { t: 'none' } };
   log(s, `${player(s, playerId).name} plays ${d.name}${play.target && s.cards[play.target] ? ` on ${cardName(s, play.target)}` : ''}.`, playerId);
   const ctx = s.attack;
@@ -2354,8 +2576,10 @@ export function canAid(s: GameState, playerId: string, group: string): { ok: boo
   if (c.zone !== 'structure' || c.controller !== playerId) return { ok: false, global: false, why: 'Not your Group.' };
   if (c.tokens < 1) return { ok: false, global: false, why: 'No Action token.' };
   if (group === ctx.attacker || group === ctx.target) return { ok: false, global: false, why: 'Already part of this attack.' };
-  if (ctx.instant && !anyHook(s, (h, self) => !!h.mayJoin?.(s, self, ctx, group, 'aid'))) return { ok: false, global: false, why: 'Groups cannot join an Instant attack unless a card allows it.' };
-  if (ctx.aidRule === 'defenderOnly') return { ok: false, global: false, why: 'Only the defender may be helped against this attack.' };
+  const byCard = plotJoin(s, ctx, group, 'aid');
+  if (byCard === false) return { ok: false, global: false, why: 'The card making this attack does not let this Group join.' };
+  if (ctx.instant && !byCard && !anyHook(s, (h, self) => !!h.mayJoin?.(s, self, ctx, group, 'aid'))) return { ok: false, global: false, why: 'Groups cannot join an Instant attack unless a card allows it.' };
+  if (ctx.aidRule === 'defenderOnly' && !byCard) return { ok: false, global: false, why: 'Only the defender may be helped against this attack.' };
   if (anyHook(s, (h, self) => !!h.forbidJoin?.(s, self, ctx, group, 'aid'))) return { ok: false, global: false, why: 'A card in play stops this Group joining.' };
   if ([...ctx.aid, ...ctx.oppose].some((x) => x.iid === group)) return { ok: false, global: false, why: 'Already used in this attack.' };
   if (!participants(s).includes(playerId)) return { ok: false, global: false, why: 'This attack is Privileged.' };
@@ -2365,7 +2589,7 @@ export function canAid(s: GameState, playerId: string, group: string): { ok: boo
   const al = alignments(s, group), ta = alignments(s, ctx.target);
   const qualifies = ctx.type === 'control' ? al.some((a) => a !== 'Fanatic' && ta.includes(a)) : al.some((a) => ta.some((b) => (a === 'Fanatic' && b === 'Fanatic') || (a !== b && ({ Government: 'Corporate', Corporate: 'Government', Liberal: 'Conservative', Conservative: 'Liberal', Peaceful: 'Violent', Violent: 'Peaceful', Straight: 'Weird', Weird: 'Straight' } as Record<string, string>)[a] === b)));
   // Cards that let a Group join regardless of alignment use its full Power.
-  if (anyHook(s, (h, self) => h.mayJoin?.(s, self, ctx, group, 'aid'))) return { ok: true, global: false };
+  if (byCard || anyHook(s, (h, self) => h.mayJoin?.(s, self, ctx, group, 'aid'))) return { ok: true, global: false };
   // Without a qualifying alignment a Group can only help with its Global Power (R029).
   if (!qualifies && globalPower(s, group) === 0) return { ok: false, global: true, why: 'No matching alignment and no Global Power.' };
   return { ok: true, global: !qualifies };
@@ -2376,8 +2600,10 @@ export function canOppose(s: GameState, playerId: string, group: string): { ok: 
   if (!ctx || s.window?.kind !== 'attack') return { ok: false, global: false, self: false, why: 'No attack in progress.' };
   const c = s.cards[group];
   if (c.zone !== 'structure' || c.controller !== playerId) return { ok: false, global: false, self: false, why: 'Not your Group.' };
-  if (c.tokens < 1) return { ok: false, global: false, self: false, why: 'No Action token.' };
-  if (ctx.instant && (group === ctx.target || !anyHook(s, (h, me) => !!h.mayJoin?.(s, me, ctx, group, 'oppose')))) return { ok: false, global: false, self: false, why: 'The target of an Instant attack cannot spend tokens.' };
+  if ((group === ctx.target ? selfDefenseTokens(s, group) : c.tokens) < 1) return { ok: false, global: false, self: false, why: 'No Action token.' };
+  const byCard = plotJoin(s, ctx, group, 'oppose');
+  if (byCard === false) return { ok: false, global: false, self: false, why: 'The card making this attack does not let this Group join.' };
+  if (ctx.instant && (group === ctx.target || (!byCard && !anyHook(s, (h, me) => !!h.mayJoin?.(s, me, ctx, group, 'oppose'))))) return { ok: false, global: false, self: false, why: 'The target of an Instant attack cannot spend tokens.' };
   if (anyHook(s, (h, me) => !!h.forbidJoin?.(s, me, ctx, group, 'oppose'))) return { ok: false, global: false, self: false, why: 'A card in play stops this Group joining.' };
   if (group === ctx.attacker) return { ok: false, global: false, self: false, why: 'The attacker cannot oppose.' };
   if (ctx.aid.some((x) => x.iid === group)) return { ok: false, global: false, self: false, why: 'Already aiding.' };
@@ -2389,7 +2615,7 @@ export function canOppose(s: GameState, playerId: string, group: string): { ok: 
   const tc = s.cards[ctx.target];
   const related = self || tc.master === group || c.master === ctx.target;
   const shares = alignments(s, group).some((a) => a !== 'Fanatic' && alignments(s, ctx.target).includes(a));
-  if (!(related || shares) && anyHook(s, (h, me) => h.mayJoin?.(s, me, ctx, group, 'oppose'))) return { ok: true, global: false, self };
+  if (!(related || shares) && (byCard || anyHook(s, (h, me) => h.mayJoin?.(s, me, ctx, group, 'oppose')))) return { ok: true, global: false, self };
   if (!(related || shares) && globalPower(s, group) === 0) return { ok: false, global: true, self, why: 'No matching alignment and no Global Power.' };
   return { ok: true, global: !(related || shares), self };
 }
@@ -2472,6 +2698,14 @@ export function applyAction(state: GameState, playerId: string, action: Action):
 
     case 'resign':
       resign(s, p);
+      break;
+
+    case 'removeZaps':
+      removeZaps(s, p, action.player);
+      break;
+
+    case 'freeGroup':
+      freeGroup(s, p, action.group, action.payWith);
       break;
 
     case 'removeToken': {
@@ -2621,6 +2855,8 @@ export function applyAction(state: GameState, playerId: string, action: Action):
       if (dest.controller !== playerId || subtree(s, action.group).includes(action.onto)) throw new RuleError('Choose an arrow elsewhere in your own Power Structure.');
       const ignore = new Set(subtree(s, action.group));
       if (!openArrows(s, action.onto, ignore).includes(action.side)) throw new RuleError('That arrow is not open.');
+      if (paralyzedGroups(s).has(action.onto)) throw new RuleError(`${cardName(s, action.onto)} is Paralyzed and cannot get new puppets.`);
+
       const payers = [action.group, g.master, action.onto, p.illuminati];
       if (!free && (!action.payWith || !payers.includes(action.payWith) || s.cards[action.payWith].tokens < 1)) throw new RuleError('Pay with a token from the Group, its old or new master, or your Illuminati.');
       if (!free) s.cards[action.payWith!].tokens--;
@@ -2640,7 +2876,7 @@ export function applyAction(state: GameState, playerId: string, action: Action):
         const c = inst(s, g);
         if (c.controller !== playerId || c.zone !== 'structure' || c.tokens < 1) throw new RuleError('Those Groups cannot pay.');
       }
-      if (!p.plotDeck.length) throw new RuleError('Your Plot deck is empty.');
+      if (!plotDeckOf(s, p.id).length && !s.common?.plotDiscard.length) throw new RuleError('Your Plot deck is empty.');
       if (s.turnFlags.noPlotDraws?.includes(playerId)) throw new RuleError('You cannot draw Plot cards this turn.');
       if (s.turnFlags.extraTurn && activePlayer(s).id === playerId) throw new RuleError('No cards may be drawn during an extra turn.');
       for (const g of action.payWith) s.cards[g].tokens--;
@@ -2650,6 +2886,7 @@ export function applyAction(state: GameState, playerId: string, action: Action):
     }
 
     case 'drawGroup': {
+      if (s.common) { buyGroup(s, p, action.payWith ?? [p.illuminati]); break; }
       if (s.phase !== 'main' || activePlayer(s).id !== playerId || s.window || s.attack) throw new RuleError('Only in your own main phase.');
       if (s.turnFlags.illumGroupDraw) throw new RuleError('You can only do this once per turn.');
       if (s.turnFlags.extraTurn) throw new RuleError('No cards may be drawn during an extra turn.');
@@ -2724,7 +2961,10 @@ export function applyAction(state: GameState, playerId: string, action: Action):
       const r = action.type === 'aid' ? canAid(s, playerId, action.group) : canOppose(s, playerId, action.group);
       if (!r.ok) throw new RuleError(r.why ?? 'Not allowed.');
       const ctx = s.attack!;
-      s.cards[action.group].tokens--;
+      // A Frozen Group defending itself spends the token it holds back (Assassins Freeze).
+      if (s.cards[action.group].tokens < 1 && s.cards[action.group].heldTokens) s.cards[action.group].heldTokens!--;
+      else s.cards[action.group].tokens--;
+
       const c: Contribution & { useGlobal?: boolean; selfDefense?: boolean } = {
         player: playerId, iid: action.group, amount: 0, label: cardName(s, action.group),
         useGlobal: r.global, selfDefense: 'self' in r && r.self === true,
@@ -2754,6 +2994,8 @@ export function applyAction(state: GameState, playerId: string, action: Action):
       break;
 
     case 'discard': {
+      // SubGenius rules: discards always go to the shared discard pile, never back into the deck.
+      if (action.toDeck && s.common) throw new RuleError('In the SubGenius game discarded cards go to the discard pile, not back into the deck.');
       if (s.prompt?.kind === 'discardToLimit' && s.prompt.player === playerId) {
         const plots = plotsInHand(s, playerId);
         if (!action.cards.every((c) => plots.includes(c))) throw new RuleError('Discard Plot cards from your hand.');
@@ -2794,6 +3036,7 @@ export function applyAction(state: GameState, playerId: string, action: Action):
   // Plots that cannot be exposed (hidden beneath a card) are never left face up.
   for (const c of Object.values(s.cards)) if (c.exposed && c.zone === 'hand' && !canExpose(s, c.iid)) c.exposed = false;
   syncHiddenResources(s);
+  syncConditions(s);
   tidyDeals(s);
   tidyPledges(s);
   s.version++;
@@ -2828,8 +3071,15 @@ function startPlayResource(s: GameState, playerId: string, card: string, decided
   if (s.phase !== 'main' || activePlayer(s).id !== playerId || s.window || s.attack) throw new RuleError('Only in your own main phase.');
   if (s.turnFlags.restricted) throw new RuleError('This turn you may only draw cards and place Action tokens.');
   if (s.turnFlags.resourcePlayed) throw new RuleError('You can only play one Resource this way per turn.');
-  if (!p.hand.includes(card) || def(s, card).type !== 'Resource') throw new RuleError('Choose a Resource in your hand.');
+  // SubGenius rules: a Resource is taken from the uncontrolled area (one per turn, for one Slack).
+  const from = s.common ? s.common.uncontrolled : p.hand;
+  if (!from.includes(card) || def(s, card).type !== 'Resource') throw new RuleError(s.common ? 'Choose a Resource in the uncontrolled area.' : 'Choose a Resource in your hand.');
   if (!canEnterPlay(s, card, playerId)) throw new RuleError('That Resource is Unique and already in play or destroyed.');
+  // A Zap may forbid taking over Resources (Lab Explosion).
+  for (const self of activeHookCards(s)) {
+    const why = HOOKS[s.cards[self].cardId].forbidAttack?.(s, self, undefined, card, 'takeover', playerId);
+    if (why) throw new RuleError(why);
+  }
   if (s.cards[p.illuminati].tokens < 1) throw new RuleError('Your Illuminati needs an Action token.');
   // A rival's hidden copy must be shown (the play fails before anything is paid) or given up.
   const rival = decided ? undefined : hiddenUniqueCopy(s, card, playerId);
@@ -3018,4 +3268,151 @@ export function startInstantAttack(s: GameState, playerId: string, opts: {
   openWindow(s, 'attack');
 }
 
+// ---------------------------------------------------------------- Zaps, Paralysis and Freezes (Assassins)
+//
+// Zap: a Plot left on the table linked to the victim's Illuminati. Its hooks restrict that player's
+//   whole Power Structure until it is removed (Assassins FAQ). Any player may spend an Illuminati action
+//   at any time (but not during an Instant attack, Rules FAQ) to remove every Zap from one player.
+// Paralysis: a Plot linked to a Group. The Group cannot spend Action tokens, use its special ability or
+//   its linked Resources, or get new puppets, and does not count toward Goals. Its master (paid by its
+//   controller) or any Illuminati may spend an action to free it, at any time, victory claims included.
+// Freeze: until the end of the turn, Groups with an attribute (or alignment) may spend no Action tokens
+//   except to defend themselves.
+// Tokens a Paralyzed or Frozen card cannot spend are held back (`heldTokens`) by syncConditions, which
+// runs after every action; they return when the card is free.
+
+/** The Zaps (live Zap Plots) on this player. */
+export function zapsOn(s: GameState, playerId: string): string[] {
+  const ill = s.players.find((p) => p.id === playerId)?.illuminati;
+  return Object.values(s.cards).filter((c) => c.zone === 'table' && !!ill && c.linkedTo === ill && PLOTS[c.cardId]?.condition === 'zap' && linkedPlotLive(s, c.iid)).map((c) => c.iid);
+}
+
+/** The player a Zap restricts (the owner of the Illuminati it is linked to), or undefined when it has no effect. */
+export function zappedPlayer(s: GameState, zap: string): string | undefined {
+  const c = s.cards[zap];
+  if (!c || !linkedPlotLive(s, zap)) return undefined;
+  return s.cards[c.linkedTo!]?.controller;
+}
+
+export const isParalyzed = (s: GameState, iid: string) => paralyzedGroups(s).has(iid);
+
+/** The Paralysis Plots holding this Group, oldest first. */
+export function paralysesOn(s: GameState, iid: string): string[] {
+  return Object.values(s.cards).filter((c) => c.zone === 'table' && c.linkedTo === iid && PLOTS[c.cardId]?.condition === 'paralysis').map((c) => c.iid);
+}
+
+/** Is this card Frozen this turn (Attribute Freeze)? */
+export function frozen(s: GameState, iid: string): boolean {
+  const c = s.cards[iid];
+  if (!s.freezes?.length || !c) return false;
+  return s.freezes.some((f) => f.turn === s.turn && !(c.controller && f.exempt?.includes(c.controller)) && !(s.attack && s.attack.plays.some((p) => p.iid === f.card) && isCancelled(s.attack.plays, f.card))
+    && ((c.zone === 'structure' && def(s, iid).type === 'Group' && (Array.isArray(f.match) ? f.match : [f.match]).some((m) => matches(s, iid, m))) || (c.zone === 'resources' && !!f.resources?.includes(c.cardId))));
+}
+
+/** Put an Attribute Freeze in effect until the end of this turn. */
+export function addFreeze(s: GameState, f: Omit<Freeze, 'turn'>) {
+  (s.freezes ??= []).push({ ...f, turn: s.turn });
+  log(s, `${f.label} Groups are Frozen until the end of the turn: they may spend Action tokens only to defend themselves.`, f.player);
+  syncConditions(s);
+}
+
+/** May this card spend an Action token now (not Paralyzed, not Frozen)? */
+export const canSpendTokens = (s: GameState, iid: string) => !isParalyzed(s, iid) && !frozen(s, iid);
+
+/**
+ * After every action: expired Freezes go, links that became illegal are switched off or discarded
+ * (PlotHandler.linkLegal, SubGenius link rules), and tokens are held back or returned.
+ */
+export function syncConditions(s: GameState) {
+  if (s.freezes) { s.freezes = s.freezes.filter((f) => f.turn === s.turn); if (!s.freezes.length) s.freezes = undefined; }
+  for (const c of Object.values(s.cards)) {
+    if (c.zone !== 'table' || !c.linkedTo) continue;
+    const h = PLOTS[c.cardId];
+    if (!h?.linkLegal) continue;
+    const target = s.cards[c.linkedTo];
+    const v = target ? h.linkLegal(s, c.iid, c.linkedTo) : 'discard';
+    if (v === 'discard') { log(s, `${cardName(s, c.iid)} no longer applies to ${target ? cardName(s, c.linkedTo) : 'its card'} and is discarded.`); discardCard(s, c.iid); continue; }
+    const off = v === 'inactive';
+    if (off !== !!c.data?.linkInactive) c.data = { ...c.data, linkInactive: off || undefined };
+  }
+  const para = paralyzedGroups(s);
+  for (const c of Object.values(s.cards)) {
+    if (c.zone !== 'structure' && c.zone !== 'resources') { if (c.heldTokens) c.heldTokens = undefined; continue; }
+    const held = para.has(c.iid) || frozen(s, c.iid);
+    if (held && c.tokens > 0) { c.heldTokens = (c.heldTokens ?? 0) + c.tokens; c.tokens = 0; }
+    else if (!held && c.heldTokens) { c.tokens += c.heldTokens; c.heldTokens = undefined; }
+    if (c.heldTokens === 0) c.heldTokens = undefined;
+  }
+}
+
+/**
+ * Remove every Zap, Paralysis and Freeze affecting this player's Power Structure (Enough is Enough).
+ * Returns how many conditions were removed.
+ */
+export function clearConditions(s: GameState, playerId: string): number {
+  let n = 0;
+  for (const z of zapsOn(s, playerId)) { discardCard(s, z); n++; }
+  for (const g of structureCards(s, playerId)) for (const pz of paralysesOn(s, g)) { discardCard(s, pz); n++; }
+  for (const f of s.freezes ?? []) if (!f.exempt?.includes(playerId)) { f.exempt = [...(f.exempt ?? []), playerId]; n++; }
+  syncConditions(s);
+  return n;
+}
+
+/** Can this player act "at any time" right now (his own main phase, or a window waiting for him)? */
+function anyTime(s: GameState, playerId: string): boolean {
+  if (s.prompt) return s.prompt.player === playerId;
+  if (s.window) return waitingFor(s).includes(playerId);
+  return s.phase === 'main' && activePlayer(s).id === playerId && !s.attack;
+}
+
+function removeZaps(s: GameState, p: PlayerState, target: string) {
+  if (!anyTime(s, p.id)) throw new RuleError('You can remove Zaps whenever you may act, but not right now.');
+  if (s.attack?.instant) throw new RuleError('Zaps cannot be removed during an Instant attack.');
+  const victim = s.players.find((x) => x.id === target && !x.eliminated);
+  if (!victim) throw new RuleError('Choose a player still in the game.');
+  const zaps = zapsOn(s, victim.id);
+  if (!zaps.length) throw new RuleError(`${victim.name} is not Zapped.`);
+  const ill = s.cards[p.illuminati];
+  if (ill.tokens < 1) throw new RuleError('Removing Zaps costs an action of your Illuminati.');
+  ill.tokens--;
+  for (const z of zaps) discardCard(s, z);
+  log(s, `${p.name} spends an Illuminati action to remove every Zap from ${victim.id === p.id ? 'their own Power Structure' : victim.name} (${zaps.map((z) => cardName(s, z)).join(', ')}).`, p.id);
+  if (s.window) s.window.passed = s.window.kind === 'plot' ? [p.id] : [];
+}
+
+function freeGroup(s: GameState, p: PlayerState, group: string, payWith: string) {
+  if (!anyTime(s, p.id)) throw new RuleError('You can free a Paralyzed Group whenever you may act, but not right now.');
+  const g = s.cards[group];
+  const holds = g ? paralysesOn(s, group) : [];
+  if (!holds.length) throw new RuleError('That Group is not Paralyzed.');
+  const payer = s.cards[payWith];
+  if (!payer || payer.zone !== 'structure' || payer.controller !== p.id) throw new RuleError('Pay with a card of your own.');
+  const isMaster = g.master === payWith;
+  if (!isMaster && def(s, payWith).type !== 'Illuminati') throw new RuleError('Only the Group\'s master or an Illuminati can free it.');
+  if (payer.tokens < 1) throw new RuleError(`${cardName(s, payWith)} has no Action token.`);
+  payer.tokens--;
+  discardCard(s, holds[0]);
+  log(s, `${p.name} spends the action of ${cardName(s, payWith)} to free ${cardName(s, group)} from ${cardName(s, holds[0])}.`, p.id);
+  syncConditions(s);
+  if (s.window) s.window.passed = s.window.kind === 'plot' ? [p.id] : [];
+}
+
+/** SubGenius rules: spend 1 Illuminati token or 2 tokens of other Groups to draw a Group into the uncontrolled area, at any time. */
+function buyGroup(s: GameState, p: PlayerState, payWith: string[]) {
+  if (!anyTime(s, p.id)) throw new RuleError('You can buy a Group card whenever you may act, but not right now.');
+  const ill = payWith.length === 1 && payWith[0] === p.illuminati;
+  const two = payWith.length === 2 && payWith.every((g) => g !== p.illuminati) && payWith[0] !== payWith[1];
+  if (!ill && !two) throw new RuleError('Buying a Group card costs 1 Illuminati token or tokens from 2 different other Groups.');
+  for (const g of payWith) {
+    const c = inst(s, g);
+    if (c.controller !== p.id || c.zone !== 'structure' || c.tokens < 1) throw new RuleError('Those Groups cannot pay.');
+  }
+  if (!s.common!.groupDeck.length && !s.common!.groupDiscard.length) throw new RuleError('The Group deck is empty.');
+  if (s.turnFlags.extraTurn && activePlayer(s).id === p.id) throw new RuleError('No cards may be drawn during an extra turn.');
+  for (const g of payWith) s.cards[g].tokens--;
+  const got = drawGroup(s, p);
+  log(s, `${p.name} buys a Group card: ${got.map((c) => cardName(s, c)).join(', ') || 'nothing'} goes to the uncontrolled area.`, p.id);
+}
+
 export { OPPOSITE_SIDE, occupied };
+

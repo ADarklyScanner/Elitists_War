@@ -25,6 +25,12 @@ export function checkInvariants(s: GameState) {
     p.groupDeck.forEach((i) => note(i, `${p.id} groupDeck`));
     p.discard.forEach((i) => note(i, `${p.id} discard`));
   }
+  // SubGenius rules: the shared piles and the uncontrolled area.
+  if (s.common) for (const [k, pile] of Object.entries(s.common) as [string, string[]][]) pile.forEach((i) => note(i, `common ${k}`));
+  for (const c of Object.values(s.cards)) {
+    if (c.zone === 'uncontrolled' && !s.common?.uncontrolled.includes(c.iid)) throw new Error(`${c.iid} zone uncontrolled but not in the area`);
+    if (c.heldTokens !== undefined && c.heldTokens < 0) throw new Error(`${c.iid} has negative held tokens`);
+  }
   const placed: { iid: string; controller: string; r: ReturnType<typeof rectOf> }[] = [];
   for (const c of Object.values(s.cards)) {
     if (c.tokens < 0) throw new Error(`${c.iid} has negative tokens`);

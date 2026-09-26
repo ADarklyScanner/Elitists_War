@@ -122,7 +122,9 @@ const destroyedCopy = (s: GameState, iid: string, killedOnly: boolean) =>
  * The Weak Link) and Computer Security itself. Plots merely aimed at a Computer Group are caught
  * separately. tests/content/plots3.test.ts keeps this list in step with cards.json.
  */
-export const COMPUTER_PLOTS = new Set(['computer-virus', 'infobahn', 'gremlins', 'the-internet-worm', 'the-auditor-from-hell', 'the-weak-link', 'computer-security']);
+export const COMPUTER_PLOTS = new Set(['computer-virus', 'infobahn', 'gremlins', 'the-internet-worm', 'the-auditor-from-hell', 'the-weak-link', 'computer-security',
+  // Assassins pack
+  'bar-codes', 'floating-point-error']);
 /** Plots that look at a rival's hidden Plots (Double-Cross). */
 const SPY_PLOTS = new Set(['agent-in-place', 'george-the-janitor', 'logic-bomb', 'mutual-betrayal', 'the-auditor-from-hell']);
 

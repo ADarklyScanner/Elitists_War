@@ -1,6 +1,6 @@
 // The card library: every card in the game, searchable and filterable, with its full face.
 // Like the rulebook reader it lives in its own element on <body>, so a game can keep running underneath.
-import { ALL_CARDS } from '../engine/cards';
+import { ALL_CARDS, cardSet } from '../engine/cards';
 import type { CardDef, Side } from '../engine/types';
 import { cardFace } from './cardFace';
 
@@ -24,6 +24,9 @@ const KINDS: { id: string; label: string; test: (d: CardDef) => boolean }[] = [
   { id: 'hit', label: 'Disasters & Assassinations', test: (d) => d.subtype === 'Disaster' || d.subtype === 'Assassination' },
 ];
 const kindOf = (d: CardDef) => KINDS.slice(1).find((k) => k.test(d))!;
+/** Which box a card comes from: the base game or an expansion pack. */
+const SETS = ['all', 'Base', 'Assassins', 'SubGenius'] as const;
+const setLabel = (id: string) => (id === 'all' ? 'All sets' : id);
 const kindLabel = (d: CardDef) =>
   d.type === 'Group' ? (d.subtype === 'Promo' ? 'Group' : d.subtype) : d.subtype === 'NWO' ? 'New World Order' : d.subtype === 'Plot' ? 'Plot' : d.subtype || d.type;
 
@@ -31,9 +34,9 @@ const ALIGNS = [...new Set(ALL_CARDS.flatMap((d) => d.alignments ?? []))].sort()
 const ATTRS = [...new Set(ALL_CARDS.flatMap((d) => d.attributes ?? []))].sort();
 const CARDS = [...ALL_CARDS].sort((a, b) => a.name.localeCompare(b.name));
 
-interface View { q: string; kind: string; align: string; attr: string; sort: 'name' | 'power' | 'resistance' }
+interface View { q: string; kind: string; set: string; align: string; attr: string; sort: 'name' | 'power' | 'resistance' }
 const KEY = 'elitists-war.library';
-let view: View = { q: '', kind: 'all', align: '', attr: '', sort: 'name' };
+let view: View = { q: '', kind: 'all', set: 'all', align: '', attr: '', sort: 'name' };
 try { Object.assign(view, JSON.parse(localStorage.getItem(KEY) || '{}'), { q: '' }); } catch { /* storage unavailable: defaults */ }
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify({ ...view, q: '' })); } catch { /* ignore */ } };
 
@@ -42,6 +45,7 @@ let open: string | undefined;
 
 function matches(d: CardDef): boolean {
   if (!KINDS.find((k) => k.id === view.kind)!.test(d)) return false;
+  if (view.set !== 'all' && cardSet(d) !== view.set) return false;
   if (view.align && !(d.alignments ?? []).includes(view.align)) return false;
   if (view.attr && !(d.attributes ?? []).includes(view.attr)) return false;
   const q = view.q.trim().toLowerCase();
@@ -74,7 +78,7 @@ function tile(d: CardDef): string {
   const k = kindOf(d).id;
   return `<button class="cl-card k-${k}${ART.has(d.id) ? ` has-art art-${d.id}` : ''}" data-cl-open="${d.id}" aria-label="${esc(d.name)}, ${esc(kindLabel(d))}">
     ${arrows(d)}
-    <span class="cl-kind">${esc(kindLabel(d))}</span>
+    <span class="cl-kind">${esc(kindLabel(d))}${cardSet(d) !== 'Base' ? ` · ${esc(cardSet(d))}` : ''}</span>
     <b class="cl-name">${esc(d.name)}</b>
     ${d.alignments?.length ? `<span class="cl-al">${d.alignments.map(esc).join(' · ')}</span>` : ''}
     ${d.type !== 'Group' && d.type !== 'Illuminati' ? `<span class="cl-snip">${esc(cardFace(d.id)?.rules || d.text)}</span>` : ''}
@@ -104,7 +108,7 @@ function detailHtml(d: CardDef): string {
     <div class="cl-detail">
       <div class="cl-big">${ART.has(d.id) ? `<div class="cl-art art-${d.id}" role="img" aria-label="${esc(d.name)}"></div>` : tile(d).replace('<button', '<div').replace('</button>', '</div>').replace(/ data-cl-open="[^"]*"/, '')}</div>
       <div class="cl-info">
-        <div class="cl-kicker">${esc(kindLabel(d))}${d.rarity && !/fixed/i.test(d.rarity) ? ` · ${esc(d.rarity)}` : ''}</div>
+        <div class="cl-kicker">${esc(kindLabel(d))}${d.rarity && !/fixed/i.test(d.rarity) ? ` · ${esc(d.rarity)}` : ''}${cardSet(d) !== 'Base' ? ` · ${esc(cardSet(d))} pack` : ''}</div>
         <h2>${esc(d.name)}</h2>
         ${f?.rules ? `<p class="face-rules">${esc(f.rules)}</p>` : isGroup ? '<p class="face-rules muted">No special ability: its numbers say it all.</p>' : ''}
         ${f?.goal ? `<p class="face-goal"><b>Special Goal:</b> ${esc(f.goal.replace(/^Special Goal:\s*/i, ''))}</p>` : ''}
@@ -133,6 +137,7 @@ function shell(): string {
     <div class="cl-wrap">
       <div class="cl-filters">
         <div class="cl-chips" role="group" aria-label="Card kind">${KINDS.map(chip).join('')}</div>
+        <div class="cl-chips cl-sets" role="group" aria-label="Card set">${SETS.map((id) => `<button class="cl-chip ${view.set === id ? 'on' : ''}" data-cl-set="${id}">${esc(setLabel(id))}</button>`).join('')}</div>
         <div class="cl-selects">
           <label>Alignment <select id="cl-align"><option value="">Any</option>${ALIGNS.map((a) => opt(a, view.align)).join('')}</select></label>
           <label>Attribute <select id="cl-attr"><option value="">Any</option>${ATTRS.map((a) => opt(a, view.attr)).join('')}</select></label>
@@ -150,6 +155,7 @@ function refresh() {
   root.querySelector('.cl-grid')!.innerHTML = listHtml();
   root.querySelector('.cl-count')!.textContent = `${shown.length} of ${CARDS.length} cards`;
   root.querySelectorAll<HTMLElement>('[data-cl-kind]').forEach((b) => b.classList.toggle('on', b.dataset.clKind === view.kind));
+  root.querySelectorAll<HTMLElement>('[data-cl-set]').forEach((b) => b.classList.toggle('on', b.dataset.clSet === view.set));
 }
 
 function showCard(id?: string) {
@@ -185,9 +191,11 @@ export function openLibrary(cardId?: string) {
     };
     sel('#cl-align', 'align'); sel('#cl-attr', 'attr'); sel('#cl-sort', 'sort');
     root.addEventListener('click', (e) => {
-      const el = (e.target as HTMLElement).closest<HTMLElement>('[data-cl-kind],[data-cl-open],[data-cl-close],[data-cl-shut]');
+      const el = (e.target as HTMLElement).closest<HTMLElement>('[data-cl-kind],[data-cl-set],[data-cl-open],[data-cl-close],[data-cl-shut]');
       if (!el) return;
       if (el.dataset.clKind) { view.kind = el.dataset.clKind; save(); refresh(); }
+      else if (el.dataset.clSet) { view.set = el.dataset.clSet; save(); refresh(); }
+
       else if (el.dataset.clOpen !== undefined) { if (el.dataset.clOpen) showCard(el.dataset.clOpen); }
       else if (el.hasAttribute('data-cl-close')) closeLibrary();
       else showCard();

@@ -8,6 +8,9 @@ import { alignments, attributes, power } from './stats';
 import { PLOTS } from './plotTypes';
 import { HOOKS } from './hooks';
 import { announcedAction, announcedActors, checkAbility, declareOptions, disasterTarget, resourcesOf, MARCH_ON_WASHINGTON } from './game';
+import { costPlays } from './costs';
+import { plotDeckOf, uncontrolledCards } from './expansions';
+
 
 const ALIGNMENTS: Alignment[] = ['Government', 'Corporate', 'Liberal', 'Conservative', 'Peaceful', 'Violent', 'Straight', 'Weird', 'Criminal', 'Fanatic'];
 
@@ -67,6 +70,17 @@ export function plotOptions(s: GameState, pl: string, card: string, declaring?: 
   }
   const out: MoveOption[] = [];
   for (const targetList of targetSets) for (const target of targets) {
+    // A declared cost ("Requires ... Action", costs.ts): one play per way to pay it.
+    if (h.requires) {
+      for (const mode of modes) for (const alignment of aligns) for (const helper of helpers) {
+        for (const play of costPlays(s, pl, { card, target, mode, alignment, helper, targets: targetList }, h.requires)) {
+          if (declaring ? checkDeclaring(s, pl, play, declaring) : checkPlot(s, pl, play)) continue;
+          out.push({ label: describePlay(s, play), action: { type: 'playPlot', play } });
+          break;
+        }
+      }
+      continue;
+    }
     const pays: (string[] | undefined)[] = needs.pay === 'tokens' ? payCandidates(s, pl, target) : [undefined];
     // Sweeping Reforms may also be paid with other players' Media Groups (they are asked to agree).
     if (d.id === 'sweeping-reforms') pays.push(sharedMediaPayers(s, pl));
@@ -94,10 +108,18 @@ export function plotOptions(s: GameState, pl: string, card: string, declaring?: 
   return out;
 }
 
+/** checkPlot for a Plot declared together with an attack that has not been made yet. */
+function checkDeclaring(s: GameState, pl: string, play: PlotPlay, declaring: Extract<Action, { type: 'attack' }>): string | null {
+  const probe = structuredClone(s);
+  const t = probe.cards[declaring.target];
+  probe.attack = { id: -1, type: declaring.attackType, instant: false, attacker: declaring.attacker, attackerPlayer: pl, target: declaring.target, targetPlayer: t.zone === 'structure' ? t.controller : undefined, fromHand: t.zone === 'hand', privileged: false, aid: [], oppose: [], attackBonus: [], defenseBonus: [], plays: [] };
+  return checkPlot(probe, pl, play, true);
+}
+
 /** A March on Washington in hand that could stand in for an action of another Plot. */
 function marchCard(s: GameState, pl: string, card: string): string | undefined {
   const me = player(s, pl);
-  if (s.cards[card].cardId === MARCH_ON_WASHINGTON || s.cards[me.illuminati].data?.marchTurn === s.turn || !me.plotDeck.length) return undefined;
+  if (s.cards[card].cardId === MARCH_ON_WASHINGTON || s.cards[me.illuminati].data?.marchTurn === s.turn || !plotDeckOf(s, pl).length) return undefined;
   return me.hand.find((c) => c !== card && s.cards[c].cardId === MARCH_ON_WASHINGTON);
 }
 
@@ -119,7 +141,8 @@ export function targetPool(s: GameState, pl: string, kind: string, exclude?: str
     case 'nwo': out = Object.values(s.nwo).filter((x): x is string => !!x); break;
     case 'rival': out = rivals.map((p) => p.illuminati); break;
     case 'rivalHand': out = rivals.flatMap((p) => p.hand); break;
-    default: out = cards.filter((c) => c.zone === 'structure' && def(s, c.iid).type === 'Group').map((c) => c.iid);
+    // Groups in play: in Power Structures, and (SubGenius rules) in the uncontrolled area.
+    default: out = cards.filter((c) => (c.zone === 'structure' || c.zone === 'uncontrolled') && def(s, c.iid).type === 'Group').map((c) => c.iid);
   }
   return out.filter((x) => x !== exclude);
 }
@@ -155,6 +178,7 @@ export function attackOptions(s: GameState, pl: string, attacker: string): { tar
   const candidates = [
     ...Object.values(s.cards).filter((c) => c.zone === 'structure' && def(s, c.iid).type === 'Group').map((c) => c.iid),
     ...player(s, pl).hand.filter((h) => def(s, h).type === 'Group'),
+    ...uncontrolledCards(s).filter((h) => def(s, h).type === 'Group'),
   ];
   for (const target of candidates) {
     for (const type of ['control', 'destroy'] as const) {

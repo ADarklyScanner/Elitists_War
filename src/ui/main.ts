@@ -10,6 +10,7 @@ import {
   declareOptions, victoryReminder,
   type Deal, type DealGroup, type DealSide, dealText, dealsAllowed, offersTo, offersFrom, I_LIED, MAX_NOTE, sideEmpty,
   legal, canExpose, specialGoalProgress, agentProblem, agentsOf, reliefPledgesFor, type PlaceCapturedData,
+  PACKS, packSelectable, enabledSets, illuminatiFor, CHURCH, plotDeckOf, groupDeckOf, uncontrolledCards, type GameSettings,
 } from '../engine';
 import { attachRect, rectOf, ensureLayout, type Rect } from '../engine/geometry';
 import { applyDealAnswer, chooseAction, computerDealAnswer, successChance } from '../ai/ai';
@@ -421,20 +422,51 @@ function botsForGame(seed: number, min: number, maxBots: number): BotSpec[] {
   return bots.length >= min ? bots : [...bots, ...resolveLineup(presetRandoms(emptyLineup(), min - bots.length, 'standard'), seed + 1)];
 }
 
+// ---- Expansion packs: offered only once every card of a pack is implemented (EXPANSIONS_READY).
+interface PackChoice { assassins?: boolean; subgenius?: boolean; sgGame?: boolean }
+const packChoice = (): PackChoice => (ui as Ui & { packs?: PackChoice }).packs ?? {};
+/** The game settings for the packs chosen (only packs players may choose yet). */
+function packSettings(): Partial<GameSettings> {
+  const c = packChoice();
+  const assassins = !!c.assassins && packSelectable('assassins');
+  const subgenius = !!(c.subgenius || c.sgGame) && packSelectable('subgenius');
+  if (!assassins && !subgenius) return {};
+  return { expansions: { assassins, subgenius }, ...(c.sgGame && subgenius ? { subgeniusRules: true } : {}) };
+}
+function packsHtml(): string {
+  const packs = PACKS.filter((p) => packSelectable(p.id));
+  if (!packs.length) return '';
+  const c = packChoice();
+  const box = (id: keyof PackChoice, label: string) => `<label class="toggle"><input type="checkbox" data-pack="${id}" ${c[id] ? 'checked' : ''}> ${label}</label>`;
+  return `<section class="panel start-panel"><div class="label">Expansion packs</div><div class="row">
+    ${packs.map((p) => box(p.id, `${p.name} cards`)).join('')}
+    ${packSelectable('subgenius') ? box('sgGame', 'The SubGenius game: everyone plays the Church of the SubGenius, with shared decks and an uncontrolled area') : ''}
+  </div></section>`;
+}
+function bindPacks(rerender: () => void) {
+  app.querySelectorAll<HTMLInputElement>('[data-pack]').forEach((b) => b.onchange = () => {
+    (ui as Ui & { packs?: PackChoice }).packs = { ...packChoice(), [b.dataset.pack!]: b.checked };
+    rerender();
+  });
+}
+
 function newGame(illuminati: string, quick: boolean, basicGoal?: number) {
   const seed = Math.floor(Math.random() * 1e9);
   const bots = botsForGame(seed, 1, 7);
+  const packs = packSettings();
+  const sets = enabledSets(packs);
   // Each computer plays on an Illuminati that suits its style, when one is free.
-  const others = ILLUMINATI.filter((c) => c.id !== illuminati).map((c) => c.id);
+  const others = illuminatiFor(packs).filter((c) => c.id !== illuminati).map((c) => c.id);
   for (let i = others.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [others[i], others[j]] = [others[j], others[i]]; }
-  const ills = assignIlluminati(bots, [illuminati], others);
+  // The SubGenius game: every player is a faction of the Church.
+  const ills = packs.subgeniusRules ? bots.map(() => CHURCH) : assignIlluminati(bots, [illuminati], others);
   const s = createGame({
     seed,
     players: [
-      { id: 'p1', name: 'You', isAI: false, deck: randomDeck(seed, illuminati) },
-      ...bots.map((b, i) => ({ id: `p${i + 2}`, name: b.name, isAI: true, aiLevel: b.level, aiStyle: b.style, aiStyleData: b.data, deck: randomDeck(seed + i + 1, ills[i]) })),
+      { id: 'p1', name: 'You', isAI: false, deck: randomDeck(seed, packs.subgeniusRules ? CHURCH : illuminati, { sets }) },
+      ...bots.map((b, i) => ({ id: `p${i + 2}`, name: b.name, isAI: true, aiLevel: b.level, aiStyle: b.style, aiStyleData: b.data, deck: randomDeck(seed + i + 1, ills[i], { sets }) })),
     ],
-    settings: { houseRules: quick ? ['quickGame'] : [], victoryReminder: ui.help !== 'off', ...(basicGoal ? { basicGoal } : {}) },
+    settings: { houseRules: quick ? ['quickGame'] : [], victoryReminder: ui.help !== 'off', ...(basicGoal ? { basicGoal } : {}), ...packs },
     chooseLeads: true,
   });
   ui.sel = { kind: 'none' };
@@ -703,7 +735,8 @@ function renderDecks(s: GameState): string {
   const pile = (deck: 'plot' | 'group', n: number, label: string) =>
     `<button class="deck ${deck} ${gcls(`deck-${deck}`)} ${n ? '' : 'empty'}" data-deck="${deck}" aria-label="${label} deck, ${n} card${n === 1 ? '' : 's'} left">
       <span class="back" aria-hidden="true"></span><span class="deck-label">${label}</span><span class="deck-count">${n}</span></button>`;
-  return `<div class="decks ${gnext('decks')}">${pile('plot', me.plotDeck.length, 'Plots')}${pile('group', me.groupDeck.length, 'Groups')}</div>`;
+  // SubGenius game: the decks are shared by everyone.
+  return `<div class="decks ${gnext('decks')}">${pile('plot', plotDeckOf(s, me.id).length, 'Plots')}${pile('group', groupDeckOf(s, me.id).length, 'Groups')}</div>`;
 }
 
 function onDeck(deck: 'plot' | 'group') {
@@ -730,7 +763,10 @@ function handSections(s: GameState): string {
       <div class="sec-cards">${cards.map((iid) => handCard(s, iid)).join('') || `<span class="muted small sec-empty">${empty}</span>`}</div>
     </section>`;
   return sec('plots', 'Plots', `· limit ${handLimit(s, ui.me)} outside your turn`, plots, 'No Plots.')
-    + sec('groups', 'Groups & Resources', '· no limit', groups, 'No Groups.');
+    + (s.common
+      // SubGenius game: the cards anyone may attack, take over or (Resources) claim for one Slack.
+      ? sec('groups uncontrolled', 'Uncontrolled area', '· anyone may take these', uncontrolledCards(s), 'Empty.') + (groups.length ? sec('groups', 'Groups waiting for your first turn', '', groups, '') : '')
+      : sec('groups', 'Groups & Resources', '· no limit', groups, 'No Groups.'));
 }
 
 function sheetTitle(s: GameState): string {
@@ -1016,7 +1052,7 @@ function handCard(s: GameState, iid: string): string {
   const playable = spare ? !agentProblem(s, ui.me, iid) : isPlot && !!PLOTS[d.id];
   const sel = ui.sel;
   const selected = (sel.kind === 'plot' && sel.card === iid) || (sel.kind === 'takeover' && sel.card === iid) || (sel.kind === 'discard' && sel.cards.includes(iid));
-  const targetable = sel.kind === 'attack' && sel.type === 'control' && attackOptions(s, ui.me, sel.attacker).some((o) => o.target === iid);
+  const targetable = sel.kind === 'attack' && attackOptions(s, ui.me, sel.attacker).some((o) => o.target === iid && o.type === sel.type);
   return `
     <button class="hcard ${isPlot ? 'plot' : 'group'} ${artCls(d.id)} ${selected ? 'selected' : ''} ${targetable ? 'targetable' : ''} ${isPlot && !playable ? 'inactive' : ''} ${gcls(iid)}" data-hand="${iid}">
       <span class="kind">${spare ? 'Spare Illuminati' : isPlot ? esc(d.subtype === 'Plot' ? 'Plot' : d.subtype) : d.type === 'Resource' ? 'Resource' : esc(d.subtype)}</span>
@@ -1908,7 +1944,8 @@ const subBar = (title: string) => `<header class="bar sub-bar"><button class="li
 
 /** The Illuminati picker, shared by the offline and online new-game pages. */
 function illPicker(pick: string): string {
-  return `<div class="ills">${ILLUMINATI.map((c) => `
+  if (packSettings().subgeniusRules) return '<p class="muted">In the SubGenius game every player leads a faction of the Church of the SubGenius.</p>';
+  return `<div class="ills">${illuminatiFor(packSettings()).map((c) => `
     <button class="ill-pick ${pick === c.id ? 'on' : ''}" data-pick="${c.id}">${ART.has(c.id) ? `<span class="pick-art art-${c.id}"></span>` : ''}
       <b>${esc(c.name)}</b><span class="pw">${c.power}/${c.globalPower}</span>
       <span class="small">${esc(illPickText(c.id, c.text))}</span>
@@ -1956,6 +1993,7 @@ function renderStart() {
     app.innerHTML = `<div class="start">${subBar('New game')}
       <section><div class="label">Choose your Illuminati</div>${illPicker(pick)}</section>
       <section><div class="label">Computer players</div>${botsEditor(1, 1)}</section>
+      ${packsHtml()}
       <section class="panel start-panel">
         <div class="row">
           ${goalInput('goal', 1 + Math.max(1, lineupSize(loadLineup())), agreed)}
@@ -1967,6 +2005,7 @@ function renderStart() {
     bindHome();
     app.querySelectorAll<HTMLElement>('[data-pick]').forEach((b) => b.onclick = () => { (ui as Ui & { pick?: string }).pick = b.dataset.pick; renderStart(); });
     bindBots(renderStart);
+    bindPacks(renderStart);
     app.querySelector<HTMLInputElement>('#quick')!.onchange = (e) => { (ui as Ui & { quick?: boolean }).quick = (e.target as HTMLInputElement).checked; };
     bindGoalInput('goal');
     app.querySelector<HTMLElement>('[data-act="start"]')!.onclick = () => { homeScreen = 'home'; newGame(pick, (ui as Ui & { quick?: boolean }).quick ?? false, (ui as Ui & { goal?: number }).goal); };
@@ -2041,8 +2080,8 @@ function onHandCard(iid: string) {
     ui.sel = { kind: 'takeover', card: iid };
   } else if (d.type === 'Resource' && idle(s)) {
     ui.sel = { kind: 'resource', iid };
-  } else if (sel.kind === 'attack' && sel.type === 'control' && attackOptions(s, ui.me, sel.attacker).some((o) => o.target === iid)) {
-    ui.sel = { kind: 'confirm', attacker: sel.attacker, target: iid, type: 'control', side: openArrows(s, sel.attacker)[0], plots: [] };
+  } else if (sel.kind === 'attack' && attackOptions(s, ui.me, sel.attacker).some((o) => o.target === iid && o.type === sel.type)) {
+    ui.sel = { kind: 'confirm', attacker: sel.attacker, target: iid, type: sel.type, side: sel.type === 'control' ? openArrows(s, sel.attacker)[0] : undefined, plots: [] };
   } else if (d.type === 'Plot' && (idle(s) || (s.window && waitingFor(s).includes(ui.me)))) {
     ui.sel = idle(s) ? { kind: 'plot', card: iid } : ui.sel;
   }
@@ -2431,6 +2470,7 @@ function renderOnline() {
         </div></section>
         <section><div class="label">Computer players</div>
         ${friends >= 7 ? '<p class="muted small">The table is full: 8 players.</p>' : botsEditor(1 + friends, friends ? 0 : 1)}</section>
+        ${packsHtml()}
         <section class="panel start-panel"><div class="row">
           ${goalInput('n-goal', 1 + friends + Math.max(friends ? 0 : 1, lineupSize(loadLineup())), (ui as Ui & { goal?: number }).goal)}
           <label class="toggle"><input type="checkbox" id="n-quick"> Quick game (8 Groups, house rule)</label></div>
@@ -2440,6 +2480,7 @@ function renderOnline() {
     bindHome();
     app.querySelectorAll<HTMLElement>('[data-pick]').forEach((b) => b.onclick = () => { (ui as Ui & { pick?: string }).pick = b.dataset.pick; render(); });
     bindBots(render);
+    bindPacks(render);
     bindGoalInput('n-goal');
     app.querySelector<HTMLSelectElement>('#n-friends')!.onchange = (e) => { (ui as Ui & { friends?: number }).friends = Number((e.target as HTMLSelectElement).value); render(); };
     app.querySelector<HTMLFormElement>('#new')!.onsubmit = async (e) => {
@@ -2447,7 +2488,8 @@ function renderOnline() {
       const bots = friends >= 7 ? [] : botsForGame(Math.floor(Math.random() * 1e9), friends ? 0 : 1, 7 - friends);
       const quick = (app.querySelector('#n-quick') as HTMLInputElement).checked;
       const basicGoal = (ui as Ui & { goal?: number }).goal;
-      try { applyReply(await api({ op: 'new', seats: 1 + friends + bots.length, computerSeats: bots.length, bots, quick, illuminati: pick, ...(basicGoal ? { basicGoal } : {}) })); homeScreen = 'home'; await openGame(online!.gameId!); } catch (err) { o.msg = (err as Error).message; render(); }
+      try { applyReply(await api({ op: 'new', seats: 1 + friends + bots.length, computerSeats: bots.length, bots, quick, illuminati: pick, ...(basicGoal ? { basicGoal } : {}), ...packSettings() }));
+ homeScreen = 'home'; await openGame(online!.gameId!); } catch (err) { o.msg = (err as Error).message; render(); }
     };
     return;
   }

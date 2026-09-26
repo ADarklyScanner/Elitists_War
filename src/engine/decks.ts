@@ -1,9 +1,11 @@
 // Deck building for quick games: a 45-card deck (R025) = 1 Illuminati + Groups + Plots,
 // drawn only from cards this version can play.
-import { ALL_CARDS } from './cards';
+import { ALL_CARDS, cardSet } from './cards';
 import { PLOTS, GOALS } from './plotTypes';
 import { HOOKS } from './hooks';
 import type { DeckList } from './game';
+import type { CardDef, CardSet, GameSettings } from './types';
+import { cardImplemented, enabledSets } from './expansions';
 
 function rng(seed: number) {
   let t = seed | 0;
@@ -15,10 +17,34 @@ function rng(seed: number) {
   };
 }
 
-export const ILLUMINATI = ALL_CARDS.filter((c) => c.type === 'Illuminati');
-export const PLAYABLE_PLOTS = ALL_CARDS.filter((c) => c.type === 'Plot' && (PLOTS[c.id] || GOALS[c.id]));
-export const PLAYABLE_RESOURCES = ALL_CARDS.filter((c) => c.type === 'Resource' && HOOKS[c.id]);
-export const PLAYABLE_GROUPS = ALL_CARDS.filter((c) => c.type === 'Group');
+const BASE = ALL_CARDS.filter((c) => cardSet(c) === 'Base');
+/** The base game's Illuminati (the expansion Illuminati come with their packs: see illuminatiFor). */
+export const ILLUMINATI = BASE.filter((c) => c.type === 'Illuminati');
+export const PLAYABLE_PLOTS = BASE.filter((c) => c.type === 'Plot' && (PLOTS[c.id] || GOALS[c.id]));
+export const PLAYABLE_RESOURCES = BASE.filter((c) => c.type === 'Resource' && HOOKS[c.id]);
+export const PLAYABLE_GROUPS = BASE.filter((c) => c.type === 'Group');
+
+/**
+ * The cards a generated deck may use: those of the given sets that this version can play. Expansion
+ * cards count only once implemented, unless `unimplemented` (tests only: an unimplemented Group then
+ * plays with its printed stats and no ability).
+ */
+function pools(sets: CardSet[], unimplemented = false) {
+  if (sets.length === 1 && sets[0] === 'Base') return { ill: ILLUMINATI, plots: PLAYABLE_PLOTS, resources: PLAYABLE_RESOURCES, groups: PLAYABLE_GROUPS };
+  const ok = (c: CardDef) => sets.includes(cardSet(c)) && (cardSet(c) === 'Base' || unimplemented || cardImplemented(c.id));
+  const cards = ALL_CARDS.filter(ok);
+  return {
+    ill: cards.filter((c) => c.type === 'Illuminati' && (cardSet(c) === 'Base' || cardImplemented(c.id))),
+    plots: cards.filter((c) => c.type === 'Plot' && (PLOTS[c.id] || GOALS[c.id])),
+    resources: cards.filter((c) => c.type === 'Resource' && HOOKS[c.id]),
+    groups: cards.filter((c) => c.type === 'Group'),
+  };
+}
+
+/** The Illuminati players may choose in a game with these settings (the packs' own Illuminati once implemented). */
+export function illuminatiFor(settings?: Partial<GameSettings>): CardDef[] {
+  return pools(enabledSets(settings)).ill;
+}
 
 /**
  * What each Illuminati's deck is built around: an alignment and/or attribute its abilities and
@@ -35,10 +61,12 @@ const THEMES: Record<string, { align?: string[]; attr?: string[]; power?: boolea
   'servants-of-cthulhu': { align: ['Violent'], destroy: true },
   'shangri-la': { align: ['Peaceful'] },
   'ufos': { goals: 3 },
+  'society-of-assassins': { align: ['Fanatic'] },
+  'church-of-the-subgenius': { attr: ['SubGenius'] },
 };
 const ALIGNS = ['Government', 'Corporate', 'Liberal', 'Conservative', 'Peaceful', 'Violent', 'Straight', 'Weird', 'Criminal', 'Fanatic'];
 const OPP: Record<string, string> = { Government: 'Corporate', Corporate: 'Government', Liberal: 'Conservative', Conservative: 'Liberal', Peaceful: 'Violent', Violent: 'Peaceful', Straight: 'Weird', Weird: 'Straight' };
-const WORDS = [...ALIGNS, 'Media', 'Magic', 'Science', 'Computer', 'Bank', 'Church', 'Space', 'Green', 'Communist', 'Secret', 'Nation', 'Coastal'];
+const WORDS = [...ALIGNS, 'Media', 'Magic', 'Science', 'Computer', 'Bank', 'Church', 'Space', 'Green', 'Communist', 'Secret', 'Nation', 'Coastal', 'SubGenius'];
 
 /** Alignments and attributes a card's play requirement or cost asks for. */
 function needsOf(c: { playRequirement?: string | null; cost?: string | null }): string[] {
@@ -68,8 +96,12 @@ export const SPARE_ILLUMINATI_CHANCE = 0.2;
  * Illuminati, which can be played as an agent inside a rival of that Illuminati (R044). The deck
  * keeps its size, so its Plot deck (Plots plus the spare) stays inside the book's 24-32.
  */
-export function randomDeck(seed: number, illuminati?: string, opts: { groups?: number; plots?: number; spareIlluminati?: number } = {}): DeckList {
+export function randomDeck(seed: number, illuminati?: string, opts: { groups?: number; plots?: number; spareIlluminati?: number; sets?: CardSet[]; unimplemented?: boolean } = {}): DeckList {
   const r = rng(seed);
+  // The sets to draw from (default: the base game only, exactly as before the expansions existed).
+  const avail = pools(opts.sets ?? ['Base'], opts.unimplemented);
+  const ILLUMINATI = avail.ill, PLAYABLE_PLOTS = avail.plots, PLAYABLE_RESOURCES = avail.resources, PLAYABLE_GROUPS = avail.groups;
+
   const shuffle = <T>(arr: T[]) => {
     const a = [...arr];
     for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
