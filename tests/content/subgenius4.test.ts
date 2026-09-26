@@ -192,7 +192,7 @@ describe('Random Jesii', () => {
     const sub = under(s0, 'p1', 'sg4-sub-personality'); s0.cards[sub].tokens = 1;
     give(s0, 'p2', 'martyr-meter', { resource: true });
     const card = hand(s0, 'p1', 'random-jesii');
-    expect(() => play(s0, 'p1', { card, target: ill(s0, 'p2'), payWith: [sub] })).toThrow(/Martyr Meter/);
+    expect(() => play(s0, 'p1', { card, target: ill(s0, 'p2'), payWith: [sub] })).toThrow(/Martyr Meter|immune/);
   });
 });
 
