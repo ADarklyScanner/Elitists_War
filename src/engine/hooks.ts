@@ -144,12 +144,27 @@ export interface CardHooks {
   /** A Unique Resource that another copy may replace once this one is destroyed (Hidden City). */
   replaceableWhenDestroyed?: boolean;
   /**
+   * Static: this card's hooks stay active even while it sits unclaimed in the uncontrolled area
+   * (SubGenius: NHGH's +5 while nobody holds it). Off by default, so every other card's hooks stay
+   * inactive there exactly as before.
+   */
+  activeUncontrolled?: boolean;
+  /**
    * Static: Disasters may strike this Resource while it is in play. It defends as a Place with this
    * Power and is never Devastated (Hidden City).
    */
   disasterTargetPower?: number;
   /** This card makes the attack in progress Magic, so defenses against Magic apply (Spear of Longinus). */
   magicAttack?: (s: GameState, self: string, ctx: AttackCtx) => boolean;
+  /** A natural roll of 11 in this attack is not an automatic failure (St. Janor Hypercleats: 12 still is). */
+  noAutoFail11?: (s: GameState, self: string, ctx: AttackCtx) => boolean;
+  /**
+   * A Group moved onto `master` (this card's controller's own) may go on any side, not only a real
+   * outgoing arrow, as long as `master` ends up with no more puppets than outgoing arrows (Dallas
+   * Catacombs). Checked for the card being moved directly; puppets carried along with it still need a
+   * real arrow of their own immediate parent.
+   */
+  freeArrows?: (s: GameState, self: string, master: string) => boolean;
 
   // ---- triggers
   onTurnStart?: (s: GameState, self: string) => void;
@@ -196,7 +211,7 @@ export function activeHookCards(s: GameState): string[] {
   for (const c of Object.values(s.cards)) {
     if (!HOOKS[c.cardId] || c.hiddenUnder) continue; // face down under Warehouse 23: inactive
     if (c.zone === 'table' && c.linkedTo) { if (linkedPlotLive(s, c.iid)) table.push(c.iid); }
-    else if (c.zone === 'structure' || c.zone === 'resources') {
+    else if (c.zone === 'structure' || c.zone === 'resources' || (c.zone === 'uncontrolled' && HOOKS[c.cardId].activeUncontrolled)) {
       // A Paralyzed Group uses neither its own ability nor the Resources linked to it (Assassins).
       if (paralyzed.size && (paralyzed.has(c.iid) || (c.zone === 'resources' && !!c.linkedTo && paralyzed.has(c.linkedTo)))) continue;
       out.push(c.iid);

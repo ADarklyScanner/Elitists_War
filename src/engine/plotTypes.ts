@@ -89,3 +89,13 @@ export const GOAL_PROGRESS: Record<string, (s: GameState, player: string) => num
 export function registerGoalProgress(table: Record<string, (s: GameState, player: string) => number>) {
   Object.assign(GOAL_PROGRESS, table);
 }
+
+/**
+ * A Goal card a player may voluntarily expose for its own sake, not just to prove a victory claim
+ * (SubGenius: The Anti"Bob", for one extra Illuminati token). Runs instead of the plain "expose a
+ * Plot" action; it decides for itself whether the card may be exposed again.
+ */
+export const GOAL_EXPOSE_BONUS: Record<string, (s: GameState, player: string, card: string) => void> = {};
+export function registerGoalExposeBonus(table: typeof GOAL_EXPOSE_BONUS) {
+  Object.assign(GOAL_EXPOSE_BONUS, table);
+}
