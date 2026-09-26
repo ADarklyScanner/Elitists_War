@@ -16,6 +16,7 @@ import './content/assassins';
 import './content/assassins5';
 import './content/assassins4';
 import './content/assassins3';
+import './content/assassins1';
 import './content/subgenius';
 import './content/subgenius3';
 import './content/subgenius1';

@@ -4,7 +4,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   ALL_CARDS, BASE_CARDS, CARDS, CHURCH, EXPANSIONS_READY, EXPANSION_CARDS, PLOTS, anyOf, applyAction, assassinationPlot, attackStrength, canAid,
-  canOppose, cardSet, costPlays, createGame, drawGroup, enabledSets, freezePlot, frozen, goalCount, goalOptions, groupActions, illuminatiAction,
+  canOppose, cardImplemented, cardSet, costPlays, createGame, drawGroup, enabledSets, freezePlot, frozen, goalCount, goalOptions, groupActions, illuminatiAction,
   isKilled, isParalyzed, killPersonality, packProgress, paralysisPlot, plotDiscards, player, power, registerAbilities, registerHooks, registerPlots,
   registerZap, randomDeck, startCardAttack, structureCards, syncConditions, takeoverOptions, validateAttack, waitingFor, zapsOn, illuminatiFor,
   type Action, type CardDef, type GameState, type PlotPlay,
@@ -158,9 +158,10 @@ describe('settings and decks', () => {
     }
     const mixed = [1, 2, 3, 4, 5, 6, 7, 8].flatMap((seed) => randomDeck(seed, undefined, { sets: ['Base', 'Assassins'], unimplemented: true }).groups);
     expect(mixed.some((id) => cardSet(CARDS[id]) === 'Assassins')).toBe(true);
-    // Unimplemented expansion cards stay out of real games.
+    // Unimplemented expansion cards stay out of real games; implemented ones (batches encode them over
+    // time, so this is not always zero) are fine.
     const real = randomDeck(3, undefined, { sets: ['Base', 'Assassins'] });
-    expect(real.groups.every((id) => cardSet(CARDS[id]) === 'Base')).toBe(true);
+    expect(real.groups.every((id) => cardSet(CARDS[id]) === 'Base' || cardImplemented(id))).toBe(true);
   });
   it('the Church of the SubGenius is offered once SubGenius is on', () => {
     expect(illuminatiFor().map((c) => c.id)).not.toContain(CHURCH);

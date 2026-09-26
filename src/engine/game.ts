@@ -687,6 +687,7 @@ export function discardCard(s: GameState, iid: string) {
   c.zone = 'discard';
   c.controller = undefined; c.master = undefined; c.linkedTo = undefined;
   c.tokens = 0; c.heldTokens = undefined;
+  c.data = { ...c.data, discardTurn: s.turn }; // Recycling Centers: salvage a card discarded this turn.
   // SubGenius rules: every discard goes face up onto the shared Plot or Group discard pile.
   if (s.common) (def(s, iid).type === 'Plot' ? s.common.plotDiscard : s.common.groupDiscard).push(iid);
   else player(s, c.owner).discard.push(iid);
@@ -1118,9 +1119,18 @@ function finishTurn(s: GameState) {
   s.claims = undefined;
   for (const c of Object.values(s.cards)) c.mods = c.mods.filter((m) => m.until !== 'endOfTurn');
   if (isOver(s)) return;
+  processDelayedRevivals(s);
   checkElimination(s, true);
   if (isOver(s)) return;
   advanceTurn(s);
+}
+
+/** Cards flagged (in `onDestroy`) to come back at the end of the turn they were destroyed, unless the
+ *  game has already ended (General Disorder). */
+function processDelayedRevivals(s: GameState) {
+  for (const c of Object.values(s.cards)) {
+    if (c.zone === 'destroyed' && c.data?.reviveAtEndOfTurn === s.turn) HOOKS[c.cardId]?.delayedRevive?.(s, c.iid);
+  }
 }
 
 function advanceTurn(s: GameState) {
@@ -1152,13 +1162,17 @@ export const isOver = (s: GameState) => s.phase === 'gameOver';
  */
 export function goalCount(s: GameState, playerId: string, extraDouble?: (iid: string) => boolean): number {
   const ill = illuminatiOf(s, playerId);
-  const doubles = abilitiesOf(s, ill).filter((a) => a.kind === 'doubleCount') as { kind: 'doubleCount'; match: never; minPower?: number }[];
+  const doubles = abilitiesOf(s, ill).filter((a) => a.kind === 'doubleCount') as { kind: 'doubleCount'; match: never; minPower?: number; unlessRivalStronger?: boolean }[];
+  // A rival control a matching Group with more Power than this one (Society of Assassins: Secret Groups).
+  const rivalStronger = (iid: string, d: (typeof doubles)[number]) => livePlayers(s).some((r) => r.id !== playerId
+    && structureCards(s, r.id).some((g) => matches(s, g, d.match) && power(s, g, { goals: true }) > power(s, iid, { goals: true })));
   let count = 0;
   let doubled = 0;
   for (const iid of structureCards(s, playerId)) {
     if (tokenBarredForGoals(s, iid)) continue;
     count++;
-    const twice = def(s, iid).type === 'Group' && (doubles.some((d) => matches(s, iid, d.match) && power(s, iid, { goals: true }) >= (d.minPower ?? 0)) || !!extraDouble?.(iid));
+    const twice = def(s, iid).type === 'Group' && (doubles.some((d) => matches(s, iid, d.match) && power(s, iid, { goals: true }) >= (d.minPower ?? 0)
+      && (!d.unlessRivalStronger || !rivalStronger(iid, d))) || !!extraDouble?.(iid));
     if (doubled < 3 && twice) { count++; doubled++; }
   }
   count += sumHooks(s, (h, self) => (controllerOf2(s, self) === playerId ? h.goalBonus?.(s, self) : 0));
@@ -2149,6 +2163,9 @@ function finishAttack(s: GameState) {
       } else {
         devastate(s, tgt);
       }
+    } else if (ctx.type === 'control' && ctx.stripAlignment) {
+      s.cards[tgt].mods.push({ source: ctx.attacker ?? 'stripAlignment', kind: 'removeAlign', align: ctx.stripAlignment, until: 'permanent' });
+      log(s, `${cardName(s, tgt)} permanently loses its ${ctx.stripAlignment} alignment.`);
     } else if (ctx.type === 'control') {
       capture(s, ctx);
     } else if (abilitiesOf(s, tgt).some((a) => a.kind === 'cannotBeDestroyed') || anyHook(s, (h, self) => !!h.preventDestroy?.(s, self, tgt, ctx))) {
@@ -2402,6 +2419,10 @@ export function destroyGroup(s: GameState, iid: string, by: string, attacker?: s
     } else discardCard(s, other.iid);
   }
   Object.assign(c, { zone: 'destroyed', controller: undefined, master: undefined, x: undefined, y: undefined, tokens: 0, mods: [], devastated: false });
+  // A card whose `onDestroy` (fired above, while it was still active) asked to freeze its alignments at
+  // the moment of death (Day Care Centers) gets them back as permanent modifiers now that the generic
+  // reset above has cleared them.
+  if (c.data?.freezeAlignments) c.mods = (c.data.freezeAlignments as Alignment[]).map((a) => ({ source: iid, kind: 'addAlign', align: a, until: 'permanent' }));
   if (!HOOKS[c.cardId]?.noDestroyCredit && !player(s, by).destroyedCredit.includes(iid)) player(s, by).destroyedCredit.push(iid);
   if (draws) drawPlot(s, player(s, by), draws);
   noteLastPuppet(s, prev, by);

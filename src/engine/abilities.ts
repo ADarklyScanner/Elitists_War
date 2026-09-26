@@ -37,8 +37,11 @@ export type Ability =
   | { kind: 'powerPer'; per: Match; value: number; global?: boolean }
   | { kind: 'extraPlotDraw'; value: number }
   | { kind: 'handLimit'; value: number }
-  /** Counts double for the Basic Goal (Illuminati special abilities). */
-  | { kind: 'doubleCount'; match: Match; minPower?: number }
+  /**
+   * Counts double for the Basic Goal (Illuminati special abilities). `unlessRivalStronger`: does not
+   * apply to a Group while some rival controls a matching Group with more Power (Society of Assassins).
+   */
+  | { kind: 'doubleCount'; match: Match; minPower?: number; unlessRivalStronger?: boolean }
   | { kind: 'extraIlluminatiToken'; value: number }
   | { kind: 'freePrivilegedAttack' }
   /** Draw a Plot whenever you destroy a (matching) Group. */

@@ -221,6 +221,11 @@ export interface AttackCtx {
   illegalGroups?: string[];
   /** Don't Touch That Dial! (Assassins): if this attack ends in failure, the attacker's turn ends at once. */
   endsAttackerTurn?: boolean;
+  /**
+   * A successful Attack to Control strips this alignment from the target for good instead of capturing
+   * it (the Drug Companies): set once the attack starts, read when it resolves.
+   */
+  stripAlignment?: Alignment;
 }
 
 /** An open response window: everyone may act; closes when all players have passed in a row. */
