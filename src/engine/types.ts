@@ -141,6 +141,8 @@ export interface PlayerState {
   firstTurnAttacked?: string[];
   /** Left the game (resigned): counts as elimination (R049). */
   resigned?: boolean;
+  /** General-purpose once-per-game markers for a card whose text needs one (Oil Spill's Green-Group bonus). */
+  flags?: Record<string, boolean>;
 }
 
 export type AttackType = 'control' | 'destroy';

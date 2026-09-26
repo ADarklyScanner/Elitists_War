@@ -1032,8 +1032,10 @@ function discardFailedTakeovers(s: GameState) {
   }
 }
 
-function endTurnCleanup(s: GameState) {
+/** Runs once everyone has passed on the end-of-turn window: failed takeovers, per-turn upkeep (onTurnEnd), then the hand limit, then the next turn. Exported so a card's onTurnEnd resolver can resume it once its own prompt is answered. */
+export function endTurnCleanup(s: GameState) {
   discardFailedTakeovers(s);
+  for (const self of activeHookCards(s)) if (HOOKS[s.cards[self].cardId].onTurnEnd?.(s, self)) return;
   // The turn is over, so the 5-Plot limit now applies to the active player too (R027).
   const over = livePlayers(s).find((x) => overLimit(s, x.id));
   if (over) { s.prompt = { player: over.id, kind: 'discardToLimit', data: { resume: 'endTurn' } }; return; }
@@ -2069,12 +2071,15 @@ function finishAttack(s: GameState) {
         raiseEvent(s, { type: 'destroyed', card: tgt, by: ctx.attackerPlayer, player: owner });
       } else log(s, `${cardName(s, tgt)} cannot be Devastated and survives.`);
     } else if (ctx.disaster) {
+      let destroyed = false;
       if (ctx.disaster.destroyMargin !== null && margin >= ctx.disaster.destroyMargin && !ctx.disaster.devastateOnly) {
         log(s, `${cardName(s, tgt)} is destroyed!`);
         destroyGroup(s, tgt, ctx.attackerPlayer);
+        destroyed = true;
       } else {
         devastate(s, tgt);
       }
+      if (ctx.instantCard) PLOTS[s.cards[ctx.instantCard]?.cardId]?.onDisasterSuccess?.(s, ctx, destroyed);
     } else if (ctx.type === 'control') {
       capture(s, ctx);
     } else if (abilitiesOf(s, tgt).some((a) => a.kind === 'cannotBeDestroyed') || anyHook(s, (h, self) => !!h.preventDestroy?.(s, self, tgt, ctx))) {
@@ -2673,8 +2678,11 @@ export function applyAction(state: GameState, playerId: string, action: Action):
       if (r.linkMovedTurn === s.turn) throw new RuleError('A link can be moved only once per turn.');
       if (resourceUsedThisTurn(s, action.resource)) throw new RuleError(`${cardName(s, action.resource)} has already been used or given a benefit this turn, so its link cannot be moved until your next turn.`);
       if (r.linkedTo && anyHook(s, (h, self) => self === r.linkedTo && !!h.lockLinks?.(s, self, action.resource))) throw new RuleError(`${cardName(s, action.resource)} is locked to ${cardName(s, r.linkedTo)} and cannot be moved.`);
+      const toIlluminati = def(s, action.to).type === 'Illuminati';
+      // Every other Resource may always fall back to an unlinked Illuminati; a few printed cards forbid even that (Screaming Meme).
+      if (toIlluminati && HOOKS[r.cardId]?.forbidIlluminatiLink) throw new RuleError(`${cardName(s, action.resource)} cannot be linked to an Illuminati.`);
       const rule = HOOKS[r.cardId]?.linkTo;
-      if (rule && def(s, action.to).type !== 'Illuminati' && !rule(s, action.resource, action.to)) throw new RuleError(`${cardName(s, action.resource)} cannot be linked to ${cardName(s, action.to)}.`);
+      if (rule && !toIlluminati && !rule(s, action.resource, action.to)) throw new RuleError(`${cardName(s, action.resource)} cannot be linked to ${cardName(s, action.to)}.`);
       // Linking spends no Group's action, so only cards answering any action (Plots) may respond.
       announce(s, playerId, 'link', action, [], action.resource);
       break;
@@ -3334,6 +3342,14 @@ export function syncConditions(s: GameState) {
     if (v === 'discard') { log(s, `${cardName(s, c.iid)} no longer applies to ${target ? cardName(s, c.linkedTo) : 'its card'} and is discarded.`); discardCard(s, c.iid); continue; }
     const off = v === 'inactive';
     if (off !== !!c.data?.linkInactive) c.data = { ...c.data, linkInactive: off || undefined };
+  }
+  for (const c of Object.values(s.cards)) {
+    if (c.zone !== 'resources' || !c.linkedTo || !s.cards[c.linkedTo]) continue;
+    const h = HOOKS[c.cardId];
+    if (h?.linkStillLegal && def(s, c.linkedTo).type !== 'Illuminati' && !h.linkStillLegal(s, c.iid, c.linkedTo)) {
+      log(s, `${cardName(s, c.iid)} no longer applies to ${cardName(s, c.linkedTo)} and is discarded.`);
+      discardCard(s, c.iid);
+    }
   }
   const para = paralyzedGroups(s);
   for (const c of Object.values(s.cards)) {

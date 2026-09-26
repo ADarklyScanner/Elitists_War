@@ -59,6 +59,18 @@ export const NWO_EFFECTS: Record<string, NwoEffect> = {
     power: (s, i) => (has(s, i, 'Peaceful') ? 1 : 0),
     resistance: (s, i) => (has(s, i, 'Peaceful') ? 3 : 0),
   },
+  // Assassins pack (docs/EXPANSIONS.md): flat Power effects fit here like the base NWOs above.
+  'end-of-the-world': {
+    color: 'yellow', implemented: true,
+    power: (s, i) => {
+      const church = attr(s, i, 'Church');
+      const fanatic = has(s, i, 'Fanatic');
+      if (church && fanatic) return 3;
+      if (church || fanatic) return 2;
+      if (has(s, i, 'Corporate') || has(s, i, 'Government')) return -2;
+      return 0;
+    },
+  },
 };
 
 export const NWO_COLOR: Record<string, 'red' | 'blue' | 'yellow'> = {
