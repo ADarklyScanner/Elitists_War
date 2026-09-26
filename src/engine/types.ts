@@ -392,6 +392,8 @@ export interface GameState {
   freezes?: Freeze[];
   /** How each person has played this game so far (counters kept by src/ai/profile.ts; people only). */
   habits?: Record<string, Record<string, unknown>>;
+  /** SubGenius: players spared from R049 elimination this turn by showing Arise!, awaiting the end of turn. */
+  ariseWatch?: string[];
 }
 
 /** The shared piles of the stand-alone SubGenius game. */

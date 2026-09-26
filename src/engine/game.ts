@@ -13,7 +13,7 @@ import {
 import { abilitiesOf, attackingGroups, matches } from './abilities';
 import { alignmentPairs, alignments, attributes, globalPower, power, resistance } from './stats';
 import { NWO_EFFECTS } from './nwo';
-import { PLOTS, GOALS } from './plotTypes';
+import { PLOTS, GOALS, GOAL_EXPOSE_BONUS } from './plotTypes';
 import { HOOKS, CHOICES, EVENT_ABILITY_CARDS, isCancelled, linkedPlotLive, paralyzedGroups, abilitiesDisabled, activeHookCards, anyHook, fireHooks, goalCheck, hooksOf, registerChoice, sumHooks, type AbilityParams, type ActivatedAbility, type CardHooks } from './hooks';
 import type { AiLevel, AnnouncedKind, Choice, GameEvent, PlotEffect } from './types';
 import { dealAction, isDealAction, lapseDeals, tidyDeals } from './deals';
@@ -478,10 +478,29 @@ export function actionSummary(s: GameState, e: GameEvent): string {
   }
 }
 
+/**
+ * Sides `master` can take a puppet on when a card in play frees its controller from the usual "real
+ * arrow" rule (Dallas Catacombs): any side at all, capped only by its number of outgoing arrows.
+ */
+function catacombsSides(s: GameState, master: string, ignore: Set<string>): Side[] {
+  const c = s.cards[master];
+  if (c.zone !== 'structure' || !c.controller) return [];
+  const cap = (def(s, master).arrowsOut ?? []).length;
+  if (puppets(s, master).filter((p) => !ignore.has(p)).length >= cap) return [];
+  return SIDES.filter((side) => !occupied(s, c.controller!, attachRect(s, master, side), new Set([...ignore, master])));
+}
+
+/** Sides open to moving `group` onto `master`: real arrows, or any side under Dallas Catacombs. */
+export function movableSides(s: GameState, playerId: string, group: string, master: string): Side[] {
+  const ignore = new Set(subtree(s, group));
+  const free = anyHook(s, (h, self) => controllerOf2(s, self) === playerId && !!h.freeArrows?.(s, self, master));
+  return free ? catacombsSides(s, master, ignore) : openArrows(s, master, ignore);
+}
+
 function doMove(s: GameState, pl: string, a: Extract<Action, { type: 'move' }>) {
   const g = s.cards[a.group], dest = s.cards[a.onto];
   const ok = g.zone === 'structure' && g.controller === pl && dest.zone === 'structure' && dest.controller === pl &&
-    !subtree(s, a.group).includes(a.onto) && openArrows(s, a.onto, new Set(subtree(s, a.group))).includes(a.side);
+    !subtree(s, a.group).includes(a.onto) && movableSides(s, pl, a.group, a.onto).includes(a.side);
   if (!ok) { log(s, `${cardName(s, a.group)} can no longer be moved there.`, pl); return; }
   const res = moveSubtree(s, a.group, pl, a.onto, a.side, 'hand', { defer: !player(s, pl).isAI });
   offerRearrange(s, pl, a.group, res, 'hand', pl);
@@ -1099,7 +1118,7 @@ function finishTurn(s: GameState) {
   s.claims = undefined;
   for (const c of Object.values(s.cards)) c.mods = c.mods.filter((m) => m.until !== 'endOfTurn');
   if (isOver(s)) return;
-  checkElimination(s);
+  checkElimination(s, true);
   if (isOver(s)) return;
   advanceTurn(s);
 }
@@ -1490,17 +1509,47 @@ function abandonAttack(s: GameState) {
   if (s.window?.kind === 'attack' || s.window?.kind === 'roll') s.window = undefined;
 }
 
-/** R049: after his third complete turn, a player whose Illuminati has no puppets is out at once. */
-function checkElimination(s: GameState) {
+/**
+ * R049: after his third complete turn, a player whose Illuminati has no puppets is out at once.
+ * `endOfTurn` marks the one call made as a turn actually finishes (from finishTurn): only there can a
+ * player sheltered by Arise! (SubGenius) turn his reprieve into a win.
+ */
+function checkElimination(s: GameState, endOfTurn = false) {
   const activeId = activePlayer(s).id;
   // A Servants-of-Cthulhu-style player whose own last Group was his winning destruction is not
   // knocked out: he may declare victory at the end of this turn instead (R049).
   const winsByDestroying = (p: PlayerState) => p.id === activeId && abilitiesOf(s, p.illuminati)
     .some((a) => a.kind === 'specialGoal' && a.goal === 'destroyCount' && p.destroyedCredit.length >= a.value);
   for (const p of livePlayers(s)) {
-    if (p.turnsTaken >= 3 && puppets(s, p.illuminati).length === 0 && !winsByDestroying(p)) {
+    const zero = puppets(s, p.illuminati).length === 0;
+    if (zero && p.turnsTaken >= 3 && !winsByDestroying(p)) {
+      // RULING: Arise! reads as a rider on this very rule ("a rival removes your last puppet"), so it
+      // steps in exactly where R049 would otherwise take the player out: showing it spares him until
+      // the end of the turn, when he wins outright if he is still puppet-less.
+      const arise = p.hand.find((iid) => s.cards[iid].cardId === 'arise');
+      if (arise && !s.ariseWatch?.includes(p.id)) {
+        exposeCards(s, [arise]);
+        (s.ariseWatch ??= []).push(p.id);
+        log(s, `${p.name} shows Arise! and stays in the game until the end of the turn.`, p.id);
+        continue;
+      }
+      if (s.ariseWatch?.includes(p.id)) continue; // already sheltered: wait for the end of the turn
       eliminate(s, p);
       log(s, `${p.name} has no Groups left and is eliminated.`, p.id);
+    } else if (s.ariseWatch?.includes(p.id) && (!zero || winsByDestroying(p))) {
+      s.ariseWatch = s.ariseWatch.filter((id) => id !== p.id); // he is no longer at risk
+    }
+  }
+  if (endOfTurn && s.ariseWatch?.length) {
+    const arisen = s.ariseWatch.filter((id) => !player(s, id).eliminated && puppets(s, player(s, id).illuminati).length === 0);
+    s.ariseWatch = undefined;
+    if (arisen.length) {
+      s.phase = 'gameOver';
+      s.winners = arisen;
+      s.attack = undefined; s.window = undefined; s.prompt = undefined;
+      for (const id of arisen) log(s, `${player(s, id).name} wins: still no puppets at the end of the turn (Arise!).`, id);
+      if (arisen.length > 1) log(s, `${arisen.map((id) => player(s, id).name).join(' and ')} share the victory.`);
+      return;
     }
   }
   const alive = livePlayers(s);
@@ -2037,7 +2086,9 @@ export function currentOutcome(s: GameState, ctx: AttackCtx): 'success' | 'failu
   if (attackCancelled(ctx) || liveEffects(ctx).some((e) => e.t === 'fail')) return 'failure';
   const { strength } = attackStrength(s, ctx);
   const r = finalRoll(ctx);
-  if (strength < 2 || r >= 11) return 'failure';
+  if (strength < 2) return 'failure';
+  // A roll of 12 always fails; a roll of 11 does too, unless a card in the attack overrides it (St. Janor Hypercleats).
+  if (r >= 11 && !(r === 11 && anyHook(s, (h, self) => !!h.noAutoFail11?.(s, self, ctx)))) return 'failure';
   return r <= strength ? 'success' : 'failure';
 }
 
@@ -2394,7 +2445,9 @@ export function checkPlot(s: GameState, playerId: string, play: PlotPlay, declar
   const p = player(s, playerId);
   if (!p.hand.includes(play.card)) return 'That card is not in your hand.';
   const d = def(s, play.card);
-  if (d.type !== 'Plot') return 'Only Plot cards can be played this way.';
+  // A card is normally only playable this way if it is a Plot; a few Group cards say they may also be
+  // "played as a Plot" for a one-off bonus (SubGenius: NHGH), which just means they register a handler here too.
+  if (d.type !== 'Plot' && !PLOTS[d.id]) return 'Only Plot cards can be played this way.';
   const h = PLOTS[d.id];
   if (!h) return `${d.name} is not available in this version yet.`;
   // A card temporarily benched after being stopped (This Was Only A Test, Assassins): unusable until its
@@ -2726,6 +2779,7 @@ export function applyAction(state: GameState, playerId: string, action: Action):
       if (r.linkedTo && anyHook(s, (h, self) => self === r.linkedTo && !!h.lockLinks?.(s, self, action.resource))) throw new RuleError(`${cardName(s, action.resource)} is locked to ${cardName(s, r.linkedTo)} and cannot be moved.`);
       const rule = HOOKS[r.cardId]?.linkTo;
       if (rule && def(s, action.to).type !== 'Illuminati' && !rule(s, action.resource, action.to)) throw new RuleError(`${cardName(s, action.resource)} cannot be linked to ${cardName(s, action.to)}.`);
+      if (anyHook(s, (h, self) => !!h.immune?.(s, self, action.to, action.resource))) throw new RuleError(`${cardName(s, action.to)} is immune to ${cardName(s, action.resource)}.`);
       // Linking spends no Group's action, so only cards answering any action (Plots) may respond.
       announce(s, playerId, 'link', action, [], action.resource);
       break;
@@ -2916,8 +2970,7 @@ export function applyAction(state: GameState, playerId: string, action: Action):
       if (g.controller !== playerId || def(s, action.group).type !== 'Group') throw new RuleError('You can only move your own Groups.');
       const dest = inst(s, action.onto);
       if (dest.controller !== playerId || subtree(s, action.group).includes(action.onto)) throw new RuleError('Choose an arrow elsewhere in your own Power Structure.');
-      const ignore = new Set(subtree(s, action.group));
-      if (!openArrows(s, action.onto, ignore).includes(action.side)) throw new RuleError('That arrow is not open.');
+      if (!movableSides(s, playerId, action.group, action.onto).includes(action.side)) throw new RuleError('That arrow is not open.');
       if (paralyzedGroups(s).has(action.onto)) throw new RuleError(`${cardName(s, action.onto)} is Paralyzed and cannot get new puppets.`);
 
       const payers = [action.group, g.master, action.onto, p.illuminati];
@@ -3061,7 +3114,7 @@ export function applyAction(state: GameState, playerId: string, action: Action):
       if (action.toDeck && s.common) throw new RuleError('In the SubGenius game discarded cards go to the discard pile, not back into the deck.');
       if (s.prompt?.kind === 'discardToLimit' && s.prompt.player === playerId) {
         const plots = plotsInHand(s, playerId);
-        if (!action.cards.every((c) => plots.includes(c))) throw new RuleError('Discard Plot cards from your hand.');
+        if (!action.cards.every((c) => plots.includes(c) && !s.cards[c].data?.lockedInHand)) throw new RuleError('Discard Plot cards from your hand.');
         const outside = s.prompt.data?.resume === 'endTurn' || activePlayer(s).id !== playerId;
         if (outside && plots.length - action.cards.length > handLimit(s, playerId)) throw new RuleError(`Discard down to ${handLimit(s, playerId)} Plots.`);
         const goals = goalsInHand(s, playerId);
@@ -3073,7 +3126,7 @@ export function applyAction(state: GameState, playerId: string, action: Action):
       } else {
         // R048: you may discard any card from your hand at any time, and (Plots only) return it to
         // your deck instead — on top, on the bottom, or anywhere in the middle — even outside a limit.
-        if (!action.cards.length || !action.cards.every((c) => p.hand.includes(c))) throw new RuleError('Choose cards in your hand.');
+        if (!action.cards.length || !action.cards.every((c) => p.hand.includes(c) && !s.cards[c].data?.lockedInHand)) throw new RuleError('Choose cards in your hand.');
         if (action.toDeck && !action.cards.every((c) => plotsInHand(s, playerId).includes(c))) throw new RuleError('Only Plot cards may be returned to a deck.');
         for (const c of action.cards) putAway(s, p, c, action.toDeck, action.position);
       }
@@ -3081,6 +3134,9 @@ export function applyAction(state: GameState, playerId: string, action: Action):
     }
 
     case 'exposeCard': {
+      // A few Goal cards may be exposed for a bonus of their own, not only to prove a victory claim.
+      const goalBonus = goalsInHand(s, playerId).includes(action.card) ? GOAL_EXPOSE_BONUS[s.cards[action.card].cardId] : undefined;
+      if (goalBonus) { goalBonus(s, playerId, action.card); break; }
       // R048: you may voluntarily expose one of your own hidden Plots at any time.
       if (!plotsInHand(s, playerId).includes(action.card)) throw new RuleError('Choose a Plot in your hand.');
       if (!canExpose(s, action.card)) throw new RuleError(`${cardName(s, action.card)} cannot be exposed.`);

@@ -18,6 +18,7 @@ import './content/assassins4';
 import './content/subgenius';
 import './content/subgenius3';
 import './content/subgenius1';
+import './content/subgenius2';
 
 export * from './types';
 export * from './game';
