@@ -1090,7 +1090,7 @@ function handCard(s: GameState, iid: string): string {
     <button class="hcard ${isPlot ? 'plot' : 'group'} ${artCls(d.id)} ${selected ? 'selected' : ''} ${targetable ? 'targetable' : ''} ${isPlot && !playable ? 'inactive' : ''} ${gcls(iid)}" data-hand="${iid}">
       <span class="kind">${spare ? 'Spare Illuminati' : isPlot ? esc(d.subtype === 'Plot' ? 'Plot' : d.subtype) : d.type === 'Resource' ? 'Resource' : esc(d.subtype)}</span>
       <span class="name">${esc(d.name)}</span>
-      ${tutorial() && isPlot && !spare && plotTiming(d.id, d.subtype, true) ? `<span class="timing">${esc(plotTiming(d.id, d.subtype, true))}</span>` : ''}
+      ${tutorial() && isPlot && !spare && plotTiming(d.id, d.subtype, true) ? `<span class="timing" title="${esc(plotTiming(d.id, d.subtype, true))}">${esc(plotTiming(d.id, d.subtype, true))}</span>` : ''}
       ${spare ? '<span class="txt">Play it as an agent inside a rival of this Illuminati: +3 to attack or defend against that Power Structure. Costs the top card of both your decks.</span>'
         : isPlot || d.type === 'Resource' ? `<span class="txt">${esc(cardFace(d.id)?.rules || (d.modifier ?? d.text))}</span>` : `
         <span class="aligns">${(d.alignments ?? []).map(chip).join('')}</span>

@@ -914,3 +914,9 @@ button.big:hover { filter: brightness(1.08); }
 .cl-pack.p-subgenius { border-color: #c97a3c; color: #f5c28f; }
 .cl-kw { display: flex; flex-wrap: wrap; gap: 3px; }
 .cl-kw i { font: 600 9px/13px var(--display); font-style: normal; letter-spacing: .08em; text-transform: uppercase; padding: 0 4px; border-radius: 3px; background: #0006; border: 1px solid #fff3; }
+/* Hand cards all share one card shape (5 × 7), whatever their contents; long labels shorten instead of stretching the card. */
+.dock .hcard { aspect-ratio: 5 / 7; min-height: 0; height: auto; overflow: hidden; }
+.dock .hcard .name { flex-shrink: 0; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.dock .hcard .timing { flex-shrink: 0; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dock .hcard .txt { flex: 0 1 auto; min-height: 0; }
+.dock .hcard .stats { flex-shrink: 0; }
